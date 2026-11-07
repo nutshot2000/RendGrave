@@ -1,6 +1,8 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
+mod areas;
 mod body;
+mod areagen;
 mod game;
 mod gfx;
 mod hud;
@@ -23,6 +25,7 @@ struct Showcase {
     log: Vec<String>,
     lab: bool,
     spells: bool,
+    tour: bool,
 }
 
 struct App {
@@ -95,6 +98,53 @@ impl App {
             if f == fr {
                 return Some(name.to_string());
             }
+        }
+        None
+    }
+    /// visit every area and take a picture of each
+    fn step_tour(&mut self) -> Option<String> {
+        use areagen::AreaId;
+        let g = &mut self.game;
+        let f = g.frame as i32;
+        g.player.hp = g.player.maxhp;
+        let stops = [(AreaId::Ashford, "t1_ashford"), (AreaId::Pines, "t2_pines"), (AreaId::Graveyard, "t3_graveyard"), (AreaId::Crypt(1), "t4_crypt1"), (AreaId::Crypt(2), "t5_crypt2"), (AreaId::Crypt(3), "t6_crypt3_boss")];
+        for (k, (a, name)) in stops.iter().enumerate() {
+            let at = 1 + k as i32 * 70;
+            if f == at {
+                g.travel(*a);
+                if !g.discovered.contains(a) {
+                    g.discovered.push(*a);
+                }
+                for e in g.enemies.iter_mut() {
+                    e.stun = 100000;
+                }
+                if *a == AreaId::Crypt(3) {
+                    if let Some(b) = g.enemies.iter().position(|e| e.k == body::Kind::King) {
+                        let (bx, by) = (g.enemies[b].x, g.enemies[b].y);
+                        g.player.x = bx - 70.0;
+                        g.player.y = by + 10.0;
+                        g.enemies[b].aggro = true;
+                    }
+                } else if *a != AreaId::Ashford {
+                    place_near_enemy(g, 80.0);
+                }
+                g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
+            }
+            if f == at + 55 {
+                return Some(name.to_string());
+            }
+        }
+        let end = 1 + stops.len() as i32 * 70;
+        if f == end {
+            g.travel(AreaId::Pines);
+            if let Some((wx, wy)) = g.waypoint {
+                g.player.x = wx + 6.0;
+                g.player.y = wy + 8.0;
+            }
+        }
+        if f == end + 50 {
+            g.wp_open = true;
+            return Some("t7_waypoints".into());
         }
         None
     }
@@ -183,6 +233,9 @@ impl App {
         None
     }
     fn step_showcase(&mut self) -> Option<String> {
+        if self.show.as_ref().map(|s| s.tour).unwrap_or(false) {
+            return self.step_tour();
+        }
         if self.show.as_ref().map(|s| s.spells).unwrap_or(false) {
             return self.step_spells();
         }
@@ -202,16 +255,13 @@ impl App {
             for s in [skills::Sk::Lightning, skills::Sk::Fireball, skills::Sk::Acid, skills::Sk::Nova] {
                 g.player.sk.rank[s as usize] = 1;
             }
-            g.player.x = 214.0;
-            g.player.y = 606.0;
-            g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
-            // a puddle for the lightning to run through
-            g.world.splash(250.0, 604.0, world::WATER, 9.0, 0);
+            place_near_enemy(g, 70.0);
+            let (x, y) = (g.player.x + 36.0, g.player.y);
+            g.world.splash(x, y, world::WATER, 9.0, 0);
         }
         if f == 600 {
-            g.player.x = 745.0;
-            g.player.y = 300.0;
-            g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
+            g.travel(areagen::AreaId::Crypt(1));
+            place_near_enemy(g, 60.0);
         }
         let near = g
             .enemies
@@ -290,7 +340,10 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
         match ev {
-            WindowEvent::CloseRequested => el.exit(),
+            WindowEvent::CloseRequested => {
+                self.game.save();
+                el.exit();
+            }
             WindowEvent::Resized(s) => {
                 if let Some(g) = &mut self.gfx {
                     g.resize(s.width, s.height);
@@ -309,6 +362,7 @@ impl ApplicationHandler for App {
                         KeyCode::Space => i.dodge = down,
                         KeyCode::KeyF => i.potion = down,
                         KeyCode::KeyR => i.restart = down,
+                        KeyCode::KeyE => i.interact = down,
                         KeyCode::Digit1 if down => self.sel_pending = Some(0),
                         KeyCode::Digit2 if down => self.sel_pending = Some(1),
                         KeyCode::Digit3 if down => self.sel_pending = Some(2),
@@ -426,7 +480,14 @@ impl App {
             self.fps_n = 0;
         }
         if let Some(sh) = &self.show {
-            if (sh.spells && shot.as_deref() == Some("s10_tree")) || (!sh.spells && self.game.frame > if sh.lab { 330 } else { 900 }) {
+            let done = if sh.tour {
+                shot.as_deref() == Some("t7_waypoints")
+            } else if sh.spells {
+                shot.as_deref() == Some("s10_tree")
+            } else {
+                self.game.frame > if sh.lab { 330 } else { 900 }
+            };
+            if done {
                 std::fs::write(format!("{}/log.txt", sh.dir), sh.log.join("\n")).ok();
                 el.exit();
             }
@@ -438,17 +499,19 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let lab = args.iter().any(|a| a == "--lab");
     let spells = args.iter().any(|a| a == "--spells");
-    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells").map(|i| {
+    let tour = args.iter().any(|a| a == "--tour");
+    let fresh = args.iter().any(|a| a == "--new");
+    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour").map(|i| {
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "shots".into());
         std::fs::create_dir_all(&dir).ok();
-        Showcase { dir, log: vec![], lab, spells }
+        Showcase { dir, log: vec![], lab, spells, tour }
     });
     let seed = if show.is_some() { 7 } else { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1) };
     let el = EventLoop::new().expect("event loop");
     el.set_control_flow(ControlFlow::Poll);
     let mut app = App {
         gfx: None,
-        game: game::Game::new(seed),
+        game: if show.is_some() { game::Game::new(seed) } else { game::Game::start(!fresh) },
         input: game::Input::default(),
         frame: None,
         last: Instant::now(),
@@ -461,4 +524,20 @@ fn main() {
         sel_pending: None,
     };
     el.run_app(&mut app).expect("run");
+}
+
+/// test helper: stand a little to the west of the first reachable enemy
+fn place_near_enemy(g: &mut game::Game, d: f32) {
+    for k in 0..g.enemies.len() {
+        let (ex, ey) = (g.enemies[k].x, g.enemies[k].y);
+        for off in [d, d * 0.7, -d, -d * 0.7] {
+            let (x, y) = (ex - off, ey);
+            if !g.world.solid(x as i32, y as i32) && !g.world.solid(x as i32 + 3, y as i32) && !g.world.solid(x as i32 - 3, y as i32) && g.world.at(x as i32, y as i32) == world::E {
+                g.player.x = x;
+                g.player.y = y;
+                g.cam = (x - g.view.0 / 2.0, y - 26.0 - g.view.1 / 2.0);
+                return;
+            }
+        }
+    }
 }

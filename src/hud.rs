@@ -6,6 +6,7 @@ use crate::gfx::Frame;
 use crate::rng::*;
 use crate::skills::*;
 use crate::world::*;
+use crate::areagen::AreaId;
 
 const FONT: &[(char, &str)] = &[
     ('A', "010101111101101"), ('B', "110101110101110"), ('C', "011100100100011"), ('D', "110101101101110"),
@@ -367,6 +368,35 @@ fn wrap(s: &str, max: usize) -> Vec<String> {
     out
 }
 
+/// the waypoint list: (x, y, w, h) of row k
+pub fn wp_row(k: usize, fw: i32, fh: i32) -> (i32, i32, i32, i32) {
+    let w = 200;
+    (fw / 2 - w / 2, fh / 3 + k as i32 * 18, w, 15)
+}
+pub fn wp_at(m: (f32, f32), view: (f32, f32), n: usize) -> Option<usize> {
+    let (fw, fh) = (view.0 as i32, view.1 as i32);
+    (0..n).find(|&k| {
+        let (x, y, w, h) = wp_row(k, fw, fh);
+        m.0 as i32 >= x && m.0 as i32 <= x + w && m.1 as i32 >= y && m.1 as i32 <= y + h
+    })
+}
+fn draw_waypoints(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
+    u.rect(0, 0, fw, fh, [4, 6, 12], 190);
+    u.text_c(fw / 2, fh / 3 - 30, "WAYPOINTS", [170, 200, 255], 2);
+    let list: Vec<AreaId> = AreaId::WAYPOINTS.iter().copied().filter(|a| g.discovered.contains(a)).collect();
+    for (k, a) in list.iter().enumerate() {
+        let (x, y, w, h) = wp_row(k, fw, fh);
+        let hover = g.wp_hover == Some(k);
+        u.rect(x, y, w, h, if hover { [40, 54, 90] } else { [18, 20, 34] }, 240);
+        u.rect(x, y, w, 1, [90, 110, 170], 255);
+        let here = *a == g.area;
+        u.text(x + 6, y + 5, &format!("{}  {}", k + 1, a.name()), if here { [150, 150, 170] } else { [230, 230, 255] }, 1, false);
+        let lv = format!("LV {}", a.level());
+        u.text(x + w - Ui::text_w(&lv, 1) - 6, y + 5, &lv, [150, 170, 220], 1, false);
+    }
+    u.text_c(fw / 2, fh / 3 + list.len() as i32 * 18 + 10, "CLICK OR PRESS A NUMBER - ESC CLOSES", [140, 140, 160], 1);
+}
+
 /// a small map of the whole world, top right
 fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
     let (mw, mh) = (84, 63);
@@ -379,8 +409,10 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
             let (wx, wy) = ((x as f32 * sx) as usize, (y as f32 * sy) as usize);
             let i = wy * W + wx;
             let m = g.world.m[i];
-            let c = match m {
+            let g_ = g.world.g[i];
+            let c = if g_ == STAIRS || g_ == STAIRSUP { [240, 220, 140] } else { match m {
                 TREE => [24, 52, 28],
+                ROCK => [8, 7, 10],
                 STONE => [86, 84, 92],
                 BRICK => [120, 104, 112],
                 WOOD => [110, 80, 50],
@@ -394,7 +426,7 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
                     BURNT => [30, 26, 26],
                     _ => [36, 60, 34],
                 },
-            };
+            } };
             u.px(ox + x, oy + y, c, 210);
         }
     }
@@ -414,9 +446,15 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
         if e.alive {
             let (x, y) = (ox + (e.x / sx) as i32, oy + (e.y / sy) as i32);
             if x >= ox && y >= oy && x < ox + mw && y < oy + mh {
-                u.px(x, y, if e.k == crate::body::Kind::Brute { [255, 150, 40] } else { [230, 50, 50] }, 255);
+                u.px(x, y, if e.k.big() { [255, 150, 40] } else { [230, 50, 50] }, 255);
             }
         }
+    }
+    if let Some((wx, wy)) = g.waypoint {
+        let (x, y) = (ox + (wx / sx) as i32, oy + (wy / sy) as i32);
+        u.px(x, y, [120, 170, 255], 255);
+        u.px(x + 1, y, [120, 170, 255], 255);
+        u.px(x, y + 1, [120, 170, 255], 255);
     }
     let (px, py) = (ox + (g.player.x / sx) as i32, oy + (g.player.y / sy) as i32);
     for &(dx, dy) in &[(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
@@ -519,6 +557,9 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     // enemy health bars
     for e in &g.enemies {
         if !e.alive || e.hpbar == 0 {
+            continue;
+        }
+        if e.k == Kind::King {
             continue;
         }
         let top = if e.k == Kind::Brute { 66.0 } else { 58.0 };
@@ -625,11 +666,27 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     }
     u.text(fw - gw - 8, 8, &gs, [255, 220, 120], 2, true);
     let alive = g.enemies.iter().filter(|e| e.alive).count();
-    u.text(8, 8, &format!("FOES {}", alive), [200, 190, 190], 1, true);
+    let _ = alive;
+    u.text(8, 8, &g.area.name(), [220, 205, 170], 1, true);
+    u.text(8, 17, &format!("AREA LEVEL {}", g.alvl), [150, 140, 150], 1, true);
+    // boss health
+    if let Some(b) = g.enemies.iter().find(|e| e.alive && e.k == Kind::King && e.aggro) {
+        let bw = (fw / 2).min(260);
+        let bx = fw / 2 - bw / 2;
+        u.rect(bx - 2, 62, bw + 4, 8, [10, 6, 10], 230);
+        u.rect(bx, 64, (bw as f32 * (b.hp / b.maxhp).clamp(0.0, 1.0)) as i32, 4, [190, 30, 30], 255);
+        u.text_c(fw / 2, 53, "THE HOLLOW KING", [240, 200, 120], 1);
+    }
+    // interaction prompt
+    if let Some(pr) = &g.prompt {
+        let w = Ui::text_w(pr, 1);
+        u.rect(fw / 2 - w / 2 - 4, fh - 62, w + 8, 11, [10, 6, 10], 200);
+        u.text(fw / 2 - w / 2, fh - 59, pr, [255, 230, 150], 1, false);
+    }
     // controls hint for the first seconds
     if t < 900 {
         let a = if t > 780 { ((900 - t) as f32 / 120.0 * 255.0) as u8 } else { 255 };
-        let lines = ["WASD MOVE   LMB SWORD   RMB CAST", "1-9 SPELLS   SPACE DODGE   F POTION   K SKILLS", "AIM AT LEGS TO TAKE THEM OFF"];
+        let lines = ["WASD MOVE   LMB SWORD   RMB CAST", "1-9 SPELLS   SPACE DODGE   F POTION   K SKILLS", "AIM AT LEGS TO TAKE THEM OFF   E INTERACT"];
         for (k, l) in lines.iter().enumerate() {
             let w = Ui::text_w(l, 1);
             let y = 26 + k as i32 * 8;
@@ -656,6 +713,12 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     }
     if g.tree {
         draw_tree(g, &mut u, fw, fh);
+    }
+    if g.wp_open {
+        draw_waypoints(g, &mut u, fw, fh);
+    }
+    if g.fade > 0 {
+        u.rect(0, 0, fw, fh, [0, 0, 0], (g.fade.min(30) as f32 / 30.0 * 255.0) as u8);
     }
     // cursor
     let (mx, my) = (inp.mouse.0 as i32, inp.mouse.1 as i32);

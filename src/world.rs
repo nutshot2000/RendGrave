@@ -23,6 +23,8 @@ pub const RUBBLE: u8 = 13;
 pub const METAL: u8 = 14;
 pub const CLOTH: u8 = 15;
 pub const ASH: u8 = 16;
+/// dungeon bedrock: very tall, dark, indestructible
+pub const ROCK: u8 = 17;
 
 pub const GRASS: u8 = 0;
 pub const DIRT: u8 = 1;
@@ -30,13 +32,16 @@ pub const FLOOR: u8 = 2;
 pub const MOSS: u8 = 3;
 pub const BURNT: u8 = 4;
 pub const MUD: u8 = 5;
+pub const STAIRS: u8 = 6;
+pub const STAIRSUP: u8 = 7;
 
 pub const AUX_TRUNK: u8 = 1;
 pub const AUX_INDOOR: u8 = 2;
+pub const AUX_DEAD: u8 = 4;
 
 #[inline]
 pub fn is_wall(m: u8) -> bool {
-    matches!(m, STONE | BRICK | TREE | WOOD)
+    matches!(m, STONE | BRICK | TREE | WOOD | ROCK)
 }
 #[inline]
 pub fn is_liquid(m: u8) -> bool {
@@ -53,6 +58,7 @@ pub fn wall_h(m: u8) -> i32 {
         BRICK => 44,
         TREE => 84,
         WOOD => 8,
+        ROCK => 44,
         _ => 0,
     }
 }
@@ -95,12 +101,6 @@ pub struct World {
     pub events: Vec<Ev>,
 }
 
-pub struct Spawns {
-    pub player: (f32, f32),
-    pub enemies: Vec<(u8, f32, f32)>,
-    pub braziers: Vec<(f32, f32)>,
-    pub crypt: (i32, i32, i32, i32),
-}
 
 impl World {
     pub fn new() -> World {
@@ -153,6 +153,11 @@ impl World {
                     self.act[b as usize * CW + a as usize] = 60;
                 }
             }
+        }
+    }
+    pub fn wake_all(&mut self) {
+        for c in self.act.iter_mut() {
+            *c = 30;
         }
     }
     #[inline]
@@ -503,7 +508,7 @@ impl World {
     }
 
     // ---------------- world generation ----------------
-    fn blob(&mut self, cx: f32, cy: f32, r: f32, m: u8, seed_: u32, only_empty: bool) {
+    pub fn blob(&mut self, cx: f32, cy: f32, r: f32, m: u8, seed_: u32, only_empty: bool) {
         let ri_ = (r * 1.4).ceil() as i32;
         for dy in -ri_..=ri_ {
             for dx in -ri_..=ri_ {
@@ -524,7 +529,7 @@ impl World {
             }
         }
     }
-    fn rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, m: u8) {
+    pub fn rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, m: u8) {
         for y in y0..y1 {
             for x in x0..x1 {
                 if Self::inb(x, y) {
@@ -535,7 +540,7 @@ impl World {
             }
         }
     }
-    fn ground_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, g: u8, aux: u8) {
+    pub fn ground_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, g: u8, aux: u8) {
         for y in y0..y1 {
             for x in x0..x1 {
                 if Self::inb(x, y) {
@@ -545,232 +550,5 @@ impl World {
                 }
             }
         }
-    }
-
-    pub fn generate(seed_: u64) -> (World, Spawns) {
-        seed(seed_);
-        let s = (seed_ & 0xffff) as u32;
-        let mut w = World::new();
-        // ground: grass with moss and dirt patches
-        for y in 0..H {
-            for x in 0..W {
-                let n = fbm(x as f32 * 0.018, y as f32 * 0.018, s);
-                let i = y * W + x;
-                w.g[i] = if n > 0.64 { MOSS } else if n < 0.3 { DIRT } else { GRASS };
-            }
-        }
-        // a road from the camp to the crypt door
-        let road = [(90.0, 680.0), (220.0, 640.0), (360.0, 600.0), (480.0, 520.0), (620.0, 470.0), (756.0, 440.0), (756.0, 400.0)];
-        let mut road_pts = vec![];
-        for k in 0..road.len() - 1 {
-            let (a, b) = (road[k], road[k + 1]);
-            let n = (((b.0 - a.0) as f32).hypot(b.1 - a.1) / 2.0) as i32;
-            for j in 0..n {
-                let t = j as f32 / n as f32;
-                let (x, y) = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-                let wob = (vnoise(x * 0.03, y * 0.03, s + 3) - 0.5) * 10.0;
-                road_pts.push((x + wob * 0.3, y + wob));
-            }
-        }
-        for &(x, y) in &road_pts {
-            let r = 6.0 + vnoise(x * 0.1, y * 0.1, s + 5) * 3.0;
-            for dy in -10..=10 {
-                for dx in -10..=10 {
-                    let d = ((dx * dx + dy * dy) as f32).sqrt();
-                    if d < r {
-                        let (px, py) = (x as i32 + dx, y as i32 + dy);
-                        if Self::inb(px, py) {
-                            let i = py as usize * W + px as usize;
-                            w.g[i] = if d > r - 1.5 && rnd() < 0.5 { MUD } else { DIRT };
-                        }
-                    }
-                }
-            }
-        }
-        let near_road = |x: f32, y: f32, r: f32| road_pts.iter().any(|&(a, b)| (a - x).powi(2) + (b - y).powi(2) < r * r);
-        // the pond
-        let pond = (300.0f32, 330.0f32);
-        for dy in -70i32..=70 {
-            for dx in -80i32..=80 {
-                let (x, y) = (pond.0 as i32 + dx, pond.1 as i32 + dy);
-                let d = ((dx * dx) as f32 / 1.3 + (dy * dy) as f32).sqrt();
-                let r = 46.0 * (0.8 + 0.4 * vnoise(x as f32 * 0.05, y as f32 * 0.05, s + 9));
-                let i = y as usize * W + x as usize;
-                if d < r {
-                    w.m[i] = WATER;
-                } else if d < r + 6.0 {
-                    w.g[i] = MUD;
-                }
-            }
-        }
-        // the crypt
-        let (x0, y0, x1, y1) = (600, 110, 910, 405);
-        w.ground_rect(x0, y0, x1, y1, FLOOR, AUX_INDOOR);
-        for (a, b) in [(x0, x1)] {
-            w.rect(a, y0, b, y0 + 7, BRICK);
-            w.rect(a, y1 - 7, 740, y1, BRICK);
-            w.rect(772, y1 - 7, b, y1, BRICK);
-        }
-        w.rect(x0, y0, x0 + 7, y1, BRICK);
-        w.rect(x1 - 7, y0, x1, y1, BRICK);
-        w.rect(706, y0, 713, 196, BRICK);
-        w.rect(706, 230, 713, y1, BRICK);
-        w.rect(x0, 262, 640, 268, BRICK);
-        w.rect(668, 262, 706, 268, BRICK);
-        for &px in &[770, 850] {
-            for &py in &[165, 245, 325] {
-                w.rect(px, py, px + 9, py + 9, BRICK);
-            }
-        }
-        // coffins and spilled oil in the north room
-        for k in 0..4 {
-            w.rect(622 + k * 21, 140, 630 + k * 21, 158, WOOD);
-            w.rect(622 + k * 21, 200, 630 + k * 21, 218, WOOD);
-        }
-        w.splash(650.0, 240.0, OIL, 9.0, 0);
-        w.splash(684.0, 176.0, OIL, 6.0, 0);
-        // acid pool in the south room
-        for dy in -16i32..=16 {
-            for dx in -22i32..=22 {
-                let d = ((dx * dx) as f32 / 1.8 + (dy * dy) as f32).sqrt();
-                if d < 13.0 + vnoise((650 + dx) as f32 * 0.2, (335 + dy) as f32 * 0.2, s) * 4.0 {
-                    let i = (335 + dy) as usize * W + (650 + dx) as usize;
-                    w.m[i] = ACID;
-                }
-            }
-        }
-        // bones and old blood in the hall
-        for _ in 0..40 {
-            let (bx, by) = (rr(720.0, 900.0) as i32, rr(120.0, 395.0) as i32);
-            if w.at(bx, by) == E {
-                let c = rr(170.0, 210.0) as u8;
-                for k in 0..(2 + ri(4)) as i32 {
-                    let (xx, yy) = (bx + k, by + (k % 2));
-                    if w.at(xx, yy) == E {
-                        let i = yy as usize * W + xx as usize;
-                        w.m[i] = BONE;
-                        w.col[i] = [c, c - 8, c - 26];
-                    }
-                }
-            }
-        }
-        for _ in 0..30 {
-            let (bx, by) = (rr(615.0, 900.0), rr(120.0, 395.0));
-            for _ in 0..40 {
-                let (x, y) = ((bx + rr(-8.0, 8.0)) as i32, (by + rr(-5.0, 5.0)) as i32);
-                if Self::inb(x, y) {
-                    let i = y as usize * W + x as usize;
-                    w.stain[i] = w.stain[i].saturating_add(70);
-                }
-            }
-        }
-        let braziers = vec![(728.0, 132.0), (892.0, 132.0), (728.0, 385.0), (892.0, 385.0), (732.0, 418.0), (780.0, 418.0), (625.0, 290.0)];
-        for &(bx, by) in &braziers {
-            w.rect(bx as i32 - 2, by as i32 - 1, bx as i32 + 3, by as i32 + 2, METAL);
-        }
-        // graveyard
-        for gy in 0..4 {
-            for gx in 0..5 {
-                let (x, y) = (470 + gx * 22 + ri(5) as i32, 300 + gy * 26 + ri(5) as i32);
-                if !near_road(x as f32, y as f32, 16.0) {
-                    w.rect(x, y, x + 5, y + 2, STONE);
-                    for _ in 0..12 {
-                        let (a, b) = (x + ri(7) as i32 - 1, y + 3 + ri(10) as i32);
-                        if Self::inb(a, b) {
-                            w.g[b as usize * W + a as usize] = DIRT;
-                        }
-                    }
-                }
-            }
-        }
-        // rocks
-        for _ in 0..70 {
-            let (x, y) = (rr(20.0, W as f32 - 20.0), rr(20.0, H as f32 - 20.0));
-            if near_road(x, y, 16.0) || (x > 580.0 && x < 930.0 && y > 90.0 && y < 425.0) || (x - 110.0).hypot(y - 670.0) < 70.0 {
-                continue;
-            }
-            w.blob(x, y, rr(2.5, 6.0), STONE, s + 21, true);
-        }
-        // forest
-        let mut placed = 0;
-        for _ in 0..4000 {
-            if placed > 120 {
-                break;
-            }
-            let (x, y) = (rr(12.0, W as f32 - 12.0), rr(12.0, H as f32 - 12.0));
-            let r = rr(10.0, 16.0);
-            let dens = fbm(x * 0.01, y * 0.01, s + 40);
-            if rnd() > dens * 1.2 {
-                continue;
-            }
-            if near_road(x, y, r * 0.6 + 12.0)
-                || (x > 575.0 && x < 935.0 && y > 85.0 && y < 440.0)
-                || (x - pond.0).hypot(y - pond.1) < 66.0
-                || (x - 110.0).hypot(y - 670.0) < 80.0
-                || (x > 455.0 && x < 590.0 && y > 285.0 && y < 420.0)
-            {
-                continue;
-            }
-            let mut clear = true;
-            'c: for dy in -(r as i32) - 2..=(r as i32) + 2 {
-                for dx in -(r as i32) - 2..=(r as i32) + 2 {
-                    if w.at(x as i32 + dx, y as i32 + dy) != E {
-                        clear = false;
-                        break 'c;
-                    }
-                }
-            }
-            if !clear {
-                continue;
-            }
-            w.blob(x, y, r, TREE, s + 30 + placed, true);
-            // remember each canopy cell's offset from the trunk; the trunk is a small disc
-            for dy in -(r as i32) - 6..=(r as i32) + 6 {
-                for dx in -(r as i32) - 6..=(r as i32) + 6 {
-                    let (xx, yy) = (x as i32 + dx, y as i32 + dy);
-                    if w.at(xx, yy) == TREE {
-                        let i = yy as usize * W + xx as usize;
-                        if w.col[i] == [0, 0, 0] {
-                            w.col[i] = [(dx + 128) as u8, (dy + 128) as u8, r as u8];
-                        }
-                        if dx * dx + dy * dy <= 5 {
-                            w.aux[i] |= AUX_TRUNK;
-                        }
-                    }
-                }
-            }
-            placed += 1;
-        }
-        // map border
-        w.rect(0, 0, W as i32, 6, STONE);
-        w.rect(0, H as i32 - 6, W as i32, H as i32, STONE);
-        w.rect(0, 0, 6, H as i32, STONE);
-        w.rect(W as i32 - 6, 0, W as i32, H as i32, STONE);
-        // enemies: zombies along the road, skeletons in the crypt, brutes guarding it
-        let mut enemies = vec![];
-        for &(gx, gy) in &[(260.0, 600.0), (420.0, 520.0), (560.0, 500.0), (380.0, 640.0)] {
-            for k in 0..3 {
-                enemies.push((0u8, gx + (k as f32 - 1.0) * 14.0 + rr(-4.0, 4.0), gy + rr(-12.0, 12.0)));
-            }
-        }
-        for &(x, y) in &[(760.0, 200.0), (820.0, 300.0), (880.0, 220.0), (810.0, 140.0), (740.0, 350.0), (650.0, 180.0), (680.0, 230.0), (640.0, 320.0)] {
-            enemies.push((1, x, y));
-        }
-        enemies.push((2, 790.0, 448.0));
-        enemies.push((2, 820.0, 260.0));
-        for &(_, x, y) in &enemies {
-            for dy in -8i32..=8 {
-                for dx in -8i32..=8 {
-                    let (xx, yy) = (x as i32 + dx, y as i32 + dy);
-                    if matches!(w.at(xx, yy), TREE | STONE) {
-                        w.set(xx, yy, E);
-                    }
-                }
-            }
-        }
-        for c in w.act.iter_mut() {
-            *c = 30;
-        }
-        (w, Spawns { player: (110.0, 672.0), enemies, braziers, crypt: (x0, y0, x1, y1) })
     }
 }

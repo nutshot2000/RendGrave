@@ -127,6 +127,13 @@ fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
         DIRT => scl([92, 72, 54], 0.82 + n * 0.25 + s * 0.12),
         MUD => scl([62, 50, 40], 0.85 + s * 0.15),
         BURNT => scl([38, 33, 31], 0.85 + s * 0.2),
+        STAIRS | STAIRSUP => {
+            // steps going down into darkness (or up into light)
+            let step = (y.rem_euclid(4) == 0) as i32 as f32;
+            let depth = (y.rem_euclid(24)) as f32 / 24.0;
+            let b = if w.g[i] == STAIRS { 0.75 - depth * 0.5 } else { 0.45 + depth * 0.5 };
+            scl([96, 90, 100], b - step * 0.25)
+        }
         FLOOR => {
             let (tx, ty) = (x.rem_euclid(10), (y + (x / 10) % 2 * 5).rem_euclid(10));
             let tile = h2(x / 10, (y + (x / 10) % 2 * 5) / 10, 8);
@@ -267,7 +274,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     }
     for e in &g.enemies {
         if e.alive {
-            shadow(&mut c, e.x, e.y, if e.k == Kind::Brute { 11.0 } else { 7.0 });
+            shadow(&mut c, e.x, e.y, if e.k == Kind::King { 15.0 } else if e.k == Kind::Brute { 11.0 } else { 7.0 });
         }
     }
     // ---- walls and trees (drawn upright, depth = their ground row)
@@ -306,6 +313,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                     let edge = north != BRICK;
                     scl([96, 88, 100], 0.85 + s * 0.15 + if edge { 0.25 } else { 0.0 })
                 }
+                ROCK => scl([20, 18, 24], 0.8 + s * 0.4),
                 _ => {
                     let plank = (wx % 4 == 0) as i32 as f32;
                     scl([138, 98, 60], 0.85 + s * 0.15 - plank * 0.25)
@@ -326,6 +334,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                             scl(base, 1.0 - k as f32 / h as f32 * 0.35)
                         }
                         STONE => scl([84, 82, 90], 0.95 - k as f32 / h as f32 * 0.35 + s * 0.1),
+                        ROCK => scl([46, 42, 48], 0.9 - k as f32 / h as f32 * 0.5 + h2(wx, k / 3, 7) * 0.2),
                         _ => scl([102, 70, 42], 0.9 - k as f32 / h as f32 * 0.3),
                     };
                     let (col, e) = if burning && h2(wx, syy + (t / 4) as i32, 1) < 0.5 { (mixc(col, fc, 0.6), scl(fc, 0.7)) } else { (col, [0; 3]) };
@@ -349,6 +358,20 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             let fy = (h2(k, (t / 3) as i32, 3) * 7.0) as i32;
             let col = fire_col((k * 13) as u32, t);
             c.put(sx + fx, sy - 9 - fy, by + 0.1, col, scl(col, 1.0), 9.0 + fy as f32);
+        }
+    }
+    // ---- waypoint: a rune circle that glows brighter once found
+    if let Some((wx, wy)) = g.waypoint {
+        let found = g.discovered.contains(&g.area);
+        let (sx, sy) = (wx as i32 - cx, wy as i32 - cy);
+        let pulse = 0.6 + (t as f32 * 0.06).sin() * 0.3;
+        for k in 0..90 {
+            let a = k as f32 / 90.0 * std::f32::consts::TAU;
+            let (x, y) = (sx + (a.cos() * 14.0) as i32, sy + (a.sin() * 9.0) as i32);
+            c.glow(x, y, scl([90, 140, 255], pulse * if found { 1.0 } else { 0.35 }));
+        }
+        for k in 0..12 {
+            c.put(sx, sy - 14 - k, wy, [130, 150, 190], scl([80, 120, 255], pulse * 0.6), 14.0 + k as f32);
         }
     }
     // ---- pickups
@@ -411,7 +434,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             frozen: e.frozen > 0,
             wet: e.wet > 0,
             shock: e.twitch > 0 && (t / 2) % 2 == 0,
-            windup: e.st == St::Wind && e.k == Kind::Brute,
+            windup: e.st == St::Wind && e.k.big(),
             burn: false,
         };
         draw_body(&mut c, &e.body, e.x + jitter, e.y, tint);
@@ -419,6 +442,16 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     // ---- projectiles
     for p in &g.projs {
         let (sx, sy) = (p.x as i32 - cx, (p.y - p.z) as i32 - cy);
+        if p.k == 3 {
+            // arrow: shaft along its flight, grey head
+            let l = (p.vx * p.vx + p.vy * p.vy).sqrt().max(0.01);
+            let (ux, uy) = (p.vx / l, p.vy / l * 0.6);
+            for k in 0..7 {
+                let (x, y) = ((p.x - ux * k as f32) as i32 - cx, (p.y - p.z - uy * k as f32) as i32 - cy);
+                c.put(x, y, p.y + 0.5, if k == 0 { [200, 200, 210] } else if k == 6 { [220, 220, 220] } else { [120, 86, 54] }, [0; 3], p.z);
+            }
+            continue;
+        }
         let r = if p.k == 1 { 2 } else { 3 };
         for dy in -r..=r {
             for dx in -r..=r {
@@ -602,6 +635,9 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             add(g.player.x + g.player.face * 10.0, g.player.y, 70.0, g.player.cast_t as f32 / 14.0 * 1.5, col);
         }
     }
+    if let Some((wx, wy)) = g.waypoint {
+        add(wx, wy + 2.0, 90.0, 0.9, [0.45, 0.6, 1.0]);
+    }
     for &(bx, by) in &g.braziers {
         let fl = 1.0 + (t as f32 * 0.21 + bx).sin() * 0.08 + (t as f32 * 0.73 + by).sin() * 0.05;
         add(bx, by + 1.0, 120.0, 1.4 * fl, [1.0, 0.55, 0.22]);
@@ -620,12 +656,13 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
         match p.k {
             0 => add(p.x, p.y, 110.0, 1.6, [1.0, 0.55, 0.2]),
             1 => add(p.x, p.y, 40.0, 0.5, [0.5, 1.0, 0.3]),
-            _ => add(p.x, p.y, 100.0, 1.4 + (t as f32 * 0.9).sin() * 0.3, [0.55, 0.7, 1.0]),
+            2 => add(p.x, p.y, 100.0, 1.4 + (t as f32 * 0.9).sin() * 0.3, [0.55, 0.7, 1.0]),
+            _ => {}
         }
     }
     for e in &g.enemies {
-        if e.alive && e.k != Kind::Zombie && e.frozen == 0 {
-            let col = if e.k == Kind::Skeleton { [1.0, 0.25, 0.15] } else { [1.0, 0.5, 0.15] };
+        if e.alive && !matches!(e.k, Kind::Zombie | Kind::Crawler) && e.frozen == 0 {
+            let col = if e.k == Kind::King { [0.5, 0.7, 1.0] } else if e.k.bony() { [1.0, 0.25, 0.15] } else { [1.0, 0.5, 0.15] };
             add(e.x, e.y + 1.0, 22.0, 0.5, col);
         }
         if e.alive && e.burning > 8 {
@@ -686,7 +723,14 @@ fn draw_tree_cell(c: &mut Ctx, w: &World, i: usize, wx: i32, wy: i32, sx: i32, d
     let h = base_h;
     let skirt = 30 + (seed * 8.0) as i32;
     // per-tree tint: some darker pines, some brighter oaks
-    let leaf = mixc([34, 76, 40], [62, 98, 44], seed);
+    let dead = w.aux[i] & AUX_DEAD != 0;
+    let leaf = if dead { mixc([58, 50, 44], [84, 76, 70], seed) } else { mixc([34, 76, 40], [62, 98, 44], seed) };
+    if dead && h2(wx, wy, 13) < 0.55 && w.aux[i] & AUX_TRUNK == 0 {
+        // bare branches: only a lattice of twigs
+        if (wx + wy) % 3 != 0 {
+            return;
+        }
+    }
     // canopy top
     let clump = vnoise(wx as f32 * 0.32, wy as f32 * 0.32, 9);
     let mut lv = 0.55 + dome * 0.55 - (dx + dy) as f32 / r * 0.16 + (clump - 0.5) * 0.4;

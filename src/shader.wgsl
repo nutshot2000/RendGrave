@@ -121,7 +121,7 @@ fn aces(x: vec3f) -> vec3f {
   let b1 = textureSampleLevel(t1, sl, uv, 0.0).rgb;
   let b2 = textureSampleLevel(t2, sl, uv, 0.0).rgb;
   c += b1 * 0.55 + b2 * 0.9;
-  c += vec3f(0.75, 0.82, 1.0) * g.amb_out.w;
+  c = c * (1.0 + g.amb_out.w * 3.0) + vec3f(0.75, 0.82, 1.0) * g.amb_out.w * 0.12;
   c = aces(c * g.misc.w);
   // cool shadows, warm highlights
   let lum = dot(c, vec3f(0.299, 0.587, 0.114));

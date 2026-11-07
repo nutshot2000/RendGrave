@@ -5,6 +5,7 @@ use crate::rng::*;
 use crate::world::*;
 use crate::skills::*;
 use crate::spells::*;
+use crate::areagen::*;
 
 #[derive(Default, Clone)]
 pub struct Input {
@@ -21,6 +22,7 @@ pub struct Input {
     pub restart: bool,
     pub tree: bool,
     pub close: bool,
+    pub interact: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -60,6 +62,7 @@ pub struct Enemy {
     pub burning: i32,
     pub hit_cd: i32,
     pub chill: i32,
+    pub summoned: bool,
 }
 
 pub struct Player {
@@ -226,7 +229,6 @@ pub struct Game {
     pub frame: u64,
     pub banner: Option<(String, String, i32)>,
     pub view: (f32, f32),
-    pub crypt: (i32, i32, i32, i32),
     pub seed: u64,
     pub prev: Input,
     pub fields: Vec<Field>,
@@ -237,6 +239,18 @@ pub struct Game {
     pub tree_hover: Option<usize>,
     pub paused: bool,
     pub hold_block: bool,
+    pub area: AreaId,
+    pub alvl: i32,
+    pub exits: Vec<Exit>,
+    pub waypoint: Option<(f32, f32)>,
+    pub discovered: Vec<AreaId>,
+    pub wp_open: bool,
+    pub wp_hover: Option<usize>,
+    pub king_dead: bool,
+    pub fade: i32,
+    pub exit_lock: i32,
+    pub prompt: Option<String>,
+    pub saving: bool,
 }
 
 fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
@@ -244,6 +258,9 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         Kind::Zombie => (70.0, 0.42, 13.0, 9.0, 22),
         Kind::Skeleton => (45.0, 0.85, 17.0, 11.0, 16),
         Kind::Brute => (260.0, 0.5, 22.0, 24.0, 38),
+        Kind::Crawler => (45.0, 1.0, 12.0, 7.0, 18),
+        Kind::Archer => (35.0, 0.8, 150.0, 10.0, 34),
+        Kind::King => (1500.0, 0.55, 30.0, 30.0, 40),
         Kind::Player => (100.0, 1.0, 10.0, 0.0, 10),
     };
     let mut body = humanoid(k);
@@ -277,6 +294,7 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         burning: 0,
         hit_cd: 0,
         chill: 0,
+        summoned: false,
     }
 }
 
@@ -284,13 +302,20 @@ impl Game {
     pub fn new_enemy(k: Kind, x: f32, y: f32) -> Enemy {
         enemy(k, x, y)
     }
+    /// test modes: straight into the Hollow Pines, no save file
     pub fn new(seed_: u64) -> Game {
-        let (world, sp) = World::generate(seed_);
+        let mut g = Game::blank(seed_);
+        g.travel(AreaId::Pines);
+        g
+    }
+    pub fn blank(seed_: u64) -> Game {
+        seed(seed_);
+        let world = World::new();
         let mut body = humanoid(Kind::Player);
         body.compute();
         let player = Player {
-            x: sp.player.0,
-            y: sp.player.1,
+            x: 100.0,
+            y: 100.0,
             hp: 100.0,
             mana: 60.0,
             body,
@@ -321,11 +346,7 @@ impl Game {
             maxmana: 60.0,
             whirl: 0,
         };
-        let enemies = sp
-            .enemies
-            .iter()
-            .map(|&(k, x, y)| enemy([Kind::Zombie, Kind::Skeleton, Kind::Brute][k as usize], x, y))
-            .collect();
+        let enemies = vec![];
         Game {
             world,
             player,
@@ -335,19 +356,18 @@ impl Game {
             gibs: vec![],
             bolts: vec![],
             lights: vec![],
-            braziers: sp.braziers,
+            braziers: vec![],
             floats: vec![],
             pickups: vec![],
             slashes: vec![],
             novas: vec![],
-            cam: (sp.player.0 - 260.0, sp.player.1 - 150.0),
+            cam: (0.0, 0.0),
             shake: 0.0,
             flash: 0.0,
             hitstop: 0,
             frame: 0,
-            banner: Some(("RENDGRAVE".into(), "THE HOLLOW PINES".into(), 170)),
+            banner: None,
             view: (520.0, 300.0),
-            crypt: sp.crypt,
             seed: seed_,
             prev: Input::default(),
             fields: vec![],
@@ -358,6 +378,18 @@ impl Game {
             tree_hover: None,
             paused: false,
             hold_block: false,
+            area: AreaId::Ashford,
+            alvl: 1,
+            exits: vec![],
+            waypoint: None,
+            discovered: vec![],
+            wp_open: false,
+            wp_hover: None,
+            king_dead: false,
+            fade: 0,
+            exit_lock: 0,
+            prompt: None,
+            saving: false,
         }
     }
 
@@ -448,18 +480,22 @@ impl Game {
     pub fn blood(&mut self, x: f32, y: f32, z: f32, n: usize, dir: (f32, f32), k: Kind) {
         let c = match k {
             Kind::Zombie => [90u8, 30, 26],
-            Kind::Skeleton => [200, 196, 180],
+            Kind::Skeleton | Kind::Archer | Kind::King => [200, 196, 180],
+            Kind::Crawler => [90u8, 30, 26],
             _ => [140, 14, 18],
         };
         for _ in 0..n {
             let sp = rr(0.3, 2.2);
-            let kind = if k == Kind::Skeleton { PtK::Debris } else { PtK::Blood };
+            let kind = if k.bony() { PtK::Debris } else { PtK::Blood };
             self.ptc(x, y, z, dir.0 * sp + rr(-0.6, 0.6), dir.1 * sp + rr(-0.5, 0.5), rr(0.2, 2.0), 300, kind, c);
         }
     }
 
     // ------------------------------------------------------------ update
     pub fn update(&mut self, inp: &Input) {
+        if self.fade > 0 {
+            self.fade -= 1;
+        }
         if inp.tree && !self.prev.tree && !self.player.dead {
             self.tree = !self.tree;
             self.hold_block = true;
@@ -470,6 +506,15 @@ impl Game {
                 self.paused = !self.paused;
             }
             self.hold_block = true;
+        }
+        if self.wp_open {
+            if inp.close && !self.prev.close {
+                self.wp_open = false;
+            } else {
+                self.update_waypoints(inp);
+            }
+            self.prev = inp.clone();
+            return;
         }
         if self.paused && !self.tree {
             self.prev = inp.clone();
@@ -519,14 +564,13 @@ impl Game {
         self.update_misc();
         self.update_spells();
         self.update_whirl();
-        self.respawn();
+        self.update_area(&inp2);
         self.prev = inp.clone();
     }
 
     fn update_player(&mut self, inp: &Input) {
         if inp.restart && !self.prev.restart && self.player.dead {
-            let s = self.seed.wrapping_add(1);
-            *self = Game::new(s);
+            self.revive();
             return;
         }
         let (mwx, mwy) = self.mouse_world(inp);
@@ -724,7 +768,7 @@ impl Game {
             p.dead = true;
             p.hp = 0.0;
             let (x, y) = (p.x, p.y);
-            self.banner = Some(("YOU DIED".into(), "PRESS R TO RISE AGAIN".into(), 100000));
+            self.banner = Some(("YOU DIED".into(), "PRESS R TO WAKE IN ASHFORD".into(), 100000));
             self.blood(x, y, 20.0, 60, (0.0, 0.0), Kind::Player);
             let mut b = std::mem::replace(&mut self.player.body, humanoid(Kind::Player));
             b.mirror = self.player.face < 0.0;
@@ -766,7 +810,7 @@ impl Game {
                 continue;
             }
             let (dx, dy) = (e.x - px, e.y - py);
-            let big = if e.k == Kind::Brute { 8.0 } else { 0.0 };
+            let big = if e.k.big() { 8.0 } else { 0.0 };
             let d = (dx * dx + dy * dy * 1.6).sqrt();
             if d > 34.0 + big {
                 continue;
@@ -781,7 +825,7 @@ impl Game {
             let h = if rel_mx.abs() < 14.0 && rel_my < 2.0 && rel_my > -66.0 {
                 rel_my
             } else {
-                -[8.0, 14.0, 24.0, 30.0, 38.0][ri(5)] * if e.k == Kind::Brute { 1.15 } else { 1.0 }
+                -[8.0, 14.0, 24.0, 30.0, 38.0][ri(5)] * if e.k == Kind::King { 1.5 } else if e.k == Kind::Brute { 1.15 } else { 1.0 }
             };
             let crit = rnd() < crit_ch;
             let power = 26.0 + edge as f32 * 8.0 + if crit { 20.0 + 6.0 * ex_r as f32 } else { 0.0 };
@@ -909,7 +953,7 @@ impl Game {
         let n = bolt.pts.len();
         let mid = bolt.pts[n / 2];
         self.bolts.push(bolt);
-        self.light(mid.0, mid.1 + 20.0, 170.0, 2.6, [0.6, 0.75, 1.0], 10);
+        self.light(mid.0, mid.1 + 20.0, 150.0, 1.7, [0.6, 0.75, 1.0], 10);
         self.light(b.0, b.1 + 30.0, 90.0, 2.0, [0.7, 0.85, 1.0], 12);
     }
 
@@ -1077,14 +1121,30 @@ impl Game {
                         break;
                     }
                 }
-                let hit_e = if kind == 2 { None } else { hit_e };
-                if wall || ground || hit_e.is_some() || p.life <= 0 {
+                let hit_e = if kind >= 2 { None } else { hit_e };
+                let pl = &self.player;
+                let hit_p = kind == 3 && !pl.dead && (pl.y - y).abs() < 6.0 && (pl.x - x).abs() < 5.0 && z < 48.0;
+                if wall || ground || hit_e.is_some() || hit_p || self.projs[k].life <= 0 {
                     match kind {
                         0 => {
                             let r = 13.0 + 2.0 * self.rank(Sk::Kindling) as f32;
                             self.explode(x, y, z.max(2.0), r);
                         }
                         1 => self.acid_hit(x, y, z, hit_e),
+                        3 => {
+                            if hit_p && self.player.inv == 0 {
+                                let d = 10.0 * (1.0 + 0.1 * (self.alvl - 1) as f32) * rr(0.85, 1.15);
+                                self.player.hp -= d;
+                                self.player.hurt = 1.0;
+                                self.player.inv = 10;
+                                self.shake = self.shake.max(3.0);
+                                let (ppx, ppy) = (self.player.x, self.player.y);
+                                self.blood(ppx, ppy, z, 8, (self.projs[k].vx.signum(), 0.0), Kind::Player);
+                                self.float(ppx, ppy - 60.0, format!("-{}", d as i32), [255, 80, 80], false);
+                            } else {
+                                self.ptc(x, y, z, 0.0, 0.0, 0.0, 120, PtK::Debris, [120, 90, 60]);
+                            }
+                        }
                         _ => {
                             for _ in 0..30 {
                                 self.ptc(x, y, z, rr(-2.0, 2.0), rr(-1.5, 1.5), rr(-1.0, 2.0), 20, PtK::Spark, [190, 215, 255]);
@@ -1114,7 +1174,7 @@ impl Game {
                 if rnd() < 0.5 {
                     self.ptc(x, y, z, rr(-0.2, 0.2), rr(-0.2, 0.2), -0.2, 20, PtK::Acid, [140, 230, 70]);
                 }
-            } else {
+            } else if kind == 2 {
                 let life = self.projs[k].life;
                 if rnd() < 0.6 {
                     let a = rnd() * std::f32::consts::TAU;
@@ -1184,18 +1244,20 @@ impl Game {
         let (x, y, k) = (e.x, e.y, e.k);
         self.player.kills += 1;
         let gold = match k {
+            Kind::King => 0,
             Kind::Brute => 40 + ri(30) as i32,
-            Kind::Skeleton => 6 + ri(10) as i32,
+            Kind::Skeleton | Kind::Archer => 6 + ri(10) as i32,
             _ => 3 + ri(8) as i32,
         };
+        let gold = gold * (1 + self.alvl / 3);
         let fortune = self.rank(Sk::Fortune) as f32;
         let gold = (gold as f32 * (1.0 + 0.25 * fortune)) as i32;
         self.pickups.push(Pickup { k: 0, x, y, z: 10.0, vz: 1.5, amt: gold, t: 0 });
-        self.gain_xp(match k {
-            Kind::Brute => 90,
-            Kind::Skeleton => 26,
-            _ => 20,
-        });
+        let xp = self.xp_for(k);
+        self.gain_xp(xp);
+        if k == Kind::King {
+            self.king_slain(x, y);
+        }
         if rnd() < if k == Kind::Brute { 1.0 } else { 0.18 + 0.07 * fortune } {
             self.pickups.push(Pickup { k: 1, x: x + 6.0, y: y + 2.0, z: 10.0, vz: 2.0, amt: 1, t: 0 });
         }
@@ -1265,7 +1327,7 @@ impl Game {
             e.burning = burning;
             if burning > 0 {
                 e.hp -= (burning.min(60)) as f32 * 0.004 * bm;
-                if e.k == Kind::Zombie && burning > 30 {
+                if matches!(e.k, Kind::Zombie | Kind::Crawler) && burning > 30 {
                     e.aggro = true;
                 }
             }
@@ -1303,7 +1365,7 @@ impl Game {
                 let ds = e.body.detach_everything();
                 let dir = ((ex - px).signum(), 0.0);
                 self.spawn_gibs(ex, ey, m, ds, dir, 0.9, false);
-                if k != Kind::Skeleton {
+                if !k.bony() {
                     self.blood(ex, ey, 20.0, 30, dir, k);
                 } else {
                     for _ in 0..12 {
@@ -1317,13 +1379,14 @@ impl Game {
             // bleeding stumps
             if e.bleed > 0 {
                 e.bleed -= 1;
-                if k != Kind::Skeleton && rnd() < 0.25 {
+                if !k.bony() && rnd() < 0.25 {
                     let h = rr(5.0, 40.0);
-                    let c = if k == Kind::Zombie { [90, 30, 26] } else { [140, 14, 18] };
+                    let c = if matches!(k, Kind::Zombie | Kind::Crawler) { [90, 30, 26] } else { [140, 14, 18] };
                     let (x, y) = (e.x, e.y);
                     self.ptc(x + rr(-4.0, 4.0), y, h, rr(-0.4, 0.4), rr(-0.3, 0.3), rr(0.0, 0.5), 300, PtK::Blood, c);
                 }
             }
+            self.boss_logic(i);
             let e = &mut self.enemies[i];
             // AI
             if e.frozen > 0 {
@@ -1336,24 +1399,37 @@ impl Game {
             }
             let (dx, dy) = (px - e.x, py - e.y);
             let dist = (dx * dx + dy * dy * 1.6).sqrt();
-            if !e.aggro && dist < if e.k == Kind::Brute { 130.0 } else { 160.0 } && self.world.los(e.x, e.y - 1.0, px, py - 1.0) {
+            if !e.aggro && dist < if e.k.big() { 130.0 } else if e.k == Kind::Archer { 190.0 } else { 160.0 } && self.world.los(e.x, e.y - 1.0, px, py - 1.0) {
                 e.aggro = true;
             }
             let e = &mut self.enemies[i];
             let mut want = (0.0f32, 0.0f32);
             let crawling = legs == 0;
-            let spd = e.speed * if legs == 2 { 1.0 } else if legs == 1 { 0.55 } else { 0.35 } * if e.burning > 25 && e.k != Kind::Skeleton { 1.5 } else { 1.0 };
+            let spd = e.speed * if legs == 2 { 1.0 } else if legs == 1 { 0.55 } else { 0.35 } * if e.burning > 25 && !e.k.bony() { 1.5 } else { 1.0 };
             if e.stun > 0 {
                 e.stun -= 1;
             } else if e.aggro && !pdead {
                 match e.st {
                     St::Idle | St::Chase => {
                         e.st = St::Chase;
-                        if dist > e.reach * 0.8 {
+                        if e.k == Kind::Archer {
+                            let l = dist.max(1.0);
+                            let sees = self.world.los(e.x, e.y - 1.0, px, py - 1.0);
+                            if dist < 70.0 {
+                                want = (-dx / l * spd, -dy / l * spd);
+                            } else if dist > 125.0 || !sees {
+                                want = (dx / l * spd, dy / l * spd);
+                            }
+                            if dist < e.reach && sees && armed && e.hit_cd == 0 && dist > 40.0 {
+                                e.st = St::Wind;
+                                e.t = e.windup;
+                            }
+                        } else if dist > e.reach * 0.8 {
                             let l = dist.max(1.0);
                             want = (dx / l * spd, dy / l * spd);
                         }
-                        if dist < e.reach && (armed || e.k == Kind::Zombie) && e.hit_cd == 0 {
+                        let e = &mut self.enemies[i];
+                        if e.k != Kind::Archer && dist < e.reach && (armed || matches!(e.k, Kind::Zombie | Kind::Crawler)) && e.hit_cd == 0 {
                             e.st = St::Wind;
                             e.t = e.windup;
                         }
@@ -1366,10 +1442,17 @@ impl Game {
                             e.t = 30;
                             e.hit_cd = 20;
                             // strike
-                            let ok = dist < e.reach + 6.0;
+                            let ok = dist < e.reach + 6.0 && e.k != Kind::Archer;
                             let (dmg, k2) = (e.dmg, e.k);
                             let (ex2, ey2) = (e.x, e.y);
-                            if k2 == Kind::Brute {
+                            if k2 == Kind::Archer {
+                                e.hit_cd = 50;
+                                let (adx, ady) = (px - ex2, py - ey2);
+                                let l = (adx * adx + ady * ady).sqrt().max(1.0);
+                                let f = e.face;
+                                self.projs.push(Proj { k: 3, x: ex2 + f * 6.0, y: ey2 + 1.0, z: 30.0, vx: adx / l * 4.2, vy: ady / l * 4.2, vz: 0.0, life: 70 });
+                            }
+                            if k2.big() {
                                 self.shake = self.shake.max(7.0);
                                 let f = e.face;
                                 let (sx, sy) = (ex2 + f * 18.0, ey2 + 2.0);
@@ -1441,7 +1524,7 @@ impl Game {
                 e.vx *= 0.82;
                 e.vy *= 0.82;
             }
-            let r = if e.k == Kind::Brute { 5.0 } else { 3.0 };
+            let r = if e.k == Kind::King { 7.0 } else if e.k == Kind::Brute { 5.0 } else { 3.0 };
             let (mut x, mut y) = (e.x, e.y);
             let moved = self.mv(&mut x, &mut y, mvx, mvy, r);
             if !moved && (want.0 != 0.0 || want.1 != 0.0) {
@@ -1472,28 +1555,28 @@ impl Game {
                 let limp = if legs == 1 { (ph.sin() * 3.0).max(0.0) } else { 0.0 };
                 b.root = (0.0, -b.leg_len + 1.5 - (ph * 2.0).sin().abs() * 1.0 * w + limp);
                 let lean = match e.k {
-                    Kind::Zombie => 0.22,
-                    Kind::Brute => 0.12,
+                    Kind::Zombie | Kind::Crawler => 0.22,
+                    Kind::Brute | Kind::King => 0.12,
                     _ => 0.05,
                 };
                 b.parts[T_TORSO].ang = lean + tw + if legs == 1 { 0.15 } else { 0.0 };
                 b.parts[T_LEGF].ang = ph.sin() * 0.5 * w;
                 b.parts[T_LEGB].ang = -ph.sin() * 0.5 * w;
-                b.parts[T_HEAD].ang = tw * 2.0 + if e.k == Kind::Zombie { 0.25 } else { 0.0 };
+                b.parts[T_HEAD].ang = tw * 2.0 + if matches!(e.k, Kind::Zombie | Kind::Crawler) { 0.25 } else { 0.0 };
                 match e.st {
                     St::Wind => {
                         let t = 1.0 - e.t as f32 / e.windup as f32;
                         b.parts[T_ARMF].ang = -0.5 - t * 2.4;
-                        b.parts[T_ARMB].ang = if e.k == Kind::Zombie { -1.4 - t } else { 0.3 };
+                        b.parts[T_ARMB].ang = if matches!(e.k, Kind::Zombie | Kind::Crawler) { -1.4 - t } else { 0.3 };
                         b.parts[T_TORSO].ang -= t * 0.2;
                     }
                     St::Recover if e.t > 22 => {
                         b.parts[T_ARMF].ang = 0.9;
-                        b.parts[T_ARMB].ang = if e.k == Kind::Zombie { 0.4 } else { 0.2 };
+                        b.parts[T_ARMB].ang = if matches!(e.k, Kind::Zombie | Kind::Crawler) { 0.4 } else { 0.2 };
                         b.parts[T_TORSO].ang += 0.25;
                     }
                     _ => {
-                        if e.k == Kind::Zombie {
+                        if matches!(e.k, Kind::Zombie | Kind::Crawler) {
                             b.parts[T_ARMF].ang = -1.35 + ph.sin() * 0.15;
                             b.parts[T_ARMB].ang = -1.25 - ph.sin() * 0.15;
                         } else {

@@ -63,9 +63,9 @@ impl Game {
         if crit {
             d *= 1.6;
         }
-        e.stun = e.stun.max(if e.k == Kind::Brute { 4 } else { 10 });
+        e.stun = e.stun.max(if e.k.big() { 4 } else { 10 });
         let dir = if from_left { 1.0 } else { -1.0 };
-        let kb = if e.k == Kind::Brute { 0.4 } else { 1.6 };
+        let kb = if e.k == Kind::King { 0.1 } else if e.k.big() { 0.4 } else { 1.6 };
         e.vx += dir * kb;
         if flesh > 0 {
             e.bleed = 160;
@@ -82,7 +82,7 @@ impl Game {
         }
         // bloodthirst heals on cuts that draw blood
         let bt = self.rank(Sk::Bloodthirst);
-        if bt > 0 && flesh > 0 && k != Kind::Skeleton {
+        if bt > 0 && flesh > 0 && !k.bony() {
             let heal = (flesh as f32 * 0.25 * bt as f32).min(3.0 * bt as f32);
             let p = &mut self.player;
             p.hp = (p.hp + heal).min(p.maxhp);
@@ -445,7 +445,7 @@ impl Game {
                     continue;
                 }
                 let d = ((e.x - px).powi(2) + ((e.y - py) * 1.3).powi(2)).sqrt();
-                if d > 36.0 + if e.k == Kind::Brute { 8.0 } else { 0.0 } {
+                if d > 36.0 + if e.k.big() { 8.0 } else { 0.0 } {
                     continue;
                 }
                 let h = -[10.0, 18.0, 26.0, 34.0][ri(4)];
