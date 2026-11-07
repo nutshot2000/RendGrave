@@ -1,0 +1,1180 @@
+<title>Pixel Physics Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: lab bench. The simulation stage dominates; the instrument panel sits beside it (stacks under it on phones). Single dark look by choice: pixel sims read best on dark. */
+:root{
+  --bg:#0f1114; --panel:#16191e; --raise:#1d2127; --line:#2a2f37;
+  --ink:#e6e4df; --muted:#8e939c; --accent:#9cc3ff; --warm:#ffb454; --body:#8fe0a8; --hit:#ff6b6b;
+  --f-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 32px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px}
+h1{font-family:var(--f-display);font-weight:600;font-size:26px;letter-spacing:.02em;margin:0;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:76ch}
+.bench{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+@media (max-width:980px){.bench{grid-template-columns:minmax(0,1fr)}}
+.stage-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:#0b0d10;border:1px solid var(--line);border-radius:4px;overflow:hidden;touch-action:none;cursor:crosshair}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#sim{image-rendering:pixelated;image-rendering:crisp-edges}
+#ov{pointer-events:none}
+.hover{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 16px;min-height:18px;font-variant-numeric:tabular-nums}
+.hover b{color:var(--ink);font-weight:500}
+.tools{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.label{font-family:var(--f-display);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.mats{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+button{font:inherit;color:var(--ink);background:var(--raise);border:1px solid var(--line);border-radius:3px;padding:6px 9px;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left}
+button:hover{border-color:#3b424d}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button[aria-pressed="true"]{border-color:var(--accent);background:#1f2a3a}
+.mats.rigid button[aria-pressed="true"]{border-color:var(--body);background:#1c2b22}
+.sw{width:14px;height:14px;border-radius:2px;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.mats.rigid .sw{outline:1.5px solid var(--body);outline-offset:1px}
+.key{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.row .grow{flex:1}
+.slider{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.slider input{width:110px;accent-color:var(--accent)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+aside{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.exps{display:flex;flex-direction:column;gap:5px}
+.exps button{flex-direction:column;align-items:flex-start;gap:1px}
+.exps button span{font-size:12px;color:var(--muted)}
+.exps button strong{font-weight:600}
+.note{font-size:13px;color:var(--ink);background:var(--raise);border-left:2px solid var(--warm);padding:8px 10px;margin:0}
+.stats{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums;margin:0}
+.stats dt{color:var(--muted)} .stats dd{margin:0;text-align:right}
+#spark{width:100%;height:56px;display:block}
+.legend{display:flex;flex-direction:column;gap:7px;font-size:12.5px;margin:0;padding:0;list-style:none}
+.legend li{display:flex;gap:9px;align-items:flex-start}
+.lg{width:16px;height:12px;flex:none;margin-top:3px;border-radius:1px}
+.lg.grid{border:1px dashed rgba(230,228,223,.35)}
+.lg.awake{border:1px solid rgba(156,195,255,.55)}
+.lg.dirty{background:rgba(156,195,255,.2);border:1px solid var(--accent)}
+.lg.part{border:1.5px solid var(--warm);border-radius:50%;width:10px;height:10px;margin:4px 3px 0}
+.lg.body{border:1.5px solid var(--body);transform:rotate(-12deg)}
+.lg.hit{background:var(--hit);border-radius:50%;width:7px;height:7px;margin:5px 4px 0}
+.foot{font-size:12px;color:var(--muted);margin:0}
+.wandbar{display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-height:38px;padding:6px;background:#121519;border:1px solid var(--line);border-radius:3px}
+.wandbar .empty{font-size:12px;color:var(--muted);padding:0 4px}
+.chip{--c:var(--warm);padding:5px 8px;gap:6px;font-size:12.5px;border-color:color-mix(in srgb,var(--c) 45%,var(--line))}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+.chip.mod{--c:var(--accent)} .chip.mod .dot{border-radius:1px}
+.chip.multi{--c:#c9a2ff} .chip.multi .dot{border-radius:1px;transform:rotate(45deg)}
+.chip.next{outline:2px solid var(--c);outline-offset:1px}
+.chip .x{color:var(--muted);font-size:11px;margin-left:2px}
+.lib{display:flex;flex-wrap:wrap;gap:5px}
+.wandstate{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.presets{display:flex;flex-wrap:wrap;gap:5px}
+.presets button{font-size:12.5px;padding:5px 8px}
+.lg.aim{border-top:1.5px dashed var(--warm);height:0;margin-top:9px}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Pixel Physics Lab</h1>
+    <p>A falling-sand cellular automaton with chunks, dirty rectangles, reactions, free particles and pixel rigid bodies. Burn, dissolve or blow a hole through a rigid body and it splits into separate pieces that fall on their own.</p>
+  </header>
+
+  <div class="bench">
+    <div class="stage-col">
+      <div class="stage" id="stage">
+        <canvas id="sim" width="320" height="180"></canvas>
+        <canvas id="ov"></canvas>
+      </div>
+      <div class="hover" id="hover"><span>Hover the level to inspect a cell.</span></div>
+
+      <div class="tools">
+        <div class="label">Materials</div>
+        <div class="mats" id="mats"></div>
+        <div class="label">Rigid bodies</div>
+        <div class="mats rigid" id="rigid"></div>
+        <p class="hint">Rigid bodies: drag to draw a beam, click for a round chunk. Brush size sets the thickness. Fixed wood above is anchored scenery and never falls; use Wood body for anything that should break off and drop.</p>
+        <div class="row"><div class="label">Wand</div><span class="grow"></span><span class="wandstate" id="wandState"></span></div>
+        <div class="row">
+          <button id="tCast" aria-pressed="false">Cast <span class="key">F</span></button>
+          <div class="presets" id="presets"></div>
+        </div>
+        <div class="wandbar" id="wandbar"></div>
+        <div class="lib" id="lib"></div>
+        <p class="hint">Press where the wand should be, drag to aim, and hold to keep casting. Cards fire left to right. Modifiers (blue) apply to every projectile in the same cast; Double and Triple cast (purple) pull the next 2 or 3 projectiles into one volley. After the last card the wand recharges. Click a wand card to remove it, a library card to add it.</p>
+        <div class="row">
+          <button id="tErase" aria-pressed="false">Erase <span class="key">E</span></button>
+          <button id="tBomb" aria-pressed="false">Bomb <span class="key">B</span></button>
+          <label class="slider" for="brush">Brush <input id="brush" type="range" min="1" max="14" value="4"> <span id="brushV">4</span></label>
+          <span class="grow"></span>
+          <button id="bPause">Pause <span class="key">Space</span></button>
+          <button id="bStep">Step <span class="key">.</span></button>
+          <button id="bOv" aria-pressed="true">Overlay <span class="key">C</span></button>
+          <button id="bReset">Reset <span class="key">R</span></button>
+        </div>
+        <p class="hint">Paint fills empty cells only. Hold Shift to paint over existing material. Brush size: [ and ].</p>
+      </div>
+    </div>
+
+    <aside>
+      <section class="card">
+        <div class="label">Experiments</div>
+        <div class="exps" id="exps"></div>
+        <p class="note" id="note"></p>
+      </section>
+
+      <section class="card">
+        <div class="label">Readout</div>
+        <dl class="stats">
+          <dt>Cells scanned this frame</dt><dd id="sScan">0</dd>
+          <dt>Share of the world</dt><dd id="sPct">0%</dd>
+          <dt>Awake chunks</dt><dd id="sAwake">0 / 60</dd>
+          <dt>Rigid bodies</dt><dd id="sBody">0</dd>
+          <dt>Outline points, traced → kept</dt><dd id="sOl">0</dd>
+          <dt>Free particles</dt><dd id="sPart">0</dd>
+          <dt>Spell projectiles</dt><dd id="sProj">0</dd>
+          <dt>Queued explosions</dt><dd id="sExp">0</dd>
+          <dt>Frame rate</dt><dd id="sFps">0</dd>
+        </dl>
+        <canvas id="spark"></canvas>
+        <p class="foot">Cells scanned per frame, last 4 seconds. A world at rest drops to zero.</p>
+      </section>
+
+      <section class="card">
+        <div class="label">Reading the overlay</div>
+        <ul class="legend">
+          <li><span class="lg grid"></span><span>Faint grid: 32×32-cell chunks. The world is 320×180 cells, 60 chunks.</span></li>
+          <li><span class="lg awake"></span><span>Outlined chunk: awake this frame. Sleeping chunks cost nothing.</span></li>
+          <li><span class="lg dirty"></span><span>Blue box: the dirty rectangle. Only these cells get scanned.</span></li>
+          <li><span class="lg body"></span><span>Green outline: a rigid body's shape. The faint line is the full marching-squares trace; the bright line keeps only the points Douglas–Peucker needs (the squares). Dashed means asleep. The dot is the centre of mass, the line its velocity.</span></li>
+          <li><span class="lg hit"></span><span>Red dot and line: the contact point and surface normal used to resolve a collision.</span></li>
+          <li><span class="lg part"></span><span>Amber ring: a free particle, flying outside the grid until it lands.</span></li>
+          <li><span class="lg aim"></span><span>Dashed amber line: the wand's aim while you hold to cast.</span></li>
+        </ul>
+        <p class="foot">Each frame every awake body is lifted out of the grid, moved by its physics, then stamped back in at its new position and angle. Between those steps the body's pixels are ordinary cells, so fire, acid and explosions act on them. A body that loses pixels is split into its connected pieces.</p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(()=>{
+// ---------- world ----------
+const W=320,H=180,N=W*H,CS=32,CW=Math.ceil(W/CS),CH=Math.ceil(H/CS),NC=CW*CH;
+const E=0,METAL=1,STONE=2,SAND=3,WATER=4,OIL=5,LAVA=6,ACID=7,WOOD=8,FIRE=9,SMOKE=10,STEAM=11,POWDER=12,ICE=13,PLANT=14,NM=15;
+const NAME=['Empty','Metal','Stone','Sand','Water','Oil','Lava','Acid','Wood','Fire','Smoke','Steam','Gunpowder','Ice','Plant'];
+const KS=1,KP=2,KL=3,KG=4,KF=5;
+const KIND  =[0,KS,KS,KP,KL,KL,KL,KL,KS,KF,KG,KG,KP,KS,KS];
+const DENS  =[0,99,99,6,3,2,5,3,99,1,1,1,4,99,99];
+const SPREAD=[0,0,0,0,5,4,1,3,0,0,0,0,0,0,0];
+const FLAM  =[0,0,0,0,0,.25,0,0,.1,0,0,0,.6,0,.12];
+const DISS  =[0,0,1,1,0,0,0,0,1,0,0,0,1,1,1];
+const DEBRIS=[0,METAL,SAND,SAND,WATER,OIL,LAVA,ACID,FIRE,FIRE,SMOKE,STEAM,FIRE,WATER,FIRE];
+const COL=[[11,13,16,0],[118,130,146,.10],[94,89,84,.24],[220,186,114,.16],[50,108,214,.10],[96,64,30,.18],[255,96,24,.28],[150,228,60,.14],[124,80,44,.26],[255,170,50,0],[84,84,90,.2],[200,212,224,.08],[60,56,62,.4],[172,216,242,.10],[60,152,66,.26]];
+const KIND_LABEL={1:'solid',2:'powder',3:'liquid',4:'gas',5:'fire'};
+const RHO=new Float32Array(NM);RHO[WOOD]=.5;RHO[STONE]=2.5;RHO[ICE]=.9;RHO[METAL]=4;
+const LRHO=new Float32Array(NM);LRHO[WATER]=1;LRHO[OIL]=.8;LRHO[ACID]=1;LRHO[LAVA]=3;
+
+const mat=new Uint8Array(N),life=new Uint8Array(N),shade=new Uint8Array(N),stamp=new Uint8Array(N),bid=new Int32Array(N);
+let cur=new Int16Array(NC*4),nxt=new Int16Array(NC*4);
+function clearRects(r){for(let c=0;c<NC;c++){const k=c*4;r[k]=32767;r[k+1]=32767;r[k+2]=-1;r[k+3]=-1;}}
+clearRects(cur);clearRects(nxt);
+let tick=1;
+const R=Math.random;
+const rd=()=>R()<.5?1:-1;
+
+function inc(x,y){const k=(((y/CS)|0)*CW+((x/CS)|0))*4;
+  if(x<nxt[k])nxt[k]=x; if(y<nxt[k+1])nxt[k+1]=y; if(x>nxt[k+2])nxt[k+2]=x; if(y>nxt[k+3])nxt[k+3]=y;}
+function wake(x,y){
+  for(let dy=-1;dy<=1;dy++){const yy=y+dy;if(yy<0||yy>=H)continue;
+    for(let dx=-1;dx<=1;dx++){const xx=x+dx;if(xx<0||xx>=W)continue;inc(xx,yy);}}}
+function initLife(m){
+  if(m===FIRE)return 20+R()*40|0;
+  if(m===SMOKE)return 30+R()*60|0;
+  if(m===STEAM)return 60+R()*120|0;
+  return 0;}
+function setI(i,m){mat[i]=m;life[i]=initLife(m);shade[i]=R()*256|0;stamp[i]=tick;bid[i]=0;wake(i%W,(i/W)|0);}
+function clearCell(i){mat[i]=E;life[i]=0;bid[i]=0;wake(i%W,(i/W)|0);}
+function swap(i,j){
+  let t=mat[i];mat[i]=mat[j];mat[j]=t;
+  t=life[i];life[i]=life[j];life[j]=t;
+  t=shade[i];shade[i]=shade[j];shade[j]=t;
+  stamp[i]=tick;stamp[j]=tick;
+  wake(i%W,(i/W)|0);wake(j%W,(j/W)|0);}
+function canMove(m,x,y){
+  if(x<0||x>=W||y<0||y>=H)return false;
+  const t=mat[y*W+x];
+  if(KIND[t]===KS)return false;
+  if(DENS[m]<=DENS[t])return false;
+  if(t!==E&&KIND[t]===KL&&R()<.5)return false;
+  return true;}
+
+const N4=[[0,1],[1,0],[0,-1],[-1,0]];
+const N8=[[0,1],[1,0],[0,-1],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]];
+
+// ---------- explosions & particles ----------
+const explQ=[];const parts=[];
+function queueExpl(x,y,r){if(explQ.length<400)explQ.push({x,y,r});else setI(y*W+x,FIRE);}
+function ignite(x,y){
+  const j=y*W+x,t=mat[j];
+  if(t===POWDER){mat[j]=E;wake(x,y);queueExpl(x,y,5);}
+  else if(t===OIL){setI(j,FIRE);life[j]=25+R()*35|0;}
+  else if((t===WOOD||t===PLANT)&&life[j]===0){life[j]=t===WOOD?90+R()*140|0:30+R()*50|0;wake(x,y);}
+}
+function spawnP(x,y,vx,vy,m){if(parts.length<3000)parts.push({x:x+.5,y:y+.5,vx,vy,m,l:m===FIRE?18+R()*30|0:255});}
+function explode(cx,cy,r){
+  const r2=r*r;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const d2=dx*dx+dy*dy;if(d2>r2)continue;
+    const x=cx+dx,y=cy+dy;if(x<0||x>=W||y<0||y>=H)continue;
+    const i=y*W+x,t=mat[i];
+    if(t===METAL)continue;
+    if(t===STONE&&d2>r2*.3)continue;
+    const d=Math.sqrt(d2)||1;
+    if(t===POWDER){mat[i]=E;wake(x,y);if(R()<.25)queueExpl(x,y,5);else{setI(i,FIRE);life[i]=6+R()*14|0;}continue;}
+    if(t!==E&&R()<.45){
+      const sp=(r-d+2)*.5*(.6+R()*.8);
+      setI(i,E);spawnP(x,y,dx/d*sp,dy/d*sp-1.2,DEBRIS[t]);
+    }else if(d2<r2*.5&&R()<.6){setI(i,FIRE);life[i]=8+R()*14|0;}
+    else if(t!==E)setI(i,E);
+  }
+  for(let k=0;k<r*3;k++){const a=R()*Math.PI*2,sp=1+R()*r*.4;spawnP(cx,cy,Math.cos(a)*sp,Math.sin(a)*sp-1,FIRE);}
+  // shove nearby rigid bodies
+  const reach=r*3.2;
+  for(const b of bodies){const dx=b.x-cx,dy=b.y-cy,d=Math.hypot(dx,dy)||1;if(d>reach+b.R*.5)continue;
+    const f=Math.max(0,(reach-d+b.R*.5)/reach)*7/Math.sqrt(b.mass);
+    b.vx+=dx/d*f;b.vy+=dy/d*f-f*.3;b.av+=(R()-.5)*f*.06;b.sleep=false;b.still=0;}
+}
+function land(px,py,m){
+  const x=px|0,y=py|0;if(x<0||x>=W||y<0||y>=H)return;
+  let i=y*W+x;
+  for(let k=0;k<6&&mat[i]!==E;k++){if(i-W<0)return;i-=W;} // droplet lands on top of whatever is there
+  if(mat[i]!==E)return;
+  setI(i,m);if(m===FIRE)life[i]=6+R()*14|0;
+}
+function updParticles(){
+  for(let p=parts.length-1;p>=0;p--){
+    const P=parts[p];let dead=false;
+    P.vy+=.18;P.vx*=.99;
+    if(P.m===FIRE&&--P.l<=0)dead=true;
+    if(!dead){
+      const steps=Math.max(1,Math.ceil(Math.max(Math.abs(P.vx),Math.abs(P.vy))));
+      let px=P.x,py=P.y;
+      const ghost=P.g>0;if(ghost)P.g--;
+      for(let s=0;s<steps;s++){
+        const nx=px+P.vx/steps,ny=py+P.vy/steps;
+        if(nx<0||nx>=W||ny<0||ny>=H){dead=true;break;}
+        const c=(ny|0)*W+(nx|0);
+        if(mat[c]!==E&&!(ghost&&(bid[c]||KIND[mat[c]]===KL))){land(px,py,P.m);dead=true;break;}
+        px=nx;py=ny;
+      }
+      P.x=px;P.y=py;
+    }
+    if(dead){parts[p]=parts[parts.length-1];parts.pop();}
+  }
+}
+
+// ---------- rigid bodies ----------
+// A body keeps its pixels in a local grid. Each frame: read back what the cellular automaton did to its
+// cells (burned, dissolved, blown up), split it if pixels were lost, lift it out of the world, integrate,
+// resolve collisions against solid cells with an impulse at the averaged contact point, then stamp it back.
+const bodies=[],bodyMap=new Map();let nextId=1;
+const G=.15;
+function newBody(w,h,lm,ll,ls,ox,oy,a,parent){
+  let n=0,sx=0,sy=0,mass=0;
+  for(let iy=0;iy<h;iy++)for(let ix=0;ix<w;ix++){const m=lm[iy*w+ix];if(!m)continue;const r=RHO[m]||1;n++;mass+=r;sx+=(ix+.5)*r;sy+=(iy+.5)*r;}
+  if(!n)return null;
+  const cx=sx/mass,cy=sy/mass;
+  let I=0,R2=0;const ex=[],ey=[];
+  for(let iy=0;iy<h;iy++)for(let ix=0;ix<w;ix++){const li=iy*w+ix,m=lm[li];if(!m)continue;
+    const dx=ix+.5-cx,dy=iy+.5-cy,d2=dx*dx+dy*dy;I+=(RHO[m]||1)*(d2+1/6);if(d2>R2)R2=d2;
+    if(ix===0||iy===0||ix===w-1||iy===h-1||!lm[li-1]||!lm[li+1]||!lm[li-w]||!lm[li+w]){ex.push(dx);ey.push(dy);}}
+  const c=Math.cos(a),s=Math.sin(a);
+  const x=ox+c*cx-s*cy,y=oy+s*cx+c*cy;
+  let vx=0,vy=0,av=0;
+  if(parent){const rx=x-parent.x,ry=y-parent.y;vx=parent.vx-parent.av*ry;vy=parent.vy+parent.av*rx;av=parent.av;}
+  const b={id:nextId++,w,h,lm,ll,ls,cx,cy,x,y,a,vx,vy,av,n,mass,I:Math.max(I,1),rho:mass/n,R:Math.sqrt(R2)+1,
+    ex:Float32Array.from(ex),ey:Float32Array.from(ey),recs:[],recL:[],sleep:false,still:0,contact:null};
+  bodies.push(b);bodyMap.set(b.id,b);return b;
+}
+function removeBody(b){const k=bodies.indexOf(b);if(k>=0)bodies.splice(k,1);bodyMap.delete(b.id);}
+function displace(i,b,x,y){
+  const m=mat[i];
+  if(KIND[m]===KF||KIND[m]===KG){mat[i]=E;return;}
+  // a body moving fast enough throws the liquid it hits as free particles: that is the splash
+  if(b&&parts.length<2800){
+    const rx=x+.5-b.x,ry=y+.5-b.y,pvx=b.vx-b.av*ry,pvy=b.vy+b.av*rx,sp=Math.hypot(pvx,pvy);
+    if(sp>.35){
+      const rl=Math.hypot(rx,ry)||1,k=.6+R()*.8;
+      mat[i]=E;life[i]=0;
+      spawnP(x,y,pvx*.5*k+rx/rl*sp*.6*k+(R()-.5)*.8,-(Math.abs(pvy)*.8+sp*.3)*k-.3,m);
+      parts[parts.length-1].g=4;
+      return;
+    }
+  }
+  const put=j=>{mat[j]=m;life[j]=life[i];shade[j]=shade[i];stamp[j]=tick;bid[j]=0;wake(j%W,(j/W)|0);mat[i]=E;};
+  for(let yy=y-1;yy>=0&&yy>y-30;yy--){const j=yy*W+x,t=mat[j];if(t===E)return put(j);if(KIND[t]===KS||KIND[t]===KP)break;}
+  for(const d of [1,-1,2,-2,3,-3,4,-4]){const xx=x+d;if(xx<0||xx>=W)continue;const j=y*W+xx;if(mat[j]===E)return put(j);}
+  mat[i]=E;
+}
+function stampBody(b,wk){
+  const c=Math.cos(b.a),s=Math.sin(b.a);
+  let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+  for(let k=0;k<4;k++){const lx=(k&1?b.w:0)-b.cx,ly=(k&2?b.h:0)-b.cy,wx=b.x+c*lx-s*ly,wy=b.y+s*lx+c*ly;
+    if(wx<mnx)mnx=wx;if(wx>mxx)mxx=wx;if(wy<mny)mny=wy;if(wy>mxy)mxy=wy;}
+  const x0=Math.max(0,Math.floor(mnx)),x1=Math.min(W-1,Math.ceil(mxx)),y0=Math.max(0,Math.floor(mny)),y1=Math.min(H-1,Math.ceil(mxy));
+  b.recs.length=0;b.recL.length=0;
+  for(let wy=y0;wy<=y1;wy++)for(let wx=x0;wx<=x1;wx++){
+    const dx=wx+.5-b.x,dy=wy+.5-b.y,lx=c*dx+s*dy+b.cx,ly=-s*dx+c*dy+b.cy;
+    if(lx<0||ly<0||lx>=b.w||ly>=b.h)continue;
+    const li=(ly|0)*b.w+(lx|0),m=b.lm[li];if(!m)continue;
+    const i=wy*W+wx,t=mat[i];
+    if(t!==E){if(KIND[t]===KS||KIND[t]===KP)continue;displace(i,b,wx,wy);}
+    mat[i]=m;life[i]=b.ll[li];shade[i]=b.ls[li];bid[i]=b.id;
+    b.recs.push(i);b.recL.push(li);
+    if(wk)wake(wx,wy);
+  }
+}
+function unstampBody(b){for(const i of b.recs)if(bid[i]===b.id)clearCell(i);}
+function readback(b){
+  let dmg=false;const r=b.recs,l=b.recL;
+  for(let k=0;k<r.length;k++){const i=r[k],li=l[k];
+    if(bid[i]===b.id&&mat[i]===b.lm[li])b.ll[li]=life[i];
+    else if(b.lm[li]){b.lm[li]=0;dmg=true;}}
+  return dmg;
+}
+function rebuild(b){
+  unstampBody(b);removeBody(b);
+  const w=b.w,h=b.h,seen=new Uint8Array(w*h),c=Math.cos(b.a),s=Math.sin(b.a);
+  for(let st=0;st<w*h;st++){
+    if(!b.lm[st]||seen[st])continue;
+    const comp=[st];seen[st]=1;let ix0=1e9,iy0=1e9,ix1=-1,iy1=-1;
+    for(let q=0;q<comp.length;q++){const li=comp[q],ix=li%w,iy=(li/w)|0;
+      if(ix<ix0)ix0=ix;if(ix>ix1)ix1=ix;if(iy<iy0)iy0=iy;if(iy>iy1)iy1=iy;
+      if(ix>0&&b.lm[li-1]&&!seen[li-1]){seen[li-1]=1;comp.push(li-1);}
+      if(ix<w-1&&b.lm[li+1]&&!seen[li+1]){seen[li+1]=1;comp.push(li+1);}
+      if(iy>0&&b.lm[li-w]&&!seen[li-w]){seen[li-w]=1;comp.push(li-w);}
+      if(iy<h-1&&b.lm[li+w]&&!seen[li+w]){seen[li+w]=1;comp.push(li+w);}}
+    if(comp.length<4){ // splinters become free particles
+      for(const li of comp){const lx=li%w+.5-b.cx,ly=((li/w)|0)+.5-b.cy,rx=c*lx-s*ly,ry=s*lx+c*ly;
+        spawnP(b.x+rx-.5,b.y+ry-.5,b.vx-b.av*ry+(R()-.5)*.4,b.vy+b.av*rx-.3,b.ll[li]>0?FIRE:b.lm[li]);}
+      continue;}
+    const nw=ix1-ix0+1,nh=iy1-iy0+1,nlm=new Uint8Array(nw*nh),nll=new Uint8Array(nw*nh),nls=new Uint8Array(nw*nh);
+    for(const li of comp){const nx=li%w-ix0,ny=((li/w)|0)-iy0,ni=ny*nw+nx;nlm[ni]=b.lm[li];nll[ni]=b.ll[li];nls[ni]=b.ls[li];}
+    const lx=ix0-b.cx,ly=iy0-b.cy;
+    const nb=newBody(nw,nh,nlm,nll,nls,b.x+c*lx-s*ly,b.y+s*lx+c*ly,b.a,b);
+    if(nb)stampBody(nb,true);
+  }
+}
+function cellsToBodies(cells){
+  const set=new Set(cells),seen=new Set();
+  for(const st of cells){
+    if(seen.has(st)||mat[st]===E)continue;
+    const comp=[st];seen.add(st);let x0=1e9,y0=1e9,x1=-1,y1=-1;
+    for(let q=0;q<comp.length;q++){const i=comp[q],x=i%W,y=(i/W)|0;
+      if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+      for(const j of [x>0?i-1:-1,x<W-1?i+1:-1,y>0?i-W:-1,y<H-1?i+W:-1])if(j>=0&&set.has(j)&&!seen.has(j)){seen.add(j);comp.push(j);}}
+    const w=x1-x0+1,h=y1-y0+1,lm=new Uint8Array(w*h),ll=new Uint8Array(w*h),ls=new Uint8Array(w*h);
+    for(const i of comp){const li=((i/W|0)-y0)*w+(i%W-x0);lm[li]=mat[i];ll[li]=life[i];ls[li]=shade[i];clearCell(i);}
+    const b=newBody(w,h,lm,ll,ls,x0,y0,0,null);
+    if(b)stampBody(b,true);
+  }
+}
+// ---------- outline: marching squares -> Douglas-Peucker ----------
+// The same pipeline Noita uses to hand a pixel body to Box2D. Here it is traced for display;
+// collisions in this lab use the body's edge pixels directly.
+const MS=[[],[[3,2]],[[2,1]],[[3,1]],[[0,1]],[[0,1],[3,2]],[[0,2]],[[0,3]],[[3,0]],[[0,2]],[[3,0],[2,1]],[[0,1]],[[3,1]],[[1,2]],[[3,2]],[]];
+function traceOutline(b){
+  const w=b.w,h=b.h,lm=b.lm,on=(x,y)=>x>=0&&y>=0&&x<w&&y<h&&lm[y*w+x]?1:0;
+  const K=4*(w+4),key=(x2,y2)=>(y2+4)*K+(x2+4); // edge midpoints in half-units
+  const adj=new Map(),pts=new Map();
+  const add=(a,b2)=>{(adj.get(a)||adj.set(a,[]).get(a)).push(b2);};
+  for(let y=-1;y<h;y++)for(let x=-1;x<w;x++){
+    const c=on(x,y)*8+on(x+1,y)*4+on(x+1,y+1)*2+on(x,y+1);
+    for(const [e1,e2] of MS[c]){
+      const p=[e1,e2].map(e=>{const X2=e===0?2*x+1:e===1?2*x+2:e===2?2*x+1:2*x,Y2=e===0?2*y:e===1?2*y+1:e===2?2*y+2:2*y+1;const k=key(X2,Y2);pts.set(k,[X2/2+.5,Y2/2+.5]);return k;});
+      add(p[0],p[1]);add(p[1],p[0]);
+    }
+  }
+  const loops=[],used=new Set();
+  for(const st of adj.keys()){
+    if(used.has(st))continue;
+    const loop=[];let prev=-1,cur=st;
+    while(cur!==undefined&&!used.has(cur)){used.add(cur);loop.push(pts.get(cur));const n=adj.get(cur);const nx=n[0]!==prev?n[0]:n[1];prev=cur;cur=nx;}
+    if(loop.length>2)loops.push(loop);
+  }
+  let raw=0,simp=0;
+  const out=loops.map(l=>{const s=simplifyLoop(l,.9);raw+=l.length;simp+=s.length;return {raw:l,simp:s};});
+  return {loops:out,raw,simp};
+}
+function dp(pts,a,z,eps,keep){
+  const [ax,ay]=pts[a],[zx,zy]=pts[z],dx=zx-ax,dy=zy-ay,L=Math.hypot(dx,dy)||1;
+  let best=-1,bd=0;
+  for(let k=a+1;k<z;k++){const d=Math.abs((pts[k][0]-ax)*dy-(pts[k][1]-ay)*dx)/L;if(d>bd){bd=d;best=k;}}
+  if(bd>eps){dp(pts,a,best,eps,keep);keep.push(best);dp(pts,best,z,eps,keep);}
+}
+function simplifyLoop(l,eps){
+  let far=0,fd=0;for(let k=1;k<l.length;k++){const d=(l[k][0]-l[0][0])**2+(l[k][1]-l[0][1])**2;if(d>fd){fd=d;far=k;}}
+  const ring=l.concat([l[0]]),keep=[0];
+  dp(ring,0,far,eps,keep);keep.push(far);dp(ring,far,l.length,eps,keep);
+  return keep.map(k=>l[k]);
+}
+
+function hardAt(b,x,y){
+  if(x<0||y<0||x>=W||y>=H)return true;
+  const i=(y|0)*W+(x|0),t=mat[i];
+  return (KIND[t]===KS&&bid[i]!==b.id)||KIND[t]===KP;
+}
+function hit(b,x,y,a){
+  const c=Math.cos(a),s=Math.sin(a),ex=b.ex,ey=b.ey;
+  for(let k=0;k<ex.length;k++){if(hardAt(b,x+c*ex[k]-s*ey[k],y+s*ex[k]+c*ey[k]))return true;}
+  return false;
+}
+function contacts(b,x,y,a){
+  const c=Math.cos(a),s=Math.sin(a),ex=b.ex,ey=b.ey;
+  let n=0,px=0,py=0,nx=0,ny=0;
+  for(let k=0;k<ex.length;k++){
+    const wx=x+c*ex[k]-s*ey[k],wy=y+s*ex[k]+c*ey[k];
+    if(!hardAt(b,wx,wy))continue;
+    n++;px+=wx;py+=wy;
+    const cx=Math.floor(wx),cy=Math.floor(wy);let gx=0,gy=0;
+    for(const [ox,oy] of N8)if(hardAt(b,cx+ox,cy+oy)){gx-=ox;gy-=oy;}
+    if(gx===0&&gy===0){gx=x-wx;gy=y-wy;}
+    const gl=Math.hypot(gx,gy)||1;nx+=gx/gl;ny+=gy/gl;
+    if(cx>=0&&cy>=0&&cx<W&&cy<H){const o=bid[cy*W+cx];if(o&&o!==b.id){const ob=bodyMap.get(o);if(ob&&ob.sleep){ob.sleep=false;ob.still=0;}}}
+  }
+  if(!n)return null;
+  const nl=Math.hypot(nx,ny)||1;
+  return {px:px/n,py:py/n,nx:nl>1e-6?nx/nl:0,ny:nl>1e-6?ny/nl:-1};
+}
+function impulse(b,C){
+  const rx=C.px-b.x,ry=C.py-b.y,nx=C.nx,ny=C.ny,m=b.mass,I=b.I;
+  let vrx=b.vx-b.av*ry,vry=b.vy+b.av*rx;
+  const vn=vrx*nx+vry*ny;
+  if(vn>=0)return;
+  const rn=rx*ny-ry*nx,e=vn<-1.5?.25:0;
+  const j=-(1+e)*vn/(1/m+rn*rn/I);
+  b.vx+=j*nx/m;b.vy+=j*ny/m;b.av+=rn*j/I;
+  const tx=-ny,ty=nx;vrx=b.vx-b.av*ry;vry=b.vy+b.av*rx;
+  const vt=vrx*tx+vry*ty,rt=rx*ty-ry*tx;
+  let jt=-vt/(1/m+rt*rt/I);const mx=.45*j;if(jt>mx)jt=mx;else if(jt<-mx)jt=-mx;
+  b.vx+=jt*tx/m;b.vy+=jt*ty/m;b.av+=rt*jt/I;
+}
+function subStep(b,dt){
+  let nx=b.x+b.vx*dt,ny=b.y+b.vy*dt,na=b.a+b.av*dt;
+  if(!hit(b,nx,ny,na)){b.x=nx;b.y=ny;b.a=na;return;}
+  const C=contacts(b,nx,ny,na);
+  if(C){b.contact=C;impulse(b,C);b.av*=.92;}
+  nx=b.x+b.vx*dt;ny=b.y+b.vy*dt;na=b.a+b.av*dt;
+  if(!hit(b,nx,ny,na)){b.x=nx;b.y=ny;b.a=na;return;}
+  if(!hit(b,nx,ny,b.a)){b.x=nx;b.y=ny;b.av*=.7;return;}
+  if(!hit(b,b.x,b.y,na)){b.a=na;b.vx*=.6;b.vy*=.6;return;}
+  if(hit(b,b.x,b.y,b.a)){for(const [ox,oy] of [[0,-1],[1,0],[-1,0],[1,-1],[-1,-1],[0,-2]])if(!hit(b,b.x+ox,b.y+oy,b.a)){b.x+=ox;b.y+=oy;break;}}
+  b.vx*=.5;b.vy*=.5;b.av*=.5;
+}
+function physBody(b){
+  unstampBody(b);b.contact=null;
+  const c=Math.cos(b.a),s=Math.sin(b.a),ex=b.ex,ey=b.ey;
+  // buoyancy: share of the outline touching liquid
+  let wet=0,wrx=0,rf=0;
+  for(let k=0;k<ex.length;k++){
+    const rx=c*ex[k]-s*ey[k],ry=s*ex[k]+c*ey[k],cx=Math.floor(b.x+rx),cy=Math.floor(b.y+ry);
+    for(const [ox,oy] of N4){const xx=cx+ox,yy=cy+oy;if(xx<0||yy<0||xx>=W||yy>=H)continue;const t=mat[yy*W+xx];
+      if(KIND[t]===KL){wet++;wrx+=rx;rf+=LRHO[t];break;}}
+  }
+  b.vy+=G;
+  if(wet){
+    const frac=wet/ex.length,acc=G*(rf/wet)/b.rho*frac;
+    b.vy-=acc;b.av+=(wrx/wet)*(-acc*b.mass)/b.I*.5;
+    const d=1-.07*frac;b.vx*=d;b.vy*=d;b.av*=1-.3*frac;
+  }
+  const sp=Math.hypot(b.vx,b.vy);if(sp>6){b.vx*=6/sp;b.vy*=6/sp;}
+  const avMax=Math.min(.25,1.2/b.R);
+  if(b.av>avMax)b.av=avMax;else if(b.av<-avMax)b.av=-avMax;
+  const n=Math.min(8,Math.max(1,Math.ceil(Math.max(Math.abs(b.vx),Math.abs(b.vy),Math.abs(b.av)*b.R))));
+  for(let k=0;k<n;k++)subStep(b,1/n);
+  stampBody(b,true);
+  if(!wet&&Math.abs(b.vx)<.06&&Math.abs(b.vy)<.06&&Math.abs(b.av)<.003){if(++b.still>30){b.sleep=true;b.vx=b.vy=b.av=0;}}
+  else b.still=0;
+}
+function stepBodies(){
+  let rebuilt=false;
+  for(let k=bodies.length-1;k>=0;k--){const b=bodies[k];if(k<bodies.length&&bodies[k]===b&&readback(b)){rebuild(b);rebuilt=true;}}
+  if(rebuilt)for(const b of bodies)if(b.sleep){b.sleep=false;b.still=0;}
+  for(const b of bodies.slice()){
+    if(b.sleep){if(tick%6===0&&!hit(b,b.x,b.y+1,b.a)){b.sleep=false;b.still=0;}else continue;}
+    physBody(b);
+  }
+}
+
+// ---------- spells ----------
+// A wand is an ordered list of cards. Casting reads cards from the current position: modifiers collect
+// into this cast, multicasts ask for more projectiles, and projectiles are what actually fly. Whatever a
+// projectile releases (fire, water, acid, explosions) goes straight into the same simulation as everything else.
+const SPELLS={
+  spark:   {name:'Spark bolt',  type:'proj',sp:4.2,g:0,   delay:5, col:[255,214,130],J:3, life:110},
+  fireball:{name:'Fireball',    type:'proj',sp:2.7,g:.05, delay:22,col:[255,120,40], J:8, life:220,size:2},
+  water:   {name:'Water bolt',  type:'proj',sp:3.0,g:.08, delay:12,col:[80,140,232], J:5, life:220,size:2},
+  acid:    {name:'Acid orb',    type:'proj',sp:2.5,g:.08, delay:14,col:[150,228,60], J:5, life:220,size:2},
+  oil:     {name:'Oil flask',   type:'proj',sp:2.6,g:.12, delay:12,col:[140,96,48],  J:5, life:220,size:2},
+  lava:    {name:'Lava drop',   type:'proj',sp:2.4,g:.12, delay:18,col:[255,96,24],  J:6, life:220,size:2},
+  frost:   {name:'Frost bolt',  type:'proj',sp:3.6,g:0,   delay:10,col:[190,230,255],J:4, life:120},
+  bomb:    {name:'Bomb',        type:'proj',sp:2.2,g:.15, delay:40,col:[120,112,128],J:12,life:100,size:2,fuse:true},
+  dig:     {name:'Digging bolt',type:'proj',sp:2.2,g:0,   delay:6, col:[230,205,150],J:2, life:160,dig:70},
+  double:  {name:'Double cast', type:'multi',n:2,delay:0},
+  triple:  {name:'Triple cast', type:'multi',n:3,delay:2},
+  speed:   {name:'Speed up',    type:'mod',delay:0,f:m=>{m.speed*=1.7;}},
+  heavy:   {name:'Heavy shot',  type:'mod',delay:2,f:m=>{m.g+=.14;m.J*=2;}},
+  bounce:  {name:'Bounce',      type:'mod',delay:0,f:m=>{m.bounce+=4;}},
+  scatter: {name:'Scatter',     type:'mod',delay:0,f:m=>{m.spread+=.45;}},
+  bigger:  {name:'Bigger',      type:'mod',delay:4,f:m=>{m.big*=1.6;}},
+  boom:    {name:'Explosive',   type:'mod',delay:6,f:m=>{m.boom=true;}},
+  ftrail:  {name:'Fire trail',  type:'mod',delay:0,f:m=>{m.trail=FIRE;}},
+  wtrail:  {name:'Water trail', type:'mod',delay:0,f:m=>{m.trail=WATER;}},
+  otrail:  {name:'Oil trail',   type:'mod',delay:0,f:m=>{m.trail=OIL;}},
+};
+const PRESETS=[
+  ['Starter',['spark','spark','fireball']],
+  ['Carpet bomber',['triple','bomb','bomb','bomb']],
+  ['Flamethrower',['triple','scatter','ftrail','spark','spark','spark']],
+  ['Acid rain',['triple','scatter','heavy','acid','acid','acid']],
+  ['Tunnel borer',['double','speed','dig','dig']],
+  ['Ricochet',['bounce','boom','spark']],
+  ['Oil, then fire',['oil','oil','fireball']],
+  ['Ice and lava',['lava','lava','frost']],
+];
+let wand=PRESETS[0][1].slice(),wIdx=0,wCool=0,wRecharging=false;
+const projs=[];
+let aim=null; // {ox,oy,ax,ay}
+function castOnce(){
+  if(!wand.length||!aim)return;
+  const m={speed:1,g:0,bounce:0,spread:.04,big:1,boom:false,trail:0,J:1};
+  const list=[];let draw=1,delay=0,guard=0,wrapped=false;
+  while(draw>0&&guard++<wand.length+1){
+    const id=wand[wIdx],S=SPELLS[id];
+    wIdx++;if(wIdx>=wand.length){wIdx=0;wrapped=true;}
+    delay+=S.delay;
+    if(S.type==='multi'){draw+=S.n-1;m.spread+=.16*(S.n-1);}
+    else if(S.type==='mod')S.f(m);
+    else{list.push(id);draw--;}
+    if(wrapped)break;
+  }
+  let dx=aim.ax-aim.ox,dy=aim.ay-aim.oy;const dl=Math.hypot(dx,dy);
+  if(dl<.5){dx=1;dy=0;}else{dx/=dl;dy/=dl;}
+  const base=Math.atan2(dy,dx);
+  list.forEach((id,k)=>{
+    const S=SPELLS[id],off=list.length>1?(k/(list.length-1)-.5)*m.spread:(R()-.5)*m.spread*.5;
+    const a=base+off,sp=S.sp*m.speed;
+    projs.push({k:id,x:aim.ox+.5+Math.cos(a)*1.5,y:aim.oy+.5+Math.sin(a)*1.5,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+      g:S.g+m.g,bounce:S.fuse?999:m.bounce,big:m.big,boom:m.boom,trail:m.trail,J:S.J*m.J,age:0,life:S.life*(S.fuse?1:1.5),dig:(S.dig||0)*m.big,tr:[]});
+  });
+  wRecharging=wrapped;
+  wCool=Math.max(3,delay)+(wrapped?28:0);
+}
+function blob(x,y,r,m){
+  const r2=r*r,ri=Math.ceil(r);
+  for(let dy=-ri;dy<=ri;dy++)for(let dx=-ri;dx<=ri;dx++){
+    if(dx*dx+dy*dy>r2)continue;const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;
+    const i=yy*W+xx,t=mat[i];
+    if(t===E||KIND[t]===KG||KIND[t]===KF){if(R()<.85)setI(i,m);}
+  }
+}
+function freeze(x,y,r){
+  const r2=r*r,ri=Math.ceil(r);
+  for(let dy=-ri;dy<=ri;dy++)for(let dx=-ri;dx<=ri;dx++){
+    if(dx*dx+dy*dy>r2)continue;const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;
+    const i=yy*W+xx,t=mat[i];
+    if(t===WATER||t===ACID||t===STEAM)setI(i,ICE);
+    else if(t===LAVA)setI(i,STONE);
+    else if(t===FIRE||t===SMOKE)clearCell(i);
+    else if((t===WOOD||t===PLANT)&&life[i]>0){life[i]=0;wake(xx,yy);}
+  }
+}
+function projHit(p,x,y,c){
+  const xi=Math.max(0,Math.min(W-1,x|0)),yi=Math.max(0,Math.min(H-1,y|0)),big=p.big;
+  if(c>=0&&bid[c]){const b=bodyMap.get(bid[c]);if(b){
+    const rx=x-b.x,ry=y-b.y;b.vx+=p.vx*p.J/b.mass*4;b.vy+=p.vy*p.J/b.mass*4;b.av+=(rx*p.vy-ry*p.vx)*p.J/b.I*4;b.sleep=false;b.still=0;}}
+  switch(p.k){
+    case 'spark':explode(xi,yi,Math.round(2*big));break;
+    case 'fireball':explode(xi,yi,Math.round(6*big));break;
+    case 'bomb':explode(xi,yi,Math.round(13*big));break;
+    case 'water':blob(xi,yi,4.5*big,WATER);break;
+    case 'acid':blob(xi,yi,4*big,ACID);break;
+    case 'oil':blob(xi,yi,5*big,OIL);break;
+    case 'lava':blob(xi,yi,3.2*big,LAVA);break;
+    case 'frost':freeze(xi,yi+2,10*big);break;
+  }
+  if(p.boom&&p.k!=='bomb'&&p.k!=='fireball')explode(xi,yi,Math.round(5*big));
+}
+function projSolid(x,y){if(x<0||y<0||x>=W||y>=H)return true;const t=mat[(y|0)*W+(x|0)];return t!==E&&KIND[t]!==KG&&KIND[t]!==KF;}
+function updProjs(){
+  for(let q=projs.length-1;q>=0;q--){
+    const p=projs[q];let dead=false;
+    p.age++;p.vy+=p.g;
+    if(p.age>p.life){if(SPELLS[p.k].fuse||p.k==='fireball')projHit(p,p.x,p.y,-1);dead=true;}
+    if(!dead){
+      const steps=Math.max(1,Math.ceil(Math.max(Math.abs(p.vx),Math.abs(p.vy))));
+      let px=p.x,py=p.y;
+      for(let s=0;s<steps&&!dead;s++){
+        const nx=px+p.vx/steps,ny=py+p.vy/steps;
+        if(nx<0||ny<0||nx>=W||ny>=H){dead=true;break;}
+        const c=(ny|0)*W+(nx|0),t=mat[c];
+        if(p.dig>0){
+          if(t!==E&&KIND[t]!==KG&&KIND[t]!==KF){
+            if(t===METAL){dead=true;break;}
+            if(R()<.25)spawnP(nx|0,ny|0,-p.vx*.3+(R()-.5),-.5-R(),DEBRIS[t]);
+            clearCell(c);p.dig--;if(p.dig<=0){dead=true;break;}
+            // widen the tunnel a little
+            for(const [ox,oy] of N4){const xx=(nx|0)+ox,yy=(ny|0)+oy;if(xx>0&&yy>0&&xx<W-1&&yy<H-1){const j=yy*W+xx;if(mat[j]!==METAL&&mat[j]!==E&&R()<.6)clearCell(j);}}
+          }
+        }else if(t!==E&&KIND[t]!==KG&&KIND[t]!==KF){
+          if(p.bounce>0){
+            const hx=projSolid(nx,py),hy=projSolid(px,ny);
+            if(hx)p.vx=-p.vx*.7;if(hy)p.vy=-p.vy*.7;if(!hx&&!hy){p.vx=-p.vx*.7;p.vy=-p.vy*.7;}
+            if(SPELLS[p.k].fuse){p.vx*=.8;}
+            p.bounce--;break;
+          }
+          projHit(p,px,py,c);dead=true;break;
+        }
+        px=nx;py=ny;
+        if(p.trail&&R()<.55){const j=(py|0)*W+(px|0);if(mat[j]===E){setI(j,p.trail);if(p.trail===FIRE)life[j]=10+R()*20|0;}}
+      }
+      p.tr.push(p.x,p.y);if(p.tr.length>8)p.tr.splice(0,2);
+      p.x=px;p.y=py;
+    }
+    if(dead)projs.splice(q,1);
+  }
+}
+
+// ---------- material rules ----------
+function powder(x,y,i,m){
+  if(canMove(m,x,y+1))return swap(i,i+W);
+  const d=rd();
+  if(canMove(m,x+d,y+1))return swap(i,i+W+d);
+  if(canMove(m,x-d,y+1))return swap(i,i+W-d);
+}
+function lavaReact(x,y,i){
+  let found=false;
+  for(let k=0;k<4;k++){const nx=x+N4[k][0],ny=y+N4[k][1];if(nx<0||nx>=W||ny<0||ny>=H)continue;
+    const j=ny*W+nx,t=mat[j];
+    if(t===WATER){setI(i,STONE);setI(j,STEAM);return true;}
+    if(t===ICE){found=true;if(R()<.1){setI(j,WATER);if(R()<.2){setI(i,STONE);return true;}}}
+    else if(FLAM[t]&&!((t===WOOD||t===PLANT)&&life[j]>0)){found=true;if(R()<.15)ignite(nx,ny);}
+  }
+  if(found)wake(x,y);return false;
+}
+function acidReact(x,y,i){
+  let found=false;
+  for(let k=0;k<4;k++){const nx=x+N4[k][0],ny=y+N4[k][1];if(nx<0||nx>=W||ny<0||ny>=H)continue;
+    const j=ny*W+nx;
+    if(DISS[mat[j]]){found=true;
+      if(R()<.05){setI(j,R()<.2?SMOKE:E);if(R()<.3){setI(i,E);return true;}}}
+  }
+  if(found)wake(x,y);return false;
+}
+function liquid(x,y,i,m){
+  if(m===LAVA&&lavaReact(x,y,i))return;
+  if(m===ACID&&acidReact(x,y,i))return;
+  let j=-1;
+  if(canMove(m,x,y+1))j=i+W;
+  else{
+    const d=rd();
+    if(canMove(m,x+d,y+1))j=i+W+d;
+    else if(canMove(m,x-d,y+1))j=i+W-d;
+    else{
+      const sp=SPREAD[m];
+      for(let s=0;s<2&&j<0;s++){const dd=s?-d:d;let k=0;while(k<sp&&canMove(m,x+dd*(k+1),y))k++;if(k>0)j=i+dd*k;}
+    }
+  }
+  if(j<0)return;
+  if(m===LAVA&&R()<.6){wake(x,y);return;}
+  swap(i,j);
+}
+function gas(x,y,i,m){
+  const l=life[i]-1;
+  if(l<=0){setI(i,m===STEAM&&R()<.35?WATER:E);return;}
+  life[i]=l;wake(x,y);
+  if(R()<.3)return;
+  const d=rd();
+  if(canMove(m,x,y-1))return swap(i,i-W);
+  if(canMove(m,x+d,y-1))return swap(i,i-W+d);
+  if(canMove(m,x+d,y))return swap(i,i+d);
+  if(canMove(m,x-d,y))return swap(i,i-d);
+}
+function fire(x,y,i){
+  for(let k=0;k<8;k++){const nx=x+N8[k][0],ny=y+N8[k][1];if(nx<0||nx>=W||ny<0||ny>=H)continue;
+    const j=ny*W+nx,t=mat[j];
+    if(t===WATER){setI(i,STEAM);if(R()<.4)setI(j,STEAM);return;}
+    if(t===ICE){if(R()<.08)setI(j,WATER);}
+    else if(FLAM[t]&&R()<FLAM[t])ignite(nx,ny);
+  }
+  const l=life[i]-1;
+  if(l<=0){setI(i,R()<.3?SMOKE:E);return;}
+  life[i]=l;wake(x,y);
+  if(y>0&&R()<.55){const nx=x+(R()<.5?0:rd());if(nx>=0&&nx<W){const j=(y-1)*W+nx;if(mat[j]===E)swap(i,j);}}
+}
+function burn(x,y,i){
+  const l=life[i]-1;
+  if(l<=0){setI(i,R()<.35?SMOKE:E);return;}
+  life[i]=l;wake(x,y);
+  for(let k=0;k<4;k++){const nx=x+N4[k][0],ny=y+N4[k][1];if(nx<0||nx>=W||ny<0||ny>=H)continue;
+    const j=ny*W+nx,t=mat[j];
+    if(t===WATER){life[i]=0;if(R()<.5)setI(j,STEAM);return;}
+    if(t===ICE){if(R()<.05)setI(j,WATER);}
+    else if(t===E){if(R()<(k===2?.08:.02)){setI(j,FIRE);life[j]=8+R()*16|0;}}
+    else if(FLAM[t]&&R()<FLAM[t]*.6)ignite(nx,ny);
+  }
+}
+function solid(x,y,i,m){
+  if((m===WOOD||m===PLANT)&&life[i]>0)return burn(x,y,i);
+  if(m===PLANT){
+    let found=false;
+    for(let k=0;k<4;k++){const nx=x+N4[k][0],ny=y+N4[k][1];if(nx<0||nx>=W||ny<0||ny>=H)continue;
+      const j=ny*W+nx;if(mat[j]===WATER){found=true;if(R()<.02)setI(j,PLANT);}}
+    if(found)wake(x,y);
+  }
+}
+function upd(x,y){
+  const i=y*W+x,m=mat[i];
+  if(m===E||stamp[i]===tick)return;
+  switch(KIND[m]){
+    case KP:powder(x,y,i,m);break;
+    case KL:liquid(x,y,i,m);break;
+    case KG:gas(x,y,i,m);break;
+    case KF:fire(x,y,i);break;
+    case KS:solid(x,y,i,m);break;
+  }
+}
+
+// ---------- step ----------
+let scanned=0,awake=0;
+function step(){
+  tick=tick>=250?1:tick+1;
+  stepBodies();
+  const t=cur;cur=nxt;nxt=t;clearRects(nxt);
+  scanned=0;awake=0;
+  const flip=tick&1;
+  for(let cy=CH-1;cy>=0;cy--){
+    for(let n=0;n<CW;n++){
+      const cx=flip?n:CW-1-n,k=(cy*CW+cx)*4;
+      if(cur[k+2]<0)continue;
+      awake++;
+      const x0=cur[k],y0=cur[k+1],x1=cur[k+2],y1=cur[k+3];
+      scanned+=(x1-x0+1)*(y1-y0+1);
+      for(let y=y1;y>=y0;y--){
+        if(flip){for(let x=x0;x<=x1;x++)upd(x,y);}
+        else{for(let x=x1;x>=x0;x--)upd(x,y);}
+      }
+    }
+  }
+  let n=0;while(explQ.length&&n<30){const e=explQ.shift();explode(e.x,e.y,e.r);n++;}
+  updParticles();
+  if(aim&&aim.hold&&wCool<=0)castOnce();
+  if(wCool>0)wCool--;
+  updProjs();
+}
+
+// ---------- rendering ----------
+const sim=document.getElementById('sim'),ctx=sim.getContext('2d');
+const img=ctx.createImageData(W,H),buf=new Uint32Array(img.data.buffer);
+const pack=(r,g,b)=>(255<<24)|((b&255)<<16)|((g&255)<<8)|(r&255);
+const cl=v=>v<0?0:v>255?255:v|0;
+const pal=new Uint32Array(NM*16);
+for(let m=0;m<NM;m++)for(let s=0;s<16;s++){const [r,g,b,v]=COL[m],f=1+(s/15-.5)*2*v;pal[m*16+s]=pack(cl(r*f),cl(g*f),cl(b*f));}
+const BGC=pal[0];
+const FR=new Uint32Array(64);for(let k=0;k<64;k++){const t=k/63;FR[k]=pack(255,cl(40+190*t),cl(10+130*t*t));}
+const EMB=new Uint32Array(32);for(let k=0;k<32;k++){const t=k/31;EMB[k]=pack(cl(170+85*t),cl(60+80*t),cl(20+20*t));}
+function render(){
+  for(let i=0;i<N;i++){
+    const m=mat[i];
+    if(m===E){buf[i]=BGC;continue;}
+    if(m===FIRE){buf[i]=FR[Math.min(63,life[i]+(shade[i]&7))];continue;}
+    if(m===LAVA){buf[i]=pal[m*16+(((shade[i]>>4)+(tick>>2))&15)];continue;}
+    if((m===WOOD||m===PLANT)&&life[i]>0){buf[i]=EMB[(shade[i]+tick*5)&31];continue;}
+    if(m===SMOKE||m===STEAM){
+      const c=COL[m],k=Math.min(1,life[i]/50),b=COL[0];
+      buf[i]=pack(b[0]+(c[0]-b[0])*k,b[1]+(c[1]-b[1])*k,b[2]+(c[2]-b[2])*k);continue;}
+    buf[i]=pal[m*16+(shade[i]>>4)];
+  }
+  for(const P of parts){const x=P.x|0,y=P.y|0;if(x<0||x>=W||y<0||y>=H)continue;
+    buf[y*W+x]=P.m===FIRE?FR[Math.min(63,P.l+20)]:pal[P.m*16+8];}
+  for(const p of projs){
+    const S=SPELLS[p.k],[r,g,b]=S.col;
+    for(let k=0;k<p.tr.length;k+=2){const x=p.tr[k]|0,y=p.tr[k+1]|0;if(x<0||y<0||x>=W||y>=H)continue;const f=.25+.12*k;buf[y*W+x]=pack(cl(r*f),cl(g*f),cl(b*f));}
+    const x=p.x|0,y=p.y|0,sz=S.size||1;
+    for(let dy=0;dy<sz;dy++)for(let dx=0;dx<sz;dx++){const xx=x+dx-(sz>1?1:0),yy=y+dy-(sz>1?1:0);if(xx<0||yy<0||xx>=W||yy>=H)continue;
+      buf[yy*W+xx]=(p.k==='bomb'&&(p.age>>3)&1)?pack(255,80,60):pack(cl(r+40),cl(g+40),cl(b+40));}
+  }
+  ctx.putImageData(img,0,0);
+}
+
+// ---------- overlay ----------
+const stage=document.getElementById('stage'),ov=document.getElementById('ov'),octx=ov.getContext('2d');
+let showOv=true;
+function sizeOv(){const r=stage.getBoundingClientRect(),d=window.devicePixelRatio||1;ov.width=Math.max(1,Math.round(r.width*d));ov.height=Math.max(1,Math.round(r.height*d));}
+function drawOverlay(){
+  const w=ov.width,h=ov.height,s=w/W,sy=h/H;
+  octx.clearRect(0,0,w,h);
+  const d=window.devicePixelRatio||1;
+  if(bodyDrag){
+    const r=Math.max(.5,brush-1)+.5;
+    octx.strokeStyle='rgba(143,224,168,0.55)';octx.lineCap='round';octx.lineWidth=r*2*s;
+    octx.beginPath();octx.moveTo((bodyDrag.a[0]+.5)*s,(bodyDrag.a[1]+.5)*sy);octx.lineTo((bodyDrag.b[0]+.5)*s+.01,(bodyDrag.b[1]+.5)*sy);octx.stroke();
+    octx.lineCap='butt';
+  }
+  if(aim&&aim.hold){
+    const ox=(aim.ox+.5)*s,oy=(aim.oy+.5)*sy;
+    let dx=aim.ax-aim.ox,dy=aim.ay-aim.oy;const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
+    octx.strokeStyle='rgba(255,180,84,0.9)';octx.lineWidth=1.5*d;octx.setLineDash([5*d,4*d]);
+    octx.beginPath();octx.moveTo(ox,oy);octx.lineTo(ox+dx*40*s,oy+dy*40*sy);octx.stroke();octx.setLineDash([]);
+    octx.beginPath();octx.arc(ox,oy,4*d,0,Math.PI*2);octx.stroke();
+  }
+  if(!showOv)return;
+  octx.lineWidth=d;
+  octx.setLineDash([3*d,4*d]);
+  octx.strokeStyle='rgba(230,228,223,0.13)';
+  octx.beginPath();
+  for(let c=1;c<CW;c++){const x=Math.round(c*CS*s)+.5;octx.moveTo(x,0);octx.lineTo(x,h);}
+  for(let c=1;c<CH;c++){const y=Math.round(c*CS*sy)+.5;octx.moveTo(0,y);octx.lineTo(w,y);}
+  octx.stroke();
+  octx.setLineDash([]);
+  for(let c=0;c<NC;c++){const k=c*4;if(cur[k+2]<0)continue;
+    const cx=c%CW,cy=(c/CW)|0;
+    const bx=cx*CS*s,by=cy*CS*sy,bw=Math.min(CS,W-cx*CS)*s,bh=Math.min(CS,H-cy*CS)*sy;
+    octx.strokeStyle='rgba(156,195,255,0.45)';octx.strokeRect(bx+.5,by+.5,bw-1,bh-1);
+    const x0=cur[k]*s,y0=cur[k+1]*sy,rw=(cur[k+2]-cur[k]+1)*s,rh=(cur[k+3]-cur[k+1]+1)*sy;
+    octx.fillStyle='rgba(156,195,255,0.16)';octx.fillRect(x0,y0,rw,rh);
+    octx.strokeStyle='rgba(156,195,255,0.95)';octx.strokeRect(x0+.5,y0+.5,rw-1,rh-1);
+  }
+  // rigid bodies
+  for(const b of bodies){
+    const c=Math.cos(b.a),sn=Math.sin(b.a);
+    if(!b.ol)b.ol=traceOutline(b);
+    const tx=(p)=>{const lx=p[0]-b.cx,ly=p[1]-b.cy;return [(b.x+c*lx-sn*ly)*s,(b.y+sn*lx+c*ly)*sy];};
+    const poly=(pts)=>{octx.beginPath();pts.forEach((p,k)=>{const [X,Y]=tx(p);k?octx.lineTo(X,Y):octx.moveTo(X,Y);});octx.closePath();octx.stroke();};
+    octx.setLineDash([]);
+    octx.strokeStyle='rgba(143,224,168,0.28)';octx.lineWidth=d;
+    for(const L of b.ol.loops)poly(L.raw);
+    octx.strokeStyle=b.sleep?'rgba(143,224,168,0.55)':'rgba(143,224,168,0.95)';
+    octx.lineWidth=1.4*d;octx.setLineDash(b.sleep?[3*d,3*d]:[]);
+    for(const L of b.ol.loops)poly(L.simp);
+    octx.setLineDash([]);
+    octx.fillStyle='#8fe0a8';
+    for(const L of b.ol.loops)for(const p of L.simp){const [X,Y]=tx(p);octx.fillRect(X-1.5*d,Y-1.5*d,3*d,3*d);}
+    const X=b.x*s,Y=b.y*sy;
+    octx.fillStyle='#8fe0a8';octx.beginPath();octx.arc(X,Y,2.5*d,0,Math.PI*2);octx.fill();
+    if(!b.sleep&&(Math.abs(b.vx)+Math.abs(b.vy))>.05){octx.strokeStyle='rgba(143,224,168,0.9)';octx.beginPath();octx.moveTo(X,Y);octx.lineTo(X+b.vx*8*s,Y+b.vy*8*sy);octx.stroke();}
+    if(b.contact){const C=b.contact,px=C.px*s,py=C.py*sy;
+      octx.fillStyle='#ff6b6b';octx.beginPath();octx.arc(px,py,2.5*d,0,Math.PI*2);octx.fill();
+      octx.strokeStyle='#ff6b6b';octx.beginPath();octx.moveTo(px,py);octx.lineTo(px+C.nx*6*s,py+C.ny*6*sy);octx.stroke();}
+  }
+  if(parts.length){
+    octx.strokeStyle='rgba(255,180,84,0.85)';octx.lineWidth=1.2*d;
+    octx.beginPath();
+    const rr=Math.max(2.5*d,s*1.1);
+    for(let p=0;p<parts.length&&p<600;p++){const P=parts[p];const x=P.x*s,y=P.y*sy;octx.moveTo(x+rr,y);octx.arc(x,y,rr,0,Math.PI*2);}
+    octx.stroke();
+  }
+}
+
+// ---------- sparkline ----------
+const spark=document.getElementById('spark'),sctx=spark.getContext('2d');
+const HIST=240,hist=new Float32Array(HIST);let hp=0;
+function sizeSpark(){const r=spark.getBoundingClientRect(),d=window.devicePixelRatio||1;spark.width=Math.max(1,Math.round(r.width*d));spark.height=Math.max(1,Math.round(r.height*d));}
+function drawSpark(){
+  const w=spark.width,h=spark.height,d=window.devicePixelRatio||1;
+  sctx.clearRect(0,0,w,h);
+  let mx=2000;for(let k=0;k<HIST;k++)if(hist[k]>mx)mx=hist[k];
+  sctx.strokeStyle='rgba(230,228,223,0.08)';sctx.lineWidth=d;
+  for(let g=1;g<4;g++){const y=Math.round(h*g/4)+.5;sctx.beginPath();sctx.moveTo(0,y);sctx.lineTo(w,y);sctx.stroke();}
+  const pad=3*d,ih=h-pad*2;
+  const path=()=>{sctx.beginPath();for(let k=0;k<HIST;k++){const v=hist[(hp+k)%HIST],x=k/(HIST-1)*w,y=pad+ih-v/mx*ih;k?sctx.lineTo(x,y):sctx.moveTo(x,y);}};
+  path();sctx.lineTo(w,h);sctx.lineTo(0,h);sctx.closePath();sctx.fillStyle='rgba(156,195,255,0.14)';sctx.fill();
+  path();sctx.strokeStyle='#9cc3ff';sctx.lineWidth=1.5*d;sctx.stroke();
+  const lv=hist[(hp+HIST-1)%HIST],ly=pad+ih-lv/mx*ih;
+  sctx.fillStyle='#9cc3ff';sctx.beginPath();sctx.arc(w-2.5*d,ly,2.5*d,0,Math.PI*2);sctx.fill();
+  sctx.fillStyle='#8e939c';sctx.font=`${10*d}px "IBM Plex Mono",monospace`;sctx.textBaseline='top';
+  sctx.fillText('peak '+Math.round(mx).toLocaleString(),4*d,2*d);
+}
+
+// ---------- level building ----------
+function setC(x,y,m){if(x<0||x>=W||y<0||y>=H)return;const i=y*W+x;if(m===E)clearCell(i);else setI(i,m);}
+function rect(x,y,w,h,m,p=1){for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)if(p>=1||R()<p)setC(xx,yy,m);}
+function bodyRect(x,y,w,h,m){const cells=[];for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++){if(xx<0||xx>=W||yy<0||yy>=H)continue;const i=yy*W+xx;setI(i,m);cells.push(i);}cellsToBodies(cells);return bodies[bodies.length-1];}
+function igniteRect(x,y,w,h){for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++){const i=yy*W+xx;if(mat[i]===WOOD){life[i]=140+R()*60|0;wake(xx,yy);}}}
+function wipe(){mat.fill(0);life.fill(0);stamp.fill(0);bid.fill(0);parts.length=0;projs.length=0;wIdx=0;wCool=0;explQ.length=0;bodies.length=0;bodyMap.clear();clearRects(cur);clearRects(nxt);hist.fill(0);}
+function frame(){rect(0,0,W,2,METAL);rect(0,H-2,W,2,METAL);rect(0,0,2,H,METAL);rect(W-2,0,2,H,METAL);}
+function floor(){rect(2,168,W-4,10,STONE);}
+
+const EXPS=[
+ {id:'beam',name:'Broken beam',sub:'Rigid body splits in two',
+  note:'One wooden beam rests on two stone pillars. Fire is burning through its middle. When the last pixel joining the halves burns away, the body splits into two and each new piece gets its outline re-traced. Each half tips off its pillar and splashes into the water: water in a moving body’s way is thrown out as particles. Wood floats; the stone block sinks.',
+  build(){frame();floor();
+    rect(36,112,16,56,STONE);rect(268,112,16,56,STONE);
+    rect(52,146,216,22,WATER);
+    bodyRect(28,106,264,6,WOOD);igniteRect(156,106,8,6);
+    bodyRect(236,96,10,10,STONE);bodyRect(72,98,8,8,ICE);}},
+ {id:'chamber',name:'Test chamber',sub:'A bit of everything',
+  note:'Lava drips through a hole into a tank of oil floating on water. The oil catches fire; where lava meets water it hardens to stone and boils off steam. Acid in the top-right flask is slowly eating its stone cup, above a wooden bridge that is a rigid body. Nothing on the left is touching anything hot, so watch those chunks fall asleep.',
+  build(){frame();floor();
+    rect(8,62,66,3,WOOD);rect(22,30,36,32,SAND);
+    rect(76,120,4,48,STONE);rect(30,140,46,28,WATER);rect(8,160,22,8,PLANT);
+    rect(98,110,4,58,STONE);rect(190,110,4,58,STONE);rect(102,138,88,30,WATER);rect(102,126,88,12,OIL);
+    rect(124,48,44,3,STONE);rect(124,26,3,22,STONE);rect(165,26,3,22,STONE);rect(127,30,38,18,LAVA);rect(144,48,4,3,E);
+    rect(204,95,6,73,STONE);rect(306,95,12,73,STONE);
+    rect(226,128,2,40,WOOD);rect(276,128,2,40,WOOD);rect(228,136,48,32,POWDER);
+    rect(270,50,40,7,STONE);rect(270,24,4,26,STONE);rect(306,24,4,26,STONE);rect(274,32,32,18,ACID);
+    bodyRect(204,91,110,4,WOOD);bodyRect(238,79,12,12,ICE);}},
+ {id:'range',name:'Spell range',sub:'Targets for the wand',cast:true,
+  note:'A firing range for the wand. Press near the left platform, drag toward a target and hold. Try Oil, then fire on the wooden hut, Frost bolt on the pond, the Tunnel borer into the sand hill, and Carpet bomber on the crate stack. The metal wall on the right stops everything, even the digging bolt.',
+  build(){frame();floor();
+    rect(2,120,34,48,STONE);
+    rect(60,146,70,22,WATER);rect(56,136,4,32,STONE);rect(130,136,4,32,STONE);
+    rect(150,120,3,48,WOOD);rect(186,120,3,48,WOOD);rect(150,118,39,3,WOOD);rect(153,150,33,18,OIL);
+    rect(196,128,40,40,SAND);rect(204,112,24,16,SAND);rect(212,100,8,12,SAND);
+    rect(298,40,6,128,METAL);
+    for(let r=0;r<4;r++)for(let k=0;k<4-r;k++)bodyRect(244+k*13+r*6,156-r*12,12,12,r===3?STONE:WOOD);
+    bodyRect(70,128,30,4,WOOD);bodyRect(104,138,10,10,ICE);
+    rect(220,30,40,6,STONE);rect(226,22,28,8,LAVA);rect(220,22,6,8,STONE);rect(254,22,6,8,STONE);}},
+ {id:'tower',name:'Block tower',sub:'Stacked rigid bodies',
+  note:'A pyramid of wooden crates with a stone block on top, every piece its own rigid body. Pick the Bomb tool and click near the base, or set fire to one crate, and watch the stack lose support and collapse.',
+  build(){frame();floor();
+    const sz=14,g=1;let rows=5,y=168-sz;
+    for(let r=0;r<rows;r++){const cnt=rows-r,x0=160-(cnt*(sz+g)-g)/2|0;for(let k=0;k<cnt;k++)bodyRect(x0+k*(sz+g),y,sz,sz,WOOD);y-=sz;}
+    bodyRect(153,y,14,14,STONE);
+    rect(20,150,40,18,WATER);rect(16,140,4,28,STONE);rect(60,140,4,28,STONE);}},
+ {id:'bridge',name:'Burning bridge',sub:'Fire spread on a rigid plank',
+  note:'A wooden plank over a pit of oil, lit at the left end. Burning wood glows until it burns out. Once the left support is gone, the plank pivots on the right pillar and drops into the oil, and the whole pit goes up.',
+  build(){frame();floor();rect(56,128,4,40,STONE);rect(262,128,4,40,STONE);rect(60,140,202,28,OIL);
+    rect(14,104,8,64,STONE);rect(296,104,12,64,STONE);
+    bodyRect(16,100,286,4,WOOD);igniteRect(16,100,8,4);}},
+ {id:'lava',name:'Lava meets water',sub:'Reactions: stone and steam',
+  note:'A blob of lava drops into a water tank. Every contact turns lava to stone and water to steam. The steam rises, and some of it condenses back into water drops.',
+  build(){frame();floor();rect(56,100,4,68,STONE);rect(262,100,4,68,STONE);rect(60,112,202,56,WATER);rect(130,16,60,26,LAVA);}},
+ {id:'density',name:'Density column',sub:'Things sort by weight',
+  note:'A glass column of randomly mixed sand, gunpowder, water and oil. Heavier materials swap downward through lighter ones: sand settles under gunpowder, water under oil. Displacing a liquid only succeeds half the time, which is why sinking looks slow.',
+  build(){frame();floor();rect(118,20,4,148,STONE);rect(202,20,4,148,STONE);
+    const ms=[SAND,POWDER,WATER,WATER,OIL,OIL,E];
+    for(let y=36;y<168;y++)for(let x=122;x<202;x++){const m=ms[R()*ms.length|0];if(m)setC(x,y,m);}}},
+ {id:'keg',name:'Powder keg',sub:'Explosions and free particles',
+  note:'A spark runs along a gunpowder fuse into a stone bunker full of powder. Each explosion throws cells out of the grid as free particles (amber rings) and shoves the crates on the bunker roof. When particles hit something, they become grid cells again.',
+  build(){frame();floor();
+    rect(20,140,40,28,WATER);rect(14,128,6,40,STONE);rect(60,128,6,40,STONE);
+    rect(170,124,4,44,STONE);rect(250,124,4,44,STONE);rect(174,128,76,40,POWDER);
+    rect(260,150,50,18,SAND);rect(270,135,30,15,SAND);
+    rect(66,166,108,2,POWDER);rect(68,161,5,5,FIRE);
+    bodyRect(168,118,88,6,WOOD);bodyRect(180,106,12,12,WOOD);bodyRect(220,106,12,12,STONE);}},
+ {id:'settle',name:'Settling',sub:'Watch the world fall asleep',
+  note:'Blocks of sand and water start in mid-air. Once they land and stop moving, their chunks go to sleep and drop out of the update. The readout falls toward zero even though the world is full of material.',
+  build(){frame();floor();
+    rect(2,150,90,18,STONE);rect(230,140,88,28,STONE);rect(120,158,60,10,STONE);
+    rect(20,20,40,50,SAND);rect(100,30,60,30,WATER);rect(190,10,30,60,SAND);rect(250,30,50,30,WATER);rect(150,90,40,20,SAND);}},
+ {id:'empty',name:'Empty lab',sub:'Blank floor to build on',
+  note:'An empty chamber with a stone floor. Build your own experiment: draw a wooden beam between two stone pillars and light the middle, drop a stone block into water, or float ice next to lava.',
+  build(){frame();floor();}},
+];
+let curExp=EXPS[0];
+function loadExp(e){curExp=e;wipe();e.build();
+  if(e.cast&&typeof setCastTool==='function')setCastTool();
+  document.getElementById('note').textContent=e.note;
+  document.querySelectorAll('.exps button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.id===e.id?'true':'false'));}
+
+// ---------- UI ----------
+const PAINT=[[SAND,'1'],[WATER,'2'],[OIL,'3'],[LAVA,'4'],[ACID,'5'],[FIRE,'6'],[WOOD,'7','Fixed wood'],[STONE,'8'],[POWDER,'9'],[ICE,'0'],[PLANT,'P'],[STEAM,'T'],[METAL,'M']];
+const RIGID=[[WOOD,'Wood body','W'],[STONE,'Stone body','K'],[ICE,'Ice body','I']];
+const matsEl=document.getElementById('mats'),rigidEl=document.getElementById('rigid');
+let sel=SAND,tool='paint',bodyMat=WOOD;
+const swatch=m=>{const [r,g,b]=COL[m];return `rgb(${r},${g},${b})`;};
+for(const [m,k,label] of PAINT){
+  const b=document.createElement('button');b.dataset.m=m;
+  b.innerHTML=`<span class="sw" style="background:${swatch(m)}"></span>${label||NAME[m]}<span class="key">${k}</span>`;
+  b.onclick=()=>pick(m);matsEl.appendChild(b);
+}
+for(const [m,label,k] of RIGID){
+  const b=document.createElement('button');b.dataset.m=m;
+  b.innerHTML=`<span class="sw" style="background:${swatch(m)}"></span>${label}<span class="key">${k}</span>`;
+  b.onclick=()=>pickBody(m);rigidEl.appendChild(b);
+}
+const tErase=document.getElementById('tErase'),tBomb=document.getElementById('tBomb'),tCast=document.getElementById('tCast');
+function setCastTool(){tool='cast';syncTools();}
+tCast.onclick=setCastTool;
+// wand editor
+const wandbar=document.getElementById('wandbar'),libEl=document.getElementById('lib'),presetsEl=document.getElementById('presets'),wandStateEl=document.getElementById('wandState');
+function chip(id){const S=SPELLS[id],b=document.createElement('button');b.className='chip '+(S.type==='proj'?'proj':S.type);
+  if(S.type==='proj')b.style.setProperty('--c',`rgb(${S.col.join(',')})`);
+  b.innerHTML=`<span class="dot"></span>${S.name}`;return b;}
+function renderWand(){
+  wandbar.innerHTML='';
+  if(!wand.length){const s=document.createElement('span');s.className='empty';s.textContent='Empty wand. Add cards from the library below.';wandbar.appendChild(s);}
+  wand.forEach((id,k)=>{const b=chip(id);b.title='Remove '+SPELLS[id].name;b.insertAdjacentHTML('beforeend','<span class="x">×</span>');
+    if(k===wIdx)b.classList.add('next');
+    b.onclick=()=>{wand.splice(k,1);if(wIdx>=wand.length)wIdx=0;renderWand();};wandbar.appendChild(b);});
+}
+for(const id in SPELLS){const b=chip(id);b.title='Add '+SPELLS[id].name;b.onclick=()=>{if(wand.length<16){wand.push(id);renderWand();setCastTool();}};libEl.appendChild(b);}
+for(const [name,list] of PRESETS){const b=document.createElement('button');b.textContent=name;b.onclick=()=>{wand=list.slice();wIdx=0;wCool=0;renderWand();setCastTool();};presetsEl.appendChild(b);}
+renderWand();
+let lastWIdx=-1,lastWandLen=-1;
+function wandStatus(){
+  if(wIdx!==lastWIdx||wand.length!==lastWandLen){lastWIdx=wIdx;lastWandLen=wand.length;renderWand();}
+  wandStateEl.textContent=!wand.length?'':wCool>0?(wRecharging?`recharging · ${wCool}`:`cast delay · ${wCool}`):'ready';
+}
+function syncTools(){
+  matsEl.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',tool==='paint'&&+b.dataset.m===sel?'true':'false'));
+  rigidEl.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',tool==='body'&&+b.dataset.m===bodyMat?'true':'false'));
+  tErase.setAttribute('aria-pressed',tool==='erase');tBomb.setAttribute('aria-pressed',tool==='bomb');
+  tCast.setAttribute('aria-pressed',tool==='cast');}
+function pick(m){sel=m;tool='paint';syncTools();}
+function pickBody(m){bodyMat=m;tool='body';syncTools();}
+tErase.onclick=()=>{tool='erase';syncTools();};
+tBomb.onclick=()=>{tool='bomb';syncTools();};
+syncTools();
+
+const expsEl=document.getElementById('exps');
+for(const e of EXPS){const b=document.createElement('button');b.dataset.id=e.id;b.innerHTML=`<strong>${e.name}</strong><span>${e.sub}</span>`;b.onclick=()=>loadExp(e);expsEl.appendChild(b);}
+
+const brushEl=document.getElementById('brush'),brushV=document.getElementById('brushV');
+let brush=4;
+function setBrush(v){brush=Math.max(1,Math.min(14,v));brushEl.value=brush;brushV.textContent=brush;}
+brushEl.oninput=()=>setBrush(+brushEl.value);
+
+let running=true;
+const bPause=document.getElementById('bPause'),bOv=document.getElementById('bOv');
+function setRunning(v){running=v;bPause.firstChild.textContent=v?'Pause ':'Play ';}
+bPause.onclick=()=>setRunning(!running);
+document.getElementById('bStep').onclick=()=>{setRunning(false);step();};
+function setOv(v){showOv=v;bOv.setAttribute('aria-pressed',v);}
+bOv.onclick=()=>setOv(!showOv);
+document.getElementById('bReset').onclick=()=>loadExp(curExp);
+
+// painting
+let down=false,last=null,shift=false,hoverCell=null,bodyDrag=null;
+function cellAt(e){const r=stage.getBoundingClientRect();return [Math.floor((e.clientX-r.left)/r.width*W),Math.floor((e.clientY-r.top)/r.height*H)];}
+function cellAtF(e){const r=stage.getBoundingClientRect();return [(e.clientX-r.left)/r.width*W-.5,(e.clientY-r.top)/r.height*H-.5];}
+function dab(cx,cy){
+  const r=brush-1,r2=(r+.5)*(r+.5);
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    if(dx*dx+dy*dy>r2)continue;const x=cx+dx,y=cy+dy;if(x<0||x>=W||y<0||y>=H)continue;
+    const i=y*W+x;
+    if(tool==='erase'){if(mat[i]!==E)clearCell(i);continue;}
+    if(mat[i]!==E&&!shift)continue;
+    const k=KIND[sel];
+    if((k===KP||k===KL||k===KG||k===KF)&&R()>.55)continue;
+    setI(i,sel);
+  }
+}
+function strokeTo(c){
+  if(!last){dab(c[0],c[1]);last=c;return;}
+  const dx=c[0]-last[0],dy=c[1]-last[1],n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/Math.max(1,brush*.6)));
+  for(let s=1;s<=n;s++)dab(Math.round(last[0]+dx*s/n),Math.round(last[1]+dy*s/n));
+  last=c;
+}
+function makeBodyFromDrag(a,b2){
+  const r=Math.max(.5,brush-1)+.5;
+  const x0=Math.max(0,Math.floor(Math.min(a[0],b2[0])-r)),x1=Math.min(W-1,Math.ceil(Math.max(a[0],b2[0])+r));
+  const y0=Math.max(0,Math.floor(Math.min(a[1],b2[1])-r)),y1=Math.min(H-1,Math.ceil(Math.max(a[1],b2[1])+r));
+  const ax=a[0],ay=a[1],bx=b2[0]-ax,by=b2[1]-ay,L=bx*bx+by*by;
+  const cells=[];
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    let t=L?((x-ax)*bx+(y-ay)*by)/L:0;t=t<0?0:t>1?1:t;
+    const dx=x-(ax+bx*t),dy=y-(ay+by*t);if(dx*dx+dy*dy>r*r)continue;
+    const i=y*W+x;if(mat[i]!==E&&!shift)continue;
+    if(bid[i])continue;
+    setI(i,bodyMat);cells.push(i);
+  }
+  if(cells.length)cellsToBodies(cells);
+}
+stage.addEventListener('pointerdown',e=>{
+  shift=e.shiftKey;const c=cellAt(e);
+  if(tool==='bomb'){explode(c[0],c[1],12);return;}
+  stage.setPointerCapture(e.pointerId);
+  if(tool==='cast'){const f=cellAtF(e);aim={ox:f[0],oy:f[1],ax:f[0]+1,ay:f[1],hold:true,fresh:true};return;}
+  if(tool==='body'){bodyDrag={a:c,b:c};return;}
+  down=true;last=null;strokeTo(c);});
+stage.addEventListener('pointermove',e=>{shift=e.shiftKey;const c=cellAt(e);hoverCell=c;
+  if(bodyDrag){bodyDrag.b=c;return;}
+  if(aim&&aim.hold){const f=cellAtF(e);aim.ax=f[0];aim.ay=f[1];return;}
+  if(down)strokeTo(c);});
+const end=()=>{if(aim)aim.hold=false;if(bodyDrag){makeBodyFromDrag(bodyDrag.a,bodyDrag.b);bodyDrag=null;}down=false;last=null;};
+stage.addEventListener('pointerup',end);
+stage.addEventListener('pointercancel',()=>{bodyDrag=null;down=false;last=null;if(aim)aim.hold=false;});
+stage.addEventListener('pointerleave',()=>{hoverCell=null;});
+
+const hoverEl=document.getElementById('hover');
+function drawHover(){
+  if(!hoverCell)return;
+  const [x,y]=hoverCell;if(x<0||x>=W||y<0||y>=H)return;
+  const i=y*W+x,m=mat[i],cx=(x/CS)|0,cy=(y/CS)|0,k=(cy*CW+cx)*4;
+  const isAwake=cur[k+2]>=0;
+  const inRect=isAwake&&x>=cur[k]&&x<=cur[k+2]&&y>=cur[k+1]&&y<=cur[k+3];
+  let state=KIND_LABEL[KIND[m]]||'';
+  if((m===WOOD||m===PLANT)&&life[i]>0)state='burning';
+  const lf=(KIND[m]===KG||m===FIRE||((m===WOOD||m===PLANT)&&life[i]>0))?` · life <b>${life[i]}</b>`:'';
+  const bb=bid[i]&&bodyMap.get(bid[i]);
+  const bt=bb?`<span>rigid body <b>#${bb.id}</b> · ${bb.n} px · ${bb.sleep?'asleep':'<b>moving</b>'}</span>`:'';
+  hoverEl.innerHTML=`<span>cell <b>${x}, ${y}</b></span><span><b>${NAME[m]}</b>${state?' · '+state:''}${lf}</span>${bt}<span>chunk <b>${cx}, ${cy}</b> · ${isAwake?(inRect?'<b>awake</b>, inside dirty rect':'<b>awake</b>, outside dirty rect'):'asleep'}</span>`;
+}
+
+const keyMap={'1':SAND,'2':WATER,'3':OIL,'4':LAVA,'5':ACID,'6':FIRE,'7':WOOD,'8':STONE,'9':POWDER,'0':ICE,'p':PLANT,'t':STEAM,'m':METAL};
+const bodyKeys={'w':WOOD,'k':STONE,'i':ICE};
+addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  const k=e.key.toLowerCase();
+  if(k===' '){if(e.target.closest&&e.target.closest('button,input'))return;e.preventDefault();setRunning(!running);return;}
+  if(e.target.tagName==='INPUT')return;
+  if(k in keyMap){pick(keyMap[k]);return;}
+  if(k in bodyKeys){pickBody(bodyKeys[k]);return;}
+  if(k==='e'){tool='erase';syncTools();}
+  else if(k==='b'){tool='bomb';syncTools();}
+  else if(k==='f')setCastTool();
+  else if(k==='c')setOv(!showOv);
+  else if(k==='r')loadExp(curExp);
+  else if(k==='.'){setRunning(false);step();}
+  else if(k==='[')setBrush(brush-1);
+  else if(k===']')setBrush(brush+1);
+});
+
+// readout
+const $=id=>document.getElementById(id);
+const sProj=$('sProj');
+const sScan=$('sScan'),sPct=$('sPct'),sAwake=$('sAwake'),sBody=$('sBody'),sOl=$('sOl'),sPart=$('sPart'),sExp=$('sExp'),sFps=$('sFps');
+let frames=0,fps=0,fc=0,fpsT=performance.now();
+function readout(){
+  sScan.textContent=scanned.toLocaleString()+' of '+N.toLocaleString();
+  sPct.textContent=(scanned/N*100).toFixed(1)+'%';
+  sAwake.textContent=awake+' / '+NC;
+  let sl=0;for(const b of bodies)if(b.sleep)sl++;
+  sBody.textContent=bodies.length+(bodies.length?` (${sl} asleep)`:'');
+  let olr=0,ols=0;for(const b of bodies){if(!b.ol)b.ol=traceOutline(b);olr+=b.ol.raw;ols+=b.ol.simp;}
+  sOl.textContent=olr.toLocaleString()+' → '+ols.toLocaleString();
+  sPart.textContent=parts.length;
+  sProj.textContent=projs.length;
+  wandStatus();
+  sExp.textContent=explQ.length;
+  sFps.textContent=fps;
+}
+
+function sizeAll(){sizeOv();sizeSpark();}
+new ResizeObserver(sizeAll).observe(stage);
+new ResizeObserver(sizeSpark).observe(spark);
+sizeAll();
+
+function loop(t){
+  if(running){step();hist[hp]=scanned;hp=(hp+1)%HIST;}
+  render();drawOverlay();
+  fc++;if(t-fpsT>=500){fps=Math.round(fc*1000/(t-fpsT));fc=0;fpsT=t;}
+  if(++frames%6===0){readout();drawSpark();drawHover();}
+  requestAnimationFrame(loop);
+}
+// test hook: headless harness can drive the sim without a DOM loop
+window.__lab={step,bodies,loadExp,EXPS,mat,bid,W,H,explode,traceOutline,parts,bodyRect,projs,PRESETS,
+  setWand:l=>{wand=l.slice();wIdx=0;wCool=0;},setAim:a=>{aim=a;}};
+loadExp(EXPS[0]);
+requestAnimationFrame(loop);
+})();
+</script>
