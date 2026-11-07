@@ -6,7 +6,8 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
 
 ## Run
 
-    cargo run --release
+    cargo run --release          # continues your save
+    cargo run --release -- --new # fresh character
 
 ## Controls
 
@@ -19,7 +20,8 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
 | K or Tab | Skill tree (spend skill points) |
 | Space | Dodge roll |
 | F | Drink a potion |
-| R | New game after death or victory |
+| E | Use exits, stairs and waypoints |
+| R | After dying: wake in Ashford |
 | F11 | Fullscreen |
 | Esc | Pause (or close the skill tree). Close the window to quit |
 
@@ -28,6 +30,7 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
     cargo run --release -- --showcase shots   # scripted fight, saves screenshots to shots/
     cargo run --release -- --lab lab          # enemy lineup, one effect each, close-up screenshots
     cargo run --release -- --spells spl       # every spell unlocked and cast, plus the skill tree screen
+    cargo run --release -- --tour tour        # visits and screenshots every area
 
 ## Code map
 
