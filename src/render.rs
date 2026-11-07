@@ -483,7 +483,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             }
         }
         for k in 0..60 {
-            let a = k as f32 / 60.0 * 6.283;
+            let a = k as f32 / 60.0 * std::f32::consts::TAU;
             let (x, y) = (gx + (a.cos() * rw) as i32, gy + (a.sin() * rw * 0.4) as i32);
             c.glow(x, y, scl([255, 120, 40], f * 0.6));
         }
@@ -554,7 +554,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     for nv in &g.novas {
         let n = 120;
         for k in 0..n {
-            let ang = k as f32 / n as f32 * 6.283;
+            let ang = k as f32 / n as f32 * std::f32::consts::TAU;
             for dr in 0..3 {
                 let r = nv.r - dr as f32 * 2.0;
                 let (x, y) = ((nv.x + ang.cos() * r) as i32 - cx, (nv.y + ang.sin() * r * 0.75) as i32 - cy);
@@ -604,9 +604,6 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
         if e.alive && e.burning > 8 {
             add(e.x, e.y + 1.0, 70.0, (e.burning as f32 / 40.0).min(1.5), [1.0, 0.55, 0.2]);
         }
-    }
-    for b in &g.bolts {
-        let _ = b;
     }
     // fires: count burning cells in blocks, one light per block
     let bs = 16;
@@ -740,7 +737,7 @@ fn draw_part(c: &mut Ctx, p: &Part, xf: &Xf, mirror: bool, x: f32, y: f32, depth
                 col = mixc(col, [255, 255, 255], tint.flash * 0.8);
                 e = scl([255, 255, 255], tint.flash * 0.1);
             }
-            let dy = (oy - sy as f32).max(0.0) + z0 * 0.0;
+            let dy = (oy - sy as f32).max(0.0) + z0;
             c.put(sx, sy, depth, col, e, dy);
         }
     }

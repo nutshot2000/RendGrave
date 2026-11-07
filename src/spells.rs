@@ -203,7 +203,7 @@ impl Game {
             self.world.splash(mx + ox, my + oy, ACID, 4.0, 12);
         }
         for _ in 0..60 {
-            let a = rnd() * 6.283;
+            let a = rnd() * std::f32::consts::TAU;
             let sp = rr(0.5, 2.5);
             self.ptc(mx, my, 2.0, a.cos() * sp, a.sin() * sp * 0.7, rr(1.0, 3.0), 200, PtK::Acid, [130, 230, 60]);
         }
@@ -261,12 +261,12 @@ impl Game {
                 }
                 1 => {
                     for _ in 0..3 {
-                        let a = rnd() * 6.283;
+                        let a = rnd() * std::f32::consts::TAU;
                         let d = rnd().sqrt() * r;
                         self.ptc(x + a.cos() * d, y + a.sin() * d * 0.7, rr(55.0, 70.0), 0.0, 0.0, -1.6, 120, PtK::Acid, [150, 230, 70]);
                     }
                     if t % 3 == 0 {
-                        let a = rnd() * 6.283;
+                        let a = rnd() * std::f32::consts::TAU;
                         let d = rnd() * r;
                         self.ptc(x + a.cos() * d, y + a.sin() * d * 0.5, rr(66.0, 76.0), rr(-0.1, 0.1), 0.0, 0.0, 90, PtK::Cloud, [44, 70, 34]);
                     }
@@ -287,18 +287,18 @@ impl Game {
                 }
                 _ => {
                     for _ in 0..4 {
-                        let a = rnd() * 6.283;
+                        let a = rnd() * std::f32::consts::TAU;
                         let d = rnd().sqrt() * r;
                         self.ptc(x + a.cos() * d - 20.0, y + a.sin() * d * 0.7, rr(40.0, 60.0), 0.9, 0.2, -1.4, 60, PtK::Ice, [210, 235, 255]);
                     }
                     if t % 2 == 0 {
-                        let a = rnd() * 6.283;
+                        let a = rnd() * std::f32::consts::TAU;
                         let d = rnd() * r;
                         self.ptc(x + a.cos() * d, y + a.sin() * d * 0.6, rr(10.0, 50.0), rr(0.3, 0.8), 0.0, 0.0, 70, PtK::Cloud, [190, 210, 230]);
                     }
                     // freeze puddles, put out fires
                     for _ in 0..30 {
-                        let a = rnd() * 6.283;
+                        let a = rnd() * std::f32::consts::TAU;
                         let d = rnd() * r;
                         let (cx, cy) = ((x + a.cos() * d) as i32, (y + a.sin() * d * 0.7) as i32);
                         match self.world.at(cx, cy) {
@@ -436,8 +436,8 @@ impl Game {
         self.player.whirl -= 1;
         if w == 26 || w == 16 || w == 6 {
             let (px, py) = (self.player.x, self.player.y);
-            let a0 = rnd() * 6.283;
-            self.slashes.push(Slash { x: px, y: py - 22.0, a0, a1: a0 + 6.283, t: 9 });
+            let a0 = rnd() * std::f32::consts::TAU;
+            self.slashes.push(Slash { x: px, y: py - 22.0, a0, a1: a0 + std::f32::consts::TAU, t: 9 });
             let edge = self.rank(Sk::Edge);
             for i in 0..self.enemies.len() {
                 let e = &self.enemies[i];
@@ -501,7 +501,7 @@ impl Game {
             let (x, y) = (p.x, p.y);
             self.banner = Some((format!("LEVEL {}", lvl), "SKILL POINT GAINED  -  PRESS K".into(), 200));
             for _ in 0..80 {
-                let a = rnd() * 6.283;
+                let a = rnd() * std::f32::consts::TAU;
                 self.ptc(x + a.cos() * 8.0, y + a.sin() * 4.0, rr(0.0, 50.0), a.cos() * 0.3, a.sin() * 0.2, rr(0.5, 1.6), 60, PtK::Heal, [255, 220, 120]);
             }
             self.light(x, y, 160.0, 2.0, [1.0, 0.85, 0.5], 50);
@@ -535,13 +535,13 @@ impl Game {
         for _ in 0..40 {
             let (x, y) = (rr(40.0, W as f32 - 40.0), rr(40.0, H as f32 - 40.0));
             let d = ((x - self.player.x).powi(2) + (y - self.player.y).powi(2)).sqrt();
-            if d < 260.0 || self.world.solid(x as i32, y as i32) || self.world.aux[y as usize * W + x as usize] & AUX_INDOOR != 0 {
+            if d < 260.0 || self.world.at(x as i32, y as i32) != E || self.world.aux[y as usize * W + x as usize] & AUX_INDOOR != 0 {
                 continue;
             }
             let n = 3 + ri(3);
             for j in 0..n {
                 let (ex, ey) = (x + rr(-14.0, 14.0), y + rr(-10.0, 10.0));
-                if self.world.solid(ex as i32, ey as i32) {
+                if self.world.at(ex as i32, ey as i32) != E {
                     continue;
                 }
                 let k = if lvl >= 3 && j == 0 && rnd() < 0.3 {

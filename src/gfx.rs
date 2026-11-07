@@ -235,6 +235,9 @@ impl Gfx {
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
+        if w == 0 || h == 0 {
+            return;
+        }
         let w = w.max(1);
         let h = h.max(1);
         self.config.width = w;
@@ -352,7 +355,7 @@ impl Gfx {
         gl.screen[0] = sw as f32;
         gl.screen[1] = sh as f32;
         gl.screen[2] = self.scale as f32;
-        gl.low = [self.rw as f32, self.rh as f32, ((sw - self.rw * self.scale) / 2) as f32, ((sh - self.rh * self.scale) / 2) as f32];
+        gl.low = [self.rw as f32, self.rh as f32, (sw.saturating_sub(self.rw * self.scale) / 2) as f32, (sh.saturating_sub(self.rh * self.scale) / 2) as f32];
         let n = lights.len().min(MAX_LIGHTS);
         gl.misc[0] = n as f32;
         self.queue.write_buffer(&self.ubuf, 0, bytemuck::bytes_of(&gl));

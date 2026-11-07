@@ -150,6 +150,7 @@ pub struct Gib {
     pub bleed: i32,
     pub frozen: bool,
     pub fx: bool,
+    pub age: i32,
 }
 
 pub struct Bolt {
@@ -203,9 +204,6 @@ pub struct Nova {
     pub t: i32,
 }
 
-pub const SPELL_NAMES: [&str; 4] = ["LIGHTNING", "FIREBALL", "ACID SHOT", "FROST NOVA"];
-pub const SPELL_COST: [f32; 4] = [14.0, 20.0, 10.0, 28.0];
-pub const SPELL_CD: [i32; 4] = [22, 36, 16, 80];
 
 pub struct Game {
     pub world: World,
@@ -228,7 +226,6 @@ pub struct Game {
     pub frame: u64,
     pub banner: Option<(String, String, i32)>,
     pub view: (f32, f32),
-    pub cleared: bool,
     pub crypt: (i32, i32, i32, i32),
     pub seed: u64,
     pub prev: Input,
@@ -238,6 +235,8 @@ pub struct Game {
     pub spawn_t: i32,
     pub tree: bool,
     pub tree_hover: Option<usize>,
+    pub paused: bool,
+    pub hold_block: bool,
 }
 
 fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
@@ -348,7 +347,6 @@ impl Game {
             frame: 0,
             banner: Some(("RENDGRAVE".into(), "THE HOLLOW PINES".into(), 170)),
             view: (520.0, 300.0),
-            cleared: false,
             crypt: sp.crypt,
             seed: seed_,
             prev: Input::default(),
@@ -358,6 +356,8 @@ impl Game {
             spawn_t: 1500,
             tree: false,
             tree_hover: None,
+            paused: false,
+            hold_block: false,
         }
     }
 
@@ -401,7 +401,6 @@ impl Game {
         for dy in -1..=1 {
             for dx in -3..=3 {
                 let i = self.world.at(x as i32 + dx, y as i32 + dy);
-                let burning_wall = false;
                 match i {
                     FIRE => r[0] = true,
                     ACID => r[1] = true,
@@ -411,7 +410,6 @@ impl Game {
                     ICE => r[5] = true,
                     _ => {}
                 }
-                let _ = burning_wall;
             }
         }
         r
@@ -442,6 +440,7 @@ impl Game {
                 bleed: if frozen { 0 } else { 120 },
                 frozen,
                 fx: true,
+                age: 0,
             });
         }
     }
@@ -461,8 +460,20 @@ impl Game {
 
     // ------------------------------------------------------------ update
     pub fn update(&mut self, inp: &Input) {
-        if (inp.tree && !self.prev.tree && !self.player.dead) || (inp.close && !self.prev.close && self.tree) {
+        if inp.tree && !self.prev.tree && !self.player.dead {
             self.tree = !self.tree;
+            self.hold_block = true;
+        } else if inp.close && !self.prev.close {
+            if self.tree {
+                self.tree = false;
+            } else if !self.player.dead {
+                self.paused = !self.paused;
+            }
+            self.hold_block = true;
+        }
+        if self.paused && !self.tree {
+            self.prev = inp.clone();
+            return;
         }
         if self.tree {
             self.tree_hover = crate::hud::node_at(inp.mouse, self.view);
@@ -491,7 +502,16 @@ impl Game {
                 Ev::Fume(x, y) => self.ptc(x as f32, y as f32, 1.0, rr(-0.2, 0.2), rr(-0.2, 0.2), 0.4, 60, PtK::Steam, [150, 220, 90]),
             }
         }
-        self.update_player(inp);
+        let mut inp2 = inp.clone();
+        if self.hold_block {
+            if inp.lmb || inp.rmb {
+                inp2.lmb = false;
+                inp2.rmb = false;
+            } else {
+                self.hold_block = false;
+            }
+        }
+        self.update_player(&inp2);
         self.update_enemies();
         self.update_projs();
         self.update_gibs();
@@ -517,7 +537,9 @@ impl Game {
             }
         }
         if let Some(s) = inp.sel {
-            p.sel = s;
+            if s < p.sk.bar().len() {
+                p.sel = s;
+            }
         }
         p.hurt *= 0.93;
         if p.inv > 0 {
@@ -554,12 +576,6 @@ impl Game {
             dx /= l;
             dy /= l;
         }
-        let under = {
-            let (x, y) = (p.x, p.y);
-            let _ = (x, y);
-            [false; 6]
-        };
-        let _ = under;
         let u = self.under(self.player.x, self.player.y);
         let p = &mut self.player;
         let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32);
@@ -689,8 +705,6 @@ impl Game {
             b.parts[T_ARMF].ang = target - 1.6 * side + 3.2 * side * e;
             b.parts[T_TORSO].ang = 0.15 * (e - 0.5) * side;
         } else if p.cast_t > 0 {
-            let fa = if p.face < 0.0 { std::f32::consts::PI - p.swing_a.max(-3.0) } else { 0.0 };
-            let _ = fa;
             b.parts[T_ARMB].ang = -1.9;
             b.parts[T_ARMF].ang = -ph.sin() * 0.35 * walk - 0.3;
         } else {
@@ -976,16 +990,16 @@ impl Game {
             }
         }
         for _ in 0..(r * 2.6) as i32 {
-            let a = rnd() * 6.283;
+            let a = rnd() * std::f32::consts::TAU;
             let sp = rr(0.5, 3.5);
             self.ptc(x, y, z, a.cos() * sp, a.sin() * sp * 0.6, rr(0.0, 2.5), rr(15.0, 40.0) as i32, PtK::Flame, [255, 170, 60]);
         }
         for _ in 0..30 {
-            let a = rnd() * 6.283;
+            let a = rnd() * std::f32::consts::TAU;
             self.ptc(x, y, z, a.cos() * rr(0.2, 1.0), a.sin() * 0.5, rr(0.3, 1.0), rr(60.0, 120.0) as i32, PtK::Smoke, [50, 44, 46]);
         }
         for _ in 0..20 {
-            let a = rnd() * 6.283;
+            let a = rnd() * std::f32::consts::TAU;
             self.ptc(x, y, z, a.cos() * rr(1.0, 4.0), a.sin() * rr(1.0, 3.0), rr(1.0, 4.0), 60, PtK::Ember, [255, 190, 90]);
         }
         // hurt everything nearby
@@ -1103,7 +1117,7 @@ impl Game {
             } else {
                 let life = self.projs[k].life;
                 if rnd() < 0.6 {
-                    let a = rnd() * 6.283;
+                    let a = rnd() * std::f32::consts::TAU;
                     self.ptc(x + a.cos() * 4.0, y, z + a.sin() * 4.0, a.cos() * 0.6, 0.0, a.sin() * 0.6, 8, PtK::Spark, [190, 215, 255]);
                 }
                 self.ball_zap(x, y, z, life);
@@ -1358,8 +1372,9 @@ impl Game {
                                 }
                                 for dy in -6i32..=6 {
                                     for dx in -8i32..=8 {
-                                        if rnd() < 0.3 && !self.world.solid(sx as i32 + dx, sy as i32 + dy) {
-                                            let i2 = (sy as usize + dy as usize).min(H - 1) * W + (sx as usize + dx as usize).min(W - 1);
+                                        let (cx, cy) = (sx as i32 + dx, sy as i32 + dy);
+                                        if rnd() < 0.3 && World::inb(cx, cy) && !self.world.solid(cx, cy) {
+                                            let i2 = cy as usize * W + cx as usize;
                                             self.world.scorch[i2] = self.world.scorch[i2].saturating_add(40);
                                         }
                                     }
@@ -1498,6 +1513,10 @@ impl Game {
         let mut stamp = vec![];
         while k < self.gibs.len() {
             let g = &mut self.gibs[k];
+            g.age += 1;
+            if g.age > 900 {
+                g.rest = 999;
+            }
             g.vz -= 0.16;
             let (nx, ny) = (g.x + g.vx, g.y + g.vy);
             if !self.world.solid(nx as i32, g.y as i32) || g.z > 12.0 {
@@ -1723,7 +1742,7 @@ impl Game {
             self.novas[nk].r = r;
             self.novas[nk].t += 1;
             for a in 0..48 {
-                let ang = a as f32 / 48.0 * 6.283;
+                let ang = a as f32 / 48.0 * std::f32::consts::TAU;
                 let (cx, cy) = (x + ang.cos() * r, y + ang.sin() * r * 0.75);
                 if rnd() < 0.5 {
                     self.ptc(cx, cy, rr(1.0, 10.0), ang.cos() * 0.4, ang.sin() * 0.3, rr(0.0, 0.6), 30, PtK::Ice, [200, 235, 255]);

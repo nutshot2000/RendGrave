@@ -15,17 +15,19 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
 | WASD | Move |
 | Left mouse | Sword (aim at the legs to take them off) |
 | Right mouse | Cast the selected spell |
-| 1-4 | Lightning, Fireball, Acid shot, Frost nova |
+| 1-9 / mouse wheel | Choose a spell from the spell bar |
+| K or Tab | Skill tree (spend skill points) |
 | Space | Dodge roll |
 | F | Drink a potion |
 | R | New game after death or victory |
 | F11 | Fullscreen |
-| Esc | Quit |
+| Esc | Pause (or close the skill tree). Close the window to quit |
 
 ## Test modes
 
     cargo run --release -- --showcase shots   # scripted fight, saves screenshots to shots/
     cargo run --release -- --lab lab          # enemy lineup, one effect each, close-up screenshots
+    cargo run --release -- --spells spl       # every spell unlocked and cast, plus the skill tree screen
 
 ## Code map
 

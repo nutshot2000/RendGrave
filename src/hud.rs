@@ -5,6 +5,7 @@ use crate::game::*;
 use crate::gfx::Frame;
 use crate::rng::*;
 use crate::skills::*;
+use crate::world::*;
 
 const FONT: &[(char, &str)] = &[
     ('A', "010101111101101"), ('B', "110101110101110"), ('C', "011100100100011"), ('D', "110101101101110"),
@@ -366,6 +367,63 @@ fn wrap(s: &str, max: usize) -> Vec<String> {
     out
 }
 
+/// a small map of the whole world, top right
+fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
+    let (mw, mh) = (84, 63);
+    let (ox, oy) = (fw - mw - 8, 26);
+    let sx = W as f32 / mw as f32;
+    let sy = H as f32 / mh as f32;
+    u.rect(ox - 2, oy - 2, mw + 4, mh + 4, [70, 58, 66], 220);
+    for y in 0..mh {
+        for x in 0..mw {
+            let (wx, wy) = ((x as f32 * sx) as usize, (y as f32 * sy) as usize);
+            let i = wy * W + wx;
+            let m = g.world.m[i];
+            let c = match m {
+                TREE => [24, 52, 28],
+                STONE => [86, 84, 92],
+                BRICK => [120, 104, 112],
+                WOOD => [110, 80, 50],
+                WATER | ICE => [50, 90, 150],
+                ACID => [100, 190, 50],
+                FIRE => [255, 140, 40],
+                OIL => [30, 26, 26],
+                _ => match g.world.g[i] {
+                    FLOOR => [60, 56, 64],
+                    DIRT | MUD => [70, 56, 42],
+                    BURNT => [30, 26, 26],
+                    _ => [36, 60, 34],
+                },
+            };
+            u.px(ox + x, oy + y, c, 210);
+        }
+    }
+    // view rectangle
+    let (vw, vh) = g.view;
+    let (rx, ry) = (ox + (cx as f32 / sx) as i32, oy + (cy as f32 / sy) as i32);
+    let (rw, rh) = ((vw / sx) as i32, (vh / sy) as i32);
+    for k in 0..rw {
+        u.px(rx + k, ry, [200, 190, 170], 140);
+        u.px(rx + k, ry + rh, [200, 190, 170], 140);
+    }
+    for k in 0..rh {
+        u.px(rx, ry + k, [200, 190, 170], 140);
+        u.px(rx + rw, ry + k, [200, 190, 170], 140);
+    }
+    for e in &g.enemies {
+        if e.alive {
+            let (x, y) = (ox + (e.x / sx) as i32, oy + (e.y / sy) as i32);
+            if x >= ox && y >= oy && x < ox + mw && y < oy + mh {
+                u.px(x, y, if e.k == crate::body::Kind::Brute { [255, 150, 40] } else { [230, 50, 50] }, 255);
+            }
+        }
+    }
+    let (px, py) = (ox + (g.player.x / sx) as i32, oy + (g.player.y / sy) as i32);
+    for &(dx, dy) in &[(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+        u.px(px + dx, py + dy, [255, 255, 255], 255);
+    }
+}
+
 fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     let t = g.frame;
     let sk = &g.player.sk;
@@ -582,6 +640,12 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         let c = [(col[0] as f32 * al) as u8, (col[1] as f32 * al) as u8, (col[2] as f32 * al) as u8];
         u.text(fw / 2 - w / 2, y, a, c, 3, true);
         u.text_c(fw / 2, y + 20, b, [(200.0 * al) as u8, (190.0 * al) as u8, (180.0 * al) as u8], 1);
+    }
+    minimap(g, &mut u, fw, cx, cy);
+    if g.paused && !g.tree {
+        u.rect(0, 0, fw, fh, [6, 3, 8], 170);
+        u.text_c(fw / 2, fh / 3, "PAUSED", [240, 214, 150], 3);
+        u.text_c(fw / 2, fh / 3 + 22, "ESC RESUME    K SKILL TREE    CLOSE THE WINDOW TO QUIT", [200, 190, 190], 1);
     }
     if g.tree {
         draw_tree(g, &mut u, fw, fh);
