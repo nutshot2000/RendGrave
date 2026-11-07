@@ -41,7 +41,7 @@ fn hash(p: vec2f) -> f32 {
   let alb = textureLoad(t0, ip, 0);
   let em = textureLoad(t1, ip, 0);
   let inf = textureLoad(t2, ip, 0);
-  let dy = inf.r * 64.0;
+  let dy = inf.r * 128.0;
   let sp = vec2f(px.x, px.y + dy);
   var light = mix(g.amb_out.rgb, g.amb_in.rgb, inf.b);
   let n = u32(g.misc.x);

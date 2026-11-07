@@ -33,7 +33,7 @@ fn unpk(v: u32) -> [u8; 3] {
 }
 #[inline]
 fn inf(dy: f32, occ: bool, indoor: bool) -> u32 {
-    let r = (dy / 64.0 * 255.0).clamp(0.0, 255.0) as u32;
+    let r = (dy / 128.0 * 255.0).clamp(0.0, 255.0) as u32;
     r | if occ { 255 << 8 } else { 0 } | if indoor { 255 << 16 } else { 0 } | 0xff00_0000
 }
 
@@ -42,8 +42,27 @@ pub struct Ctx<'a> {
     pub cx: i32,
     pub cy: i32,
     pub t: u64,
+    /// the player's body on screen (x, y, ground row): walls in front of it turn see-through
+    pub fade: Option<(f32, f32, f32)>,
 }
 impl<'a> Ctx<'a> {
+    /// a wall or canopy pixel: dithered away where it would hide the player
+    #[inline]
+    fn put_w(&mut self, sx: i32, sy: i32, depth: f32, c: [u8; 3], e: [u8; 3], dy: f32) {
+        if let Some((px, py, pd)) = self.fade {
+            if depth > pd {
+                let (dx, dyy) = ((sx as f32 - px) / 18.0, (sy as f32 - py) / 34.0);
+                let d = dx * dx + dyy * dyy;
+                if d < 1.0 {
+                    let pat = (sx + sy * 2).rem_euclid(4);
+                    if (d < 0.55 && pat != 0) || pat < 2 {
+                        return;
+                    }
+                }
+            }
+        }
+        self.put(sx, sy, depth, c, e, dy);
+    }
     #[inline]
     fn put(&mut self, sx: i32, sy: i32, depth: f32, c: [u8; 3], e: [u8; 3], dy: f32) {
         if sx < 0 || sy < 0 || sx >= self.f.w as i32 || sy >= self.f.h as i32 {
@@ -57,7 +76,7 @@ impl<'a> Ctx<'a> {
         self.f.alb[i] = pk(c);
         self.f.emi[i] = pk(e);
         let old = self.f.inf[i];
-        self.f.inf[i] = (old & 0xffff_ff00) | ((dy / 64.0 * 255.0).clamp(0.0, 255.0) as u32);
+        self.f.inf[i] = (old & 0xffff_ff00) | ((dy / 128.0 * 255.0).clamp(0.0, 255.0) as u32);
     }
     #[inline]
     fn glow(&mut self, sx: i32, sy: i32, e: [u8; 3]) {
@@ -201,15 +220,21 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             let m = w.m[i];
             let gc = ground_col(w, i, x, y);
             let (mut c, mut e) = if m == E || is_wall(m) { (gc, [0, 0, 0]) } else { top_col(w, i, m, x, y, t, gc) };
-            if m == E && y > 0 {
+            if m == TREE {
+                // the shade of the canopy overhead
+                let off = w.col[i];
+                let (dx, dy) = (off[0] as f32 - 128.0, off[1] as f32 - 128.0);
+                let d = (dx * dx + dy * dy).sqrt() / (off[2].max(1) as f32);
+                c = scl(c, 0.45 + d * 0.35);
+            } else if m == E && y > 0 {
                 // ambient occlusion at the foot of walls
-                if is_wall(w.at(x, y - 1)) || is_wall(w.at(x, y - 2)) {
+                if w.solid(x, y - 1) || w.solid(x, y - 2) {
                     c = scl(c, 0.55);
                 }
             }
             f.alb[o] = pk(c);
             f.emi[o] = pk(e);
-            f.inf[o] = inf(0.0, is_wall(m) && m != WOOD, w.aux[i] & AUX_INDOOR != 0);
+            f.inf[o] = inf(0.0, w.blocks(i), w.aux[i] & AUX_INDOOR != 0);
             let _ = &mut e;
         }
     }
@@ -223,7 +248,8 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             f.alb[o] = pk([200, 220, 255]);
         }
     }
-    let mut c = Ctx { f, cx, cy, t };
+    let fade = if g.player.dead { None } else { Some((g.player.x - cx as f32, g.player.y - 26.0 - cy as f32, g.player.y)) };
+    let mut c = Ctx { f, cx, cy, t, fade };
     // ---- shadows under characters
     let shadow = |c: &mut Ctx, x: f32, y: f32, rw: f32| {
         let (sx, sy) = (x as i32 - c.cx, y as i32 - c.cy);
@@ -244,8 +270,8 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             shadow(&mut c, e.x, e.y, if e.k == Kind::Brute { 11.0 } else { 7.0 });
         }
     }
-    // ---- walls (drawn upright, depth = their ground row)
-    for wy in cy..cy + fh + 40 {
+    // ---- walls and trees (drawn upright, depth = their ground row)
+    for wy in cy..cy + fh + 130 {
         for wx in cx..cx + fw {
             if !World::inb(wx, wy) {
                 continue;
@@ -256,26 +282,22 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                 continue;
             }
             let s = w.shade[i] as f32 / 255.0;
-            let mut h = wall_h(m);
-            if m == TREE {
-                h += (vnoise(wx as f32 * 0.2, wy as f32 * 0.2, 4) * 8.0) as i32 - 4;
-            } else if m == STONE {
-                h += (vnoise(wx as f32 * 0.3, wy as f32 * 0.3, 6) * 6.0) as i32 - 3;
-            }
             let sx = wx - cx;
-            let top_y = wy - h - cy;
-            let south = w.at(wx, wy + 1);
-            let north = w.at(wx, wy - 1);
             let burning = w.life[i] > 0;
             let fc = if burning { fire_col(i as u32 * 7, t) } else { [0; 3] };
             let depth = wy as f32;
+            if m == TREE {
+                draw_tree_cell(&mut c, w, i, wx, wy, sx, depth, burning, fc);
+                continue;
+            }
+            let mut h = wall_h(m);
+            if m == STONE {
+                h += (vnoise(wx as f32 * 0.3, wy as f32 * 0.3, 6) * 6.0) as i32 - 3;
+            }
+            let top_y = wy - h - cy;
+            let south = w.at(wx, wy + 1);
+            let north = w.at(wx, wy - 1);
             let tc = match m {
-                TREE => {
-                    let n = vnoise(wx as f32 * 0.35, wy as f32 * 0.35, 9);
-                    let edge = !is_wall(north) || north != TREE;
-                    let base = scl([42, 86, 44], 0.75 + n * 0.5 + s * 0.15);
-                    if edge { scl(base, 1.3) } else { base }
-                }
                 STONE => {
                     let edge = north != STONE;
                     scl([118, 116, 122], 0.85 + s * 0.2 + if edge { 0.2 } else { 0.0 })
@@ -290,38 +312,24 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                 }
             };
             let (tc, te) = if burning { (mixc(tc, fc, 0.55), scl(fc, 0.8)) } else { (tc, [0; 3]) };
-            c.put(sx, top_y, depth, tc, te, (h + 1) as f32);
+            c.put_w(sx, top_y, depth, tc, te, (h + 1) as f32);
             // front face where the south side is open
             if south != m || wall_h(south) < h {
                 for k in 1..=h {
                     let syy = top_y + k;
                     let hh = (h - k) as f32;
-                    let (col, draw) = match m {
-                        TREE => {
-                            let trunk = w.aux[i] & AUX_TRUNK != 0;
-                            if k <= 13 {
-                                let n = vnoise(wx as f32 * 0.4, (wy + k) as f32 * 0.3, 10);
-                                (scl([34, 70, 38], 0.78 + n * 0.45 - k as f32 * 0.035), true)
-                            } else if trunk {
-                                let bark = ((wx * 3 + k) % 4 == 0) as i32 as f32;
-                                (scl([76, 54, 38], 0.9 - bark * 0.25 - (k as f32 / h as f32) * 0.2), true)
-                            } else {
-                                ([0; 3], false)
-                            }
-                        }
+                    let col = match m {
                         BRICK => {
                             let row = k / 4;
                             let mortar = k % 4 == 0 || (wx + row * 3) % 8 == 0;
                             let base = if mortar { [52, 46, 58] } else { scl([92, 80, 96], 0.85 + h2(wx / 8, row, 2) * 0.25) };
-                            (scl(base, 1.0 - k as f32 / h as f32 * 0.35), true)
+                            scl(base, 1.0 - k as f32 / h as f32 * 0.35)
                         }
-                        STONE => (scl([84, 82, 90], 0.95 - k as f32 / h as f32 * 0.35 + s * 0.1), true),
-                        _ => (scl([102, 70, 42], 0.9 - k as f32 / h as f32 * 0.3), true),
+                        STONE => scl([84, 82, 90], 0.95 - k as f32 / h as f32 * 0.35 + s * 0.1),
+                        _ => scl([102, 70, 42], 0.9 - k as f32 / h as f32 * 0.3),
                     };
-                    if draw {
-                        let (col, e) = if burning && h2(wx, syy + (t / 4) as i32, 1) < 0.5 { (mixc(col, fc, 0.6), scl(fc, 0.7)) } else { (col, [0; 3]) };
-                        c.put(sx, syy, depth, col, e, hh + 1.0);
-                    }
+                    let (col, e) = if burning && h2(wx, syy + (t / 4) as i32, 1) < 0.5 { (mixc(col, fc, 0.6), scl(fc, 0.7)) } else { (col, [0; 3]) };
+                    c.put_w(sx, syy, depth, col, e, hh + 1.0);
                 }
             }
         }
@@ -642,6 +650,66 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     *lights_out = ls;
     // ---------------------------------------------------- UI
     hud::draw(g, c.f, inp, cx, cy);
+}
+
+/// One cell of a tree. Canopy cells draw a domed leafy top high in the air plus a hanging
+/// skirt on the south edge; trunk cells draw the bark from the ground up to the canopy.
+#[allow(clippy::too_many_arguments)]
+fn draw_tree_cell(c: &mut Ctx, w: &World, i: usize, wx: i32, wy: i32, sx: i32, depth: f32, burning: bool, fc: [u8; 3]) {
+    let t = c.t;
+    let off = w.col[i];
+    let (dx, dy, r) = (off[0] as i32 - 128, off[1] as i32 - 128, off[2].max(4) as f32);
+    let (tx, ty) = (wx - dx, wy - dy);
+    let seed = h2(tx, ty, 77);
+    let d = ((dx * dx + dy * dy) as f32).sqrt() / r;
+    let dome = (1.0 - d * d).max(0.0);
+    let base_h = wall_h(TREE) + (seed * 14.0) as i32 - 7;
+    let h = base_h;
+    let skirt = 30 + (seed * 8.0) as i32;
+    // per-tree tint: some darker pines, some brighter oaks
+    let leaf = mixc([34, 76, 40], [62, 98, 44], seed);
+    // canopy top
+    let clump = vnoise(wx as f32 * 0.32, wy as f32 * 0.32, 9);
+    let mut lv = 0.55 + dome * 0.55 - (dx + dy) as f32 / r * 0.16 + (clump - 0.5) * 0.4;
+    if d > 0.9 {
+        lv *= 0.75;
+    }
+    let mut col = scl(leaf, lv);
+    if h2(wx, wy, 31) > 0.94 && dome > 0.3 {
+        col = scl(col, 1.35);
+    }
+    let top_y = wy - h - c.cy;
+    let (col, e) = if burning { (mixc(col, fc, 0.6), scl(fc, 0.8)) } else { (col, [0; 3]) };
+    c.put_w(sx, top_y, depth, col, e, (h + 1) as f32);
+    // hanging skirt of leaves along the south edge, with a ragged bottom
+    if w.at(wx, wy + 1) != TREE {
+        // rounded underside: the skirt hangs lowest in the middle, like the bottom of a ball
+        let prof = (1.0 - (dx as f32 / r).powi(2)).max(0.0).sqrt();
+        let len = (skirt as f32 * (0.3 + 0.7 * prof)) as i32 - (h2(wx, ty, 5) * 5.0) as i32;
+        for k in 1..=len.max(1) {
+            let n = vnoise(wx as f32 * 0.45, (wy + k) as f32 * 0.3, 10);
+            let curve = k as f32 / len.max(1) as f32;
+            let col = scl(leaf, (0.66 + n * 0.32 - curve * 0.38 - (dx as f32 / r) * 0.16) * (0.72 + 0.28 * prof));
+            let (col, e) = if burning && h2(wx, k + (t / 4) as i32, 1) < 0.5 { (mixc(col, fc, 0.6), scl(fc, 0.7)) } else { (col, [0; 3]) };
+            c.put_w(sx, top_y + k, depth, col, e, (h - k + 1) as f32);
+        }
+    }
+    // trunk: from the ground up into the canopy
+    if w.aux[i] & AUX_TRUNK != 0 && w.aux[i + W] & AUX_TRUNK == 0 {
+        let canopy_bottom = wy - h + skirt - 4;
+        let bark = scl([82, 58, 40], 1.05 - (dx as f32 + 2.0) * 0.12);
+        for y in canopy_bottom..=wy {
+            let k = wy - y;
+            let groove = ((wx * 5 + y / 3) % 7 == 0) as i32 as f32;
+            let col = scl(bark, 0.95 - groove * 0.3 - (k as f32 / (h as f32)) * 0.25);
+            let (col, e) = if burning && h2(wx, y + (t / 4) as i32, 1) < 0.4 { (mixc(col, fc, 0.6), scl(fc, 0.6)) } else { (col, [0; 3]) };
+            c.put_w(sx, y - c.cy, depth, col, e, k as f32 + 1.0);
+        }
+        // root flare
+        if dx.abs() == 2 {
+            c.put(sx + dx.signum(), wy - c.cy, depth, scl(bark, 0.7), [0; 3], 1.0);
+        }
+    }
 }
 
 #[derive(Default, Clone, Copy)]

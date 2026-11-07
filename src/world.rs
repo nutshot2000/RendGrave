@@ -50,8 +50,8 @@ pub fn conductive(m: u8) -> bool {
 pub fn wall_h(m: u8) -> i32 {
     match m {
         STONE => 14,
-        BRICK => 30,
-        TREE => 27,
+        BRICK => 44,
+        TREE => 84,
         WOOD => 8,
         _ => 0,
     }
@@ -131,7 +131,17 @@ impl World {
     }
     #[inline]
     pub fn solid(&self, x: i32, y: i32) -> bool {
-        is_wall(self.at(x, y))
+        if !Self::inb(x, y) {
+            return true;
+        }
+        let i = y as usize * W + x as usize;
+        let m = self.m[i];
+        is_wall(m) && (m != TREE || self.aux[i] & AUX_TRUNK != 0)
+    }
+    /// does this cell stop light and line of sight? (canopies don't, trunks do)
+    pub fn blocks(&self, i: usize) -> bool {
+        let m = self.m[i];
+        is_wall(m) && m != WOOD && (m != TREE || self.aux[i] & AUX_TRUNK != 0)
     }
     pub fn wake(&mut self, x: i32, y: i32) {
         let cx = (x.max(0) as usize / CS).min(CW - 1);
@@ -485,8 +495,7 @@ impl World {
         for k in 1..n {
             let t = k as f32 / n as f32;
             let (x, y) = (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
-            let m = self.at(x as i32, y as i32);
-            if is_wall(m) && m != WOOD {
+            if !Self::inb(x as i32, y as i32) || self.blocks(y as usize * W + x as usize) {
                 return false;
             }
         }
@@ -685,16 +694,16 @@ impl World {
         // forest
         let mut placed = 0;
         for _ in 0..4000 {
-            if placed > 300 {
+            if placed > 120 {
                 break;
             }
             let (x, y) = (rr(12.0, W as f32 - 12.0), rr(12.0, H as f32 - 12.0));
-            let r = rr(5.5, 10.0);
+            let r = rr(10.0, 16.0);
             let dens = fbm(x * 0.01, y * 0.01, s + 40);
-            if rnd() > dens * 1.4 {
+            if rnd() > dens * 1.2 {
                 continue;
             }
-            if near_road(x, y, r + 22.0)
+            if near_road(x, y, r * 0.6 + 12.0)
                 || (x > 575.0 && x < 935.0 && y > 85.0 && y < 440.0)
                 || (x - pond.0).hypot(y - pond.1) < 66.0
                 || (x - 110.0).hypot(y - 670.0) < 80.0
@@ -715,11 +724,18 @@ impl World {
                 continue;
             }
             w.blob(x, y, r, TREE, s + 30 + placed, true);
-            for dy in 0..(r as i32 + 3) {
-                for dx in -1..=1 {
+            // remember each canopy cell's offset from the trunk; the trunk is a small disc
+            for dy in -(r as i32) - 6..=(r as i32) + 6 {
+                for dx in -(r as i32) - 6..=(r as i32) + 6 {
                     let (xx, yy) = (x as i32 + dx, y as i32 + dy);
                     if w.at(xx, yy) == TREE {
-                        w.aux[yy as usize * W + xx as usize] |= AUX_TRUNK;
+                        let i = yy as usize * W + xx as usize;
+                        if w.col[i] == [0, 0, 0] {
+                            w.col[i] = [(dx + 128) as u8, (dy + 128) as u8, r as u8];
+                        }
+                        if dx * dx + dy * dy <= 5 {
+                            w.aux[i] |= AUX_TRUNK;
+                        }
                     }
                 }
             }
