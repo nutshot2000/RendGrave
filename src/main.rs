@@ -119,8 +119,9 @@ impl App {
             g.enemies.clear();
             g.player.x = 70.0;
             g.player.y = 660.0;
-            g.player.sk.level = 7;
-            g.player.sk.points = 30;
+            g.player.sk.level = 40;
+            g.player.sk.points = 60;
+            g.player.sk.tomes = [true; N];
             for i in 0..N {
                 while g.player.sk.learn(i) {}
             }
@@ -197,6 +198,10 @@ impl App {
         g.player.hp = g.player.hp.max(60.0);
         g.player.mana = 100.0;
         if f == 1 {
+            g.player.sk.level = 8;
+            for s in [skills::Sk::Lightning, skills::Sk::Fireball, skills::Sk::Acid, skills::Sk::Nova] {
+                g.player.sk.rank[s as usize] = 1;
+            }
             g.player.x = 214.0;
             g.player.y = 606.0;
             g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);

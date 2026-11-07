@@ -364,6 +364,19 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                 c.put(sx + ox + 1, sy + oy, p.y, [200, 150, 40], [20, 14, 0], 2.0);
                 c.put(sx + ox, sy + oy - 1, p.y, [255, 230, 120], [30, 24, 0], 3.0);
             }
+        } else if p.k == 2 {
+            let sc = SCHOOLS[NODES[p.amt as usize].col].1;
+            for dy in 0..6 {
+                for dx in -4i32..=4 {
+                    let spine = dx == 0;
+                    let col = if spine { [60, 30, 20] } else if dy == 0 || dx.abs() == 4 { [150, 110, 50] } else { [110, 40, 34] };
+                    c.put(sx + dx, sy - 7 + dy, p.y, col, [0; 3], 7.0 - dy as f32);
+                }
+            }
+            let pulse = 0.6 + (t as f32 * 0.15).sin() * 0.4;
+            c.put(sx - 2, sy - 5, p.y + 0.1, sc, scl(sc, pulse), 6.0);
+            c.put(sx + 2, sy - 4, p.y + 0.1, sc, scl(sc, pulse), 6.0);
+            c.glow(sx, sy - 10, scl(sc, pulse * 0.6));
         } else {
             for dy in 0..6 {
                 for dx in -2i32..=2 {
@@ -596,6 +609,12 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     for l in &g.lights {
         let k = if l.max > 0 { l.t as f32 / l.max as f32 } else { 1.0 };
         add(l.x, l.y, l.r, l.i * k, l.c);
+    }
+    for p in &g.pickups {
+        if p.k == 2 {
+            let sc = SCHOOLS[NODES[p.amt as usize].col].1;
+            add(p.x, p.y, 70.0, 1.0, [sc[0] as f32 / 255.0, sc[1] as f32 / 255.0, sc[2] as f32 / 255.0]);
+        }
     }
     for p in &g.projs {
         match p.k {

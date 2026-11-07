@@ -467,6 +467,9 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         icon(u, x + 2, y + 2, n.sk, t);
         if r == 0 {
             u.rect(x, y, bs, bs, [10, 8, 12], if can { 90 } else { 170 });
+            if needs_tome(i) && !sk.tomes[i] {
+                u.text(x + 2, y + bs - 7, "?", [200, 160, 90], 1, true);
+            }
         }
         // rank pips
         for k in 0..n.max as i32 {
@@ -487,7 +490,7 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         let col = SCHOOLS[n.col].1;
         u.text(18, ty + 6, n.name, col, 2, true);
         let kind = if n.active { "SPELL" } else { "PASSIVE" };
-        let rk = format!("{}   RANK {}/{}", kind, sk.rank[i], n.max);
+        let rk = format!("{}   LEVEL {}   RANK {}/{}", kind, min_level(i), sk.rank[i], n.max);
         u.text(fw - Ui::text_w(&rk, 1) - 18, ty + 8, &rk, [200, 190, 190], 1, true);
         let maxc = ((fw - 40) / 4) as usize;
         for (k, l) in wrap(n.desc, maxc).iter().enumerate() {
@@ -502,7 +505,7 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         u.text(fw - Ui::text_w(&extra, 1) - 18, ty + th - 10, &extra, [150, 180, 255], 1, true);
     } else {
         u.text(18, ty + 8, "HOVER A SKILL TO SEE WHAT IT DOES. EARN POINTS BY LEVELLING UP.", [200, 190, 190], 1, false);
-        u.text(18, ty + 18, "EACH TIER NEEDS THE ONE ABOVE IT AND A MINIMUM LEVEL.", [160, 150, 160], 1, false);
+        u.text(18, ty + 18, "EACH TIER NEEDS THE ONE ABOVE IT AND A MINIMUM LEVEL. ULTIMATES NEED A TOME.", [160, 150, 160], 1, false);
     }
 }
 
@@ -568,10 +571,14 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     let bar = p.sk.bar();
     let n = bar.len() as i32;
     let sw = 20;
-    let total = n * sw + (n - 1) * 3;
+    let total = (n * sw + (n - 1) * 3).max(0);
     let bx = fw / 2 - total / 2;
     let by = fh - sw - 6;
-    u.rect(bx - 4, by - 4, total + 8, sw + 8, [16, 10, 16], 200);
+    if n > 0 {
+        u.rect(bx - 4, by - 4, total + 8, sw + 8, [16, 10, 16], 200);
+    } else {
+        u.text_c(fw / 2, by + 6, "NO SPELLS YET - LEVEL UP AND PRESS K", [150, 140, 150], 1);
+    }
     for (k, &s) in bar.iter().enumerate() {
         let x = bx + k as i32 * (sw + 3);
         let nd = node(s);

@@ -292,7 +292,7 @@ impl Game {
             x: sp.player.0,
             y: sp.player.1,
             hp: 100.0,
-            mana: 100.0,
+            mana: 60.0,
             body,
             swing: 0,
             swing_a: 0.0,
@@ -318,7 +318,7 @@ impl Game {
             kills: 0,
             sk: Skills::new(),
             maxhp: 100.0,
-            maxmana: 100.0,
+            maxmana: 60.0,
             whirl: 0,
         };
         let enemies = sp
@@ -669,10 +669,10 @@ impl Game {
         if p.sel >= bar.len() {
             p.sel = 0;
         }
-        let s = bar[p.sel];
+        let s = bar.get(p.sel).copied().unwrap_or(Sk::Lightning);
         let nd = node(s);
         let si = s as usize;
-        if inp.rmb && p.cd[si] == 0 && p.dodge == 0 && p.whirl == 0 {
+        if inp.rmb && !bar.is_empty() && p.cd[si] == 0 && p.dodge == 0 && p.whirl == 0 {
             if p.mana >= nd.mana {
                 p.mana -= nd.mana;
                 p.cd[si] = nd.cd;
@@ -1198,6 +1198,12 @@ impl Game {
         });
         if rnd() < if k == Kind::Brute { 1.0 } else { 0.18 + 0.07 * fortune } {
             self.pickups.push(Pickup { k: 1, x: x + 6.0, y: y + 2.0, z: 10.0, vz: 2.0, amt: 1, t: 0 });
+        }
+        let missing: Vec<usize> = (0..N).filter(|&i| needs_tome(i) && !self.player.sk.tomes[i]).collect();
+        let tome_chance = if k == Kind::Brute { 0.12 } else { 0.004 };
+        if !missing.is_empty() && rnd() < tome_chance {
+            let i = missing[ri(missing.len())];
+            self.pickups.push(Pickup { k: 2, x: x - 6.0, y: y + 1.0, z: 12.0, vz: 2.5, amt: i as i32, t: 0 });
         }
     }
 
@@ -1816,9 +1822,13 @@ impl Game {
             if p.k == 0 {
                 self.player.gold += p.amt;
                 self.float(px, py - 56.0, format!("+{} GOLD", p.amt), [255, 214, 90], false);
-            } else {
+            } else if p.k == 1 {
                 self.player.potions += 1;
                 self.float(px, py - 56.0, "+POTION".into(), [255, 110, 120], false);
+            } else {
+                let i = p.amt as usize;
+                self.player.sk.tomes[i] = true;
+                self.banner = Some((format!("TOME OF {}", NODES[i].name), "LEARN IT IN THE SKILL TREE AT LEVEL 30".into(), 260));
             }
         }
         // camera: follow the player, lean towards the cursor

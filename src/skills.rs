@@ -52,8 +52,20 @@ pub const SCHOOLS: [(&str, [u8; 3]); 6] = [
     ("BODY", [240, 110, 120]),
 ];
 
-/// minimum character level for each tier
-pub const ROW_LEVEL: [i32; 4] = [1, 2, 4, 6];
+/// Minimum character level for a node. Blade and Body come early; the spell schools
+/// open at level 4 and their ultimates at 30 (which also need a tome found in the world).
+pub fn min_level(i: usize) -> i32 {
+    let n = &NODES[i];
+    if n.col >= 4 {
+        [1, 5, 12, 20][n.row]
+    } else {
+        [4, 8, 18, 30][n.row]
+    }
+}
+/// tier-4 spells must be found as tomes before they can be learned
+pub fn needs_tome(i: usize) -> bool {
+    NODES[i].active && NODES[i].row == 3
+}
 
 macro_rules! node {
     ($sk:ident, $name:expr, $desc:expr, $c:expr, $r:expr, $max:expr, $act:expr, $mana:expr, $cd:expr) => {
@@ -103,37 +115,38 @@ pub struct Skills {
     pub level: i32,
     pub xp: i32,
     pub points: i32,
+    pub tomes: [bool; N],
 }
 
 impl Skills {
     pub fn new() -> Skills {
-        let mut rank = [0u8; N];
-        for s in [Sk::Lightning, Sk::Fireball, Sk::Acid, Sk::Nova] {
-            rank[s as usize] = 1;
-        }
-        Skills { rank, level: 1, xp: 0, points: 1 }
+        // you begin with nothing but a sword
+        Skills { rank: [0u8; N], level: 1, xp: 0, points: 0, tomes: [false; N] }
     }
     #[inline]
     pub fn r(&self, s: Sk) -> i32 {
         self.rank[s as usize] as i32
     }
     /// can this node take another point right now? Returns the reason if not.
-    pub fn can_learn(&self, i: usize) -> Result<(), &'static str> {
+    pub fn can_learn(&self, i: usize) -> Result<(), String> {
         let n = &NODES[i];
         if self.rank[i] >= n.max {
-            return Err("MAXED");
+            return Err("MAXED".into());
         }
-        if self.points <= 0 {
-            return Err("NO SKILL POINTS");
+        if self.level < min_level(i) {
+            return Err(format!("NEEDS LEVEL {}", min_level(i)));
         }
-        if self.level < ROW_LEVEL[n.row] {
-            return Err(["", "NEEDS LEVEL 2", "NEEDS LEVEL 4", "NEEDS LEVEL 6"][n.row]);
+        if needs_tome(i) && !self.tomes[i] {
+            return Err("FIND ITS TOME IN THE WORLD FIRST".into());
         }
         if n.row > 0 {
             let above = NODES.iter().position(|m| m.col == n.col && m.row == n.row - 1).unwrap();
             if self.rank[above] == 0 {
-                return Err("LEARN THE SKILL ABOVE FIRST");
+                return Err("LEARN THE SKILL ABOVE FIRST".into());
             }
+        }
+        if self.points <= 0 {
+            return Err("NO SKILL POINTS".into());
         }
         Ok(())
     }
