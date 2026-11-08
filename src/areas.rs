@@ -16,7 +16,7 @@ impl Game {
         let mut g = Game::blank(seed_);
         g.saving = true;
         if load && g.load() {
-            let to = if g.area.is_dungeon() { AreaId::Pines } else { g.area };
+            let to = g.area.surface();
             g.area = AreaId::Ashford;
             g.travel(to);
             g.banner = Some(("WELCOME BACK".into(), to.name(), 200));
@@ -36,7 +36,7 @@ impl Game {
         e.maxhp = e.hp;
         e.dmg *= 1.0 + 0.1 * l;
         // now and then a champion: tougher, glowing, better loot
-        if k != Kind::King && self.area != AreaId::Ashford && rnd() < 0.07 {
+        if !k.boss() && self.area != AreaId::Ashford && rnd() < 0.07 {
             e.elite = true;
             e.hp *= 2.6;
             e.maxhp = e.hp;
@@ -49,7 +49,11 @@ impl Game {
     pub fn xp_for(&self, k: Kind) -> i32 {
         let base = match k {
             Kind::King => 600.0,
+            Kind::Chief => 900.0,
             Kind::Brute => 90.0,
+            Kind::Bloater => 40.0,
+            Kind::Bandit => 34.0,
+            Kind::Crossbow => 36.0,
             Kind::Archer => 30.0,
             Kind::Skeleton => 26.0,
             Kind::Crawler => 16.0,
@@ -69,8 +73,10 @@ impl Game {
         self.world = world;
         self.area = to;
         self.alvl = to.level();
-        let king_dead = self.king_dead;
-        self.enemies = sp.enemies.iter().filter(|e| !(e.0 == Kind::King && king_dead)).map(|&(k, x, y)| self.scaled_enemy(k, x, y)).collect();
+        let (king_dead, chief_dead) = (self.king_dead, self.chief_dead);
+        self.enemies = sp.enemies.iter().filter(|e| !(e.0 == Kind::King && king_dead) && !(e.0 == Kind::Chief && chief_dead)).map(|&(k, x, y)| self.scaled_enemy(k, x, y)).collect();
+        self.chests = sp.chests.iter().map(|&(x, y, tier)| crate::props::Chest { x, y, tier, open: false, t: 0 }).collect();
+        self.shrines = sp.shrines.iter().map(|&(x, y, k)| crate::props::Shrine { x, y, k, used: false }).collect();
         self.projs.clear();
         self.ptcs.clear();
         self.gibs.clear();
@@ -88,6 +94,10 @@ impl Game {
         self.braziers = sp.braziers.clone();
         self.buildings = sp.buildings.clone();
         self.lamps = sp.lamps.clone();
+        for s in &self.shrines {
+            let c = crate::props::SHRINES[s.k as usize].2;
+            self.lamps.push((s.x, s.y - 16.0, [c[0] as f32 / 300.0, c[1] as f32 / 300.0, c[2] as f32 / 300.0]));
+        }
         self.exits = sp.exits;
         self.waypoint = sp.waypoint;
         self.player.x = x;
@@ -150,6 +160,9 @@ impl Game {
                 return;
             }
         }
+        if self.update_props(press) {
+            return;
+        }
         let mut go = None;
         for e in &self.exits {
             if px >= e.x0 && px <= e.x1 && py >= e.y0 && py <= e.y1 {
@@ -190,13 +203,18 @@ impl Game {
     /// the Hollow King calls his servants at half health
     pub fn boss_logic(&mut self, i: usize) {
         let e = &mut self.enemies[i];
-        if e.k != Kind::King || e.summoned || e.hp > e.maxhp * 0.5 {
+        if !e.k.boss() || e.summoned || e.hp > e.maxhp * 0.5 {
             return;
         }
         e.summoned = true;
-        let (x, y) = (e.x, e.y);
-        self.banner = Some(("RISE, MY SERVANTS".into(), "THE HOLLOW KING CALLS THE DEAD".into(), 150));
-        self.snd(Sfx::KingRoar, x, y, 1.2);
+        let (x, y, bk) = (e.x, e.y, e.k);
+        if bk == Kind::Chief {
+            self.banner = Some(("TO ME, BROTHERS".into(), "THE CHIEF CALLS HIS GANG".into(), 150));
+            self.snd(Sfx::Roar, x, y, 1.2);
+        } else {
+            self.banner = Some(("RISE, MY SERVANTS".into(), "THE HOLLOW KING CALLS THE DEAD".into(), 150));
+            self.snd(Sfx::KingRoar, x, y, 1.2);
+        }
         self.shake = 8.0;
         for k in 0..5 {
             let a = k as f32 / 5.0 * std::f32::consts::TAU;
@@ -204,7 +222,8 @@ impl Game {
             if self.world.solid(sx as i32, sy as i32) {
                 continue;
             }
-            let mut s = self.scaled_enemy(if k % 2 == 0 { Kind::Skeleton } else { Kind::Archer }, sx, sy);
+            let kind = match (bk, k % 2) { (Kind::Chief, 0) => Kind::Bandit, (Kind::Chief, _) => Kind::Crossbow, (_, 0) => Kind::Skeleton, _ => Kind::Archer };
+            let mut s = self.scaled_enemy(kind, sx, sy);
             s.aggro = true;
             s.stun = 30;
             self.enemies.push(s);
@@ -212,6 +231,20 @@ impl Game {
                 self.ptc(sx, sy, 0.0, rr(-1.0, 1.0), rr(-0.6, 0.6), rr(0.5, 2.0), 200, PtK::Debris, [90, 76, 64]);
             }
         }
+    }
+
+    pub fn chief_slain(&mut self, x: f32, y: f32) {
+        let first = !self.chief_dead;
+        self.chief_dead = true;
+        if first {
+            self.player.sk.points += 1;
+        }
+        self.banner = Some(("THE BANDIT CHIEF FALLS".into(), if first { "A BONUS SKILL POINT - RAVENHOLD IS FREE".into() } else { "RAVENHOLD IS FREE".into() }, 400));
+        for k in 0..8 {
+            self.pickups.push(Pickup { k: 0, x: x + rr(-16.0, 16.0), y: y + rr(-8.0, 8.0), z: 14.0, vz: rr(1.5, 3.0), amt: 60 + ri(50) as i32, t: k * 5 });
+        }
+        self.flash = 0.2;
+        self.save();
     }
 
     pub fn king_slain(&mut self, x: f32, y: f32) {
@@ -249,6 +282,7 @@ impl Game {
             format!("potions {}", p.potions),
             format!("waypoints {}", join(self.discovered.iter().map(|a| a.key()).collect())),
             format!("king {}", self.king_dead as u8),
+            format!("chief {}", self.chief_dead as u8),
         ];
         let mut lines: Vec<String> = lines.to_vec();
         for (k, it) in self.player.equip.iter().enumerate() {
@@ -288,6 +322,7 @@ impl Game {
                 "potions" => self.player.potions = v.parse().unwrap_or(3),
                 "waypoints" => self.discovered = v.split(',').filter_map(AreaId::from_key).collect(),
                 "king" => self.king_dead = v == "1",
+                "chief" => self.chief_dead = v == "1",
                 "equip0" | "equip1" | "equip2" | "equip3" => {
                     if !gear_loaded {
                         self.player.equip = [None, None, None, None];

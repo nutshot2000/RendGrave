@@ -103,15 +103,39 @@ pub enum Kind {
     Archer,
     /// act I boss: a giant crowned skeleton in rusted armour
     King,
+    /// a swollen bog corpse full of acid and gas
+    Bloater,
+    /// a living outlaw with a sword or an axe
+    Bandit,
+    /// a bandit with a crossbow
+    Crossbow,
+    /// boss of the Ravenhold bandits
+    Chief,
 }
 impl Kind {
     /// big, heavy enemies (bigger reach and footprint, resist knockback)
     pub fn big(self) -> bool {
-        matches!(self, Kind::Brute | Kind::King)
+        matches!(self, Kind::Brute | Kind::King | Kind::Chief)
     }
     /// made of bone: no blood, crumbles into bone chips
     pub fn bony(self) -> bool {
         matches!(self, Kind::Skeleton | Kind::Archer | Kind::King)
+    }
+    /// keeps its distance and shoots
+    pub fn ranged(self) -> bool {
+        matches!(self, Kind::Archer | Kind::Crossbow)
+    }
+    /// the shambling, grabbing dead
+    pub fn shambler(self) -> bool {
+        matches!(self, Kind::Zombie | Kind::Crawler | Kind::Bloater)
+    }
+    /// area bosses: health bar on top, boss music, no champions
+    pub fn boss(self) -> bool {
+        matches!(self, Kind::King | Kind::Chief)
+    }
+    /// living people: they bleed red and run when beaten
+    pub fn bandit(self) -> bool {
+        matches!(self, Kind::Bandit | Kind::Crossbow | Kind::Chief)
     }
 }
 
@@ -608,6 +632,12 @@ fn vary(c: [u8; 3], x: i32, y: i32, s: u32, amt: f32) -> [u8; 3] {
 }
 
 pub fn humanoid(orig: Kind) -> Body {
+    match orig {
+        Kind::Bloater => return bloater(),
+        Kind::Bandit | Kind::Crossbow => return bandit(orig),
+        Kind::Chief => return chief(),
+        _ => {}
+    }
     // variants share a base body plan
     let kind = match orig {
         Kind::Crawler => Kind::Zombie,
@@ -1094,4 +1124,125 @@ pub fn weapon_part(wk: crate::items::WKind, rarity: crate::items::Rarity, glow: 
             None
         }),
     }
+}
+
+/// a zombie swollen with bog water: a wide belly studded with glowing boils
+fn bloater() -> Body {
+    let mut b = humanoid(Kind::Zombie);
+    let s = (next() & 0xffff) as u32;
+    let t = b.parts[T_TORSO].clone();
+    let nw = t.w * 3 / 2 + 1;
+    let k = nw as f32 / t.w as f32;
+    let mut px = vec![Px::default(); (nw * t.h) as usize];
+    for y in 0..t.h {
+        for x in 0..nw {
+            let sx = ((x as f32 / k) as i32).min(t.w - 1);
+            let mut p = t.px[(y * t.w + sx) as usize];
+            if p.m != 0 {
+                if p.m == PM_FLESH || p.m == PM_CLOTH {
+                    p.m = PM_FLESH;
+                    p.c = vary([92, 124, 70], x, y, s, 0.2);
+                    p.im = PM_FLESH;
+                    p.ic = [110, 150, 60];
+                }
+                if h2(x, y, s + 3) < 0.1 && y > 2 {
+                    p.m = PM_GLOW;
+                    p.c = [150, 235, 70];
+                }
+            }
+            px[(y * nw + x) as usize] = p;
+        }
+    }
+    b.parts[T_TORSO].w = nw;
+    b.parts[T_TORSO].px = px;
+    b.parts[T_TORSO].pivot.0 *= k;
+    for p in b.parts.iter_mut() {
+        if p.parent == T_TORSO as i32 {
+            p.attach.0 *= k;
+        }
+        for q in p.px.iter_mut() {
+            if q.m == PM_FLESH {
+                q.c = [(q.c[0] as f32 * 0.85) as u8, (q.c[1] as f32 * 1.02).min(255.0) as u8, (q.c[2] as f32 * 0.8) as u8];
+            }
+        }
+    }
+    b.kind = Kind::Bloater;
+    b.compute();
+    b
+}
+
+/// an outlaw in dull mail and leather, with a sword, an axe or a crossbow
+fn bandit(orig: Kind) -> Body {
+    use crate::items::{Rarity, WKind};
+    let mut b = humanoid(Kind::Player);
+    let leather = [[112u8, 64, 40], [92, 72, 52], [124, 42, 36], [72, 78, 60]][ri(4)];
+    for (pi, p) in b.parts.iter_mut().enumerate() {
+        if pi == T_WEAPON {
+            continue;
+        }
+        for q in p.px.iter_mut() {
+            if q.m == 0 {
+                continue;
+            }
+            if q.c[2] as i32 > q.c[0] as i32 + 30 {
+                // the player's blue becomes worn leather
+                let l = (q.c[0] as f32 + q.c[1] as f32 + q.c[2] as f32) / (52.0 + 74.0 + 160.0);
+                q.c = mul(leather, l.clamp(0.6, 1.4));
+                q.m = PM_CLOTH;
+            } else if q.c == [200, 50, 50] {
+                q.c = [44, 38, 36];
+            } else if q.m == PM_METAL {
+                // a dark hood, leather sleeves and breeches; only the chest keeps its mail
+                let l = (q.c[0] as f32 + q.c[1] as f32 + q.c[2] as f32) / 600.0;
+                q.c = match pi {
+                    T_HEAD => mul([66, 52, 46], 0.7 + l * 0.6),
+                    T_ARMF | T_ARMB => mul(leather, 0.55 + l * 0.5),
+                    T_LEGF | T_LEGB => mul([74, 62, 54], 0.7 + l * 0.5),
+                    _ => mul(q.c, 0.55),
+                };
+                if pi != T_TORSO {
+                    q.m = PM_CLOTH;
+                }
+                if pi == T_HEAD && l < 0.2 {
+                    // the visor slit becomes a face peering out of the hood
+                    q.m = PM_FLESH;
+                    q.c = [196, 156, 126];
+                }
+            }
+        }
+    }
+    let at = b.parts[T_WEAPON].attach;
+    b.parts[T_WEAPON] = if orig == Kind::Crossbow {
+        let mut bow = humanoid(Kind::Archer).parts[T_WEAPON].clone();
+        bow.attach = at;
+        bow
+    } else {
+        weapon_part(if rnd() < 0.5 { WKind::Sword } else { WKind::Axe }, Rarity::Common, false, at)
+    };
+    b.kind = orig;
+    b.compute();
+    b
+}
+
+/// the bandit chief: a huge man in blackened plate and a red cloak, with a war axe
+fn chief() -> Body {
+    use crate::items::{Rarity, WKind};
+    let mut b = humanoid(Kind::Brute);
+    for (pi, p) in b.parts.iter_mut().enumerate() {
+        if pi == T_WEAPON {
+            continue;
+        }
+        for q in p.px.iter_mut() {
+            match q.m {
+                PM_CLOTH => q.c = mul([140, 30, 28], 0.8 + (q.c[0] as f32 / 255.0) * 0.4),
+                PM_METAL => q.c = mul(q.c, 0.55),
+                _ => {}
+            }
+        }
+    }
+    let at = b.parts[T_WEAPON].attach;
+    b.parts[T_WEAPON] = weapon_part(WKind::Axe, Rarity::Rare, false, at);
+    b.kind = Kind::Chief;
+    b.compute();
+    b
 }

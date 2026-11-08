@@ -1,6 +1,7 @@
 // Area generators: each area is built from its biome rules plus a few hand-placed landmarks
-// (town buildings, the crypt entrance, boss rooms). Outdoor areas use the save's seed so
-// they stay the same; dungeons get a fresh layout on every visit.
+// (town buildings, the crypt entrance, the bandit castle, boss rooms). Outdoor areas use the
+// save's seed so they stay the same; dungeons get a fresh layout on every visit.
+// Every area has its own size inside the engine's largest map (W x H).
 use crate::body::Kind;
 use crate::rng::*;
 use crate::world::*;
@@ -10,10 +11,14 @@ pub enum AreaId {
     Ashford,
     Pines,
     Graveyard,
+    Fen,
+    Ravenhold,
     Crypt(u8),
+    Cellars(u8),
 }
 
 pub const CRYPT_FLOORS: u8 = 3;
+pub const CELLAR_FLOORS: u8 = 2;
 
 impl AreaId {
     pub fn name(&self) -> String {
@@ -21,7 +26,10 @@ impl AreaId {
             AreaId::Ashford => "ASHFORD".into(),
             AreaId::Pines => "THE HOLLOW PINES".into(),
             AreaId::Graveyard => "THE OLD GRAVEYARD".into(),
+            AreaId::Fen => "THE BLACKWATER FEN".into(),
+            AreaId::Ravenhold => "RAVENHOLD".into(),
             AreaId::Crypt(f) => format!("SUNKEN CRYPT - FLOOR {}", f),
+            AreaId::Cellars(f) => format!("RAVENHOLD CELLARS - DEPTH {}", f),
         }
     }
     pub fn sub(&self) -> &'static str {
@@ -29,8 +37,12 @@ impl AreaId {
             AreaId::Ashford => "THE LAST SAFE HEARTH",
             AreaId::Pines => "THE DEAD WALK BETWEEN THE TREES",
             AreaId::Graveyard => "WHERE THE DIGGING NEVER STOPS",
+            AreaId::Fen => "THE BOG REMEMBERS EVERY BODY",
+            AreaId::Ravenhold => "BANDITS HOLD THE BROKEN KEEP",
             AreaId::Crypt(f) if *f == CRYPT_FLOORS => "THE HOLLOW KING WAITS BELOW",
             AreaId::Crypt(_) => "THE DEAD DO NOT REST HERE",
+            AreaId::Cellars(f) if *f == CELLAR_FLOORS => "THE CHIEF COUNTS HIS PLUNDER",
+            AreaId::Cellars(_) => "STOLEN GOLD AND COLD STEEL",
         }
     }
     /// area level: what enemies scale to
@@ -39,18 +51,43 @@ impl AreaId {
             AreaId::Ashford => 1,
             AreaId::Pines => 2,
             AreaId::Graveyard => 5,
+            AreaId::Fen => 7,
+            AreaId::Ravenhold => 9,
             AreaId::Crypt(f) => 2 + *f as i32,
+            AreaId::Cellars(f) => 9 + *f as i32,
         }
     }
     pub fn is_dungeon(&self) -> bool {
-        matches!(self, AreaId::Crypt(_))
+        matches!(self, AreaId::Crypt(_) | AreaId::Cellars(_))
+    }
+    /// where you come back up to when you load a save taken underground
+    pub fn surface(&self) -> AreaId {
+        match self {
+            AreaId::Crypt(_) => AreaId::Pines,
+            AreaId::Cellars(_) => AreaId::Ravenhold,
+            a => *a,
+        }
+    }
+    /// the area's size in cells
+    pub fn size(&self) -> (usize, usize) {
+        match self {
+            AreaId::Ashford => (1024, 768),
+            AreaId::Pines => (2048, 1536),
+            AreaId::Graveyard => (1792, 1280),
+            AreaId::Fen => (2048, 1536),
+            AreaId::Ravenhold => (1536, 1152),
+            AreaId::Crypt(_) | AreaId::Cellars(_) => (1280, 960),
+        }
     }
     pub fn key(&self) -> String {
         match self {
             AreaId::Ashford => "ashford".into(),
             AreaId::Pines => "pines".into(),
             AreaId::Graveyard => "graveyard".into(),
+            AreaId::Fen => "fen".into(),
+            AreaId::Ravenhold => "ravenhold".into(),
             AreaId::Crypt(f) => format!("crypt{}", f),
+            AreaId::Cellars(f) => format!("cellars{}", f),
         }
     }
     pub fn from_key(s: &str) -> Option<AreaId> {
@@ -58,7 +95,15 @@ impl AreaId {
             "ashford" => Some(AreaId::Ashford),
             "pines" => Some(AreaId::Pines),
             "graveyard" => Some(AreaId::Graveyard),
-            _ => s.strip_prefix("crypt").and_then(|f| f.parse().ok()).map(AreaId::Crypt),
+            "fen" => Some(AreaId::Fen),
+            "ravenhold" => Some(AreaId::Ravenhold),
+            _ => {
+                if let Some(f) = s.strip_prefix("cellars") {
+                    f.parse().ok().map(AreaId::Cellars)
+                } else {
+                    s.strip_prefix("crypt").and_then(|f| f.parse().ok()).map(AreaId::Crypt)
+                }
+            }
         }
     }
     fn hash(&self) -> u64 {
@@ -66,11 +111,14 @@ impl AreaId {
             AreaId::Ashford => 0x11,
             AreaId::Pines => 0x2222,
             AreaId::Graveyard => 0x333333,
+            AreaId::Fen => 0x5555_5555,
+            AreaId::Ravenhold => 0x6666_6666_66,
             AreaId::Crypt(f) => 0x4444_4444 + *f as u64,
+            AreaId::Cellars(f) => 0x7777_0000_00 + *f as u64,
         }
     }
     /// areas with a waypoint stone, in menu order
-    pub const WAYPOINTS: [AreaId; 3] = [AreaId::Ashford, AreaId::Pines, AreaId::Graveyard];
+    pub const WAYPOINTS: [AreaId; 5] = [AreaId::Ashford, AreaId::Pines, AreaId::Graveyard, AreaId::Fen, AreaId::Ravenhold];
 }
 
 pub struct Exit {
@@ -151,10 +199,14 @@ pub struct Spawns {
     pub braziers: Vec<(f32, f32)>,
     pub exits: Vec<Exit>,
     pub waypoint: Option<(f32, f32)>,
+    /// (x, y, tier): tier 1 chests are iron-bound and richer
+    pub chests: Vec<(f32, f32, u8)>,
+    /// (x, y, kind): see props::SHRINES
+    pub shrines: Vec<(f32, f32, u8)>,
 }
 impl Spawns {
     fn new() -> Spawns {
-        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None }
+        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![] }
     }
     pub fn arrival(&self, from: AreaId) -> (f32, f32) {
         self.entries.iter().find(|e| e.0 == from).map(|e| (e.1, e.2)).unwrap_or(self.start)
@@ -164,18 +216,29 @@ impl Spawns {
 pub fn generate(id: AreaId, seed_: u64) -> (World, Spawns) {
     let s = seed_ ^ id.hash().wrapping_mul(0x9E37_79B9_7F4A_7C15);
     seed(s);
-    let mut w = World::new();
+    let (aw, ah) = id.size();
+    let mut w = World::sized(aw, ah);
     let sp = match id {
         AreaId::Ashford => town(&mut w, s as u32),
         AreaId::Pines => forest(&mut w, s as u32),
         AreaId::Graveyard => graveyard(&mut w, s as u32),
-        AreaId::Crypt(f) => dungeon(&mut w, f),
+        AreaId::Fen => fen(&mut w, s as u32),
+        AreaId::Ravenhold => ravenhold(&mut w, s as u32),
+        AreaId::Crypt(f) => dungeon(&mut w, f, false),
+        AreaId::Cellars(f) => dungeon(&mut w, f, true),
     };
     w.wake_all();
     (w, sp)
 }
 
 // ------------------------------------------------------------------ helpers
+fn idx(x: i32, y: i32) -> usize {
+    y as usize * W + x as usize
+}
+fn inarea(w: &World, x: i32, y: i32) -> bool {
+    x >= 0 && y >= 0 && (x as usize) < w.aw && (y as usize) < w.ah
+}
+/// a winding road; it clears trees and rocks, and becomes a plank bridge over water
 fn path(w: &mut World, ctrl: &[(f32, f32)], width: f32, seed_: u32) -> Vec<(f32, f32)> {
     let mut pts = vec![];
     for k in 0..ctrl.len() - 1 {
@@ -196,13 +259,52 @@ fn path(w: &mut World, ctrl: &[(f32, f32)], width: f32, seed_: u32) -> Vec<(f32,
                 let d = ((dx * dx + dy * dy) as f32).sqrt();
                 if d < r {
                     let (px, py) = (x as i32 + dx, y as i32 + dy);
-                    if World::inb(px, py) {
-                        let i = py as usize * W + px as usize;
+                    if inarea(w, px, py) {
+                        let i = idx(px, py);
+                        if w.m[i] == WATER || w.g[i] == PLANK {
+                            w.m[i] = E;
+                            w.g[i] = PLANK;
+                            continue;
+                        }
                         w.g[i] = if d > r - 1.5 && rnd() < 0.5 { MUD } else { DIRT };
-                        if w.m[i] == TREE || w.m[i] == STONE {
+                        if matches!(w.m[i], TREE | STONE | GAS) {
                             w.m[i] = E;
                         }
                     }
+                }
+            }
+        }
+    }
+    pts
+}
+/// a stream of water with muddy banks
+fn river(w: &mut World, ctrl: &[(f32, f32)], width: f32, seed_: u32) -> Vec<(f32, f32)> {
+    let mut pts = vec![];
+    for k in 0..ctrl.len() - 1 {
+        let (a, b) = (ctrl[k], ctrl[k + 1]);
+        let n = ((b.0 - a.0).hypot(b.1 - a.1) / 2.0) as i32;
+        for j in 0..n.max(1) {
+            let t = j as f32 / n as f32;
+            let (x, y) = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+            let wob = (vnoise(x * 0.012, y * 0.012, seed_ + 7) - 0.5) * 60.0;
+            pts.push((x + wob, y));
+        }
+    }
+    for &(x, y) in &pts {
+        let r = width * (0.8 + 0.5 * vnoise(x * 0.04, y * 0.04, seed_ + 8));
+        let ri_ = r.ceil() as i32 + 5;
+        for dy in -ri_..=ri_ {
+            for dx in -ri_..=ri_ {
+                let d = ((dx * dx + dy * dy) as f32).sqrt();
+                let (px, py) = (x as i32 + dx, y as i32 + dy);
+                if !inarea(w, px, py) {
+                    continue;
+                }
+                let i = idx(px, py);
+                if d < r {
+                    w.m[i] = WATER;
+                } else if d < r + 4.5 && w.m[i] != WATER {
+                    w.g[i] = MUD;
                 }
             }
         }
@@ -213,27 +315,29 @@ fn near(pts: &[(f32, f32)], x: f32, y: f32, r: f32) -> bool {
     pts.iter().any(|&(a, b)| (a - x).powi(2) + (b - y).powi(2) < r * r)
 }
 fn ground_noise(w: &mut World, s: u32, moss: f32, dirt: f32) {
-    for y in 0..H {
-        for x in 0..W {
+    for y in 0..w.ah {
+        for x in 0..w.aw {
             let n = fbm(x as f32 * 0.018, y as f32 * 0.018, s);
             w.g[y * W + x] = if n > moss { MOSS } else if n < dirt { DIRT } else { GRASS };
         }
     }
 }
 fn border(w: &mut World) {
-    w.rect(0, 0, W as i32, 6, STONE);
-    w.rect(0, H as i32 - 6, W as i32, H as i32, STONE);
-    w.rect(0, 0, 6, H as i32, STONE);
-    w.rect(W as i32 - 6, 0, W as i32, H as i32, STONE);
+    let (aw, ah) = (w.aw as i32, w.ah as i32);
+    w.rect(0, 0, aw, 6, STONE);
+    w.rect(0, ah - 6, aw, ah, STONE);
+    w.rect(0, 0, 6, ah, STONE);
+    w.rect(aw - 6, 0, aw, ah, STONE);
 }
 /// plant trees where `ok` allows; `dead` trees are bare and grey
 fn plant_trees(w: &mut World, max: i32, tries: i32, rmin: f32, rmax: f32, s: u32, dead: bool, ok: &dyn Fn(f32, f32, f32) -> bool) {
     let mut placed = 0;
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
     for _ in 0..tries {
         if placed >= max {
             break;
         }
-        let (x, y) = (rr(12.0, W as f32 - 12.0), rr(12.0, H as f32 - 12.0));
+        let (x, y) = (rr(12.0, aw - 12.0), rr(12.0, ah - 12.0));
         let r = rr(rmin, rmax);
         if !ok(x, y, r) {
             continue;
@@ -241,8 +345,13 @@ fn plant_trees(w: &mut World, max: i32, tries: i32, rmin: f32, rmax: f32, s: u32
         let mut clear = true;
         'c: for dy in -(r as i32) - 2..=(r as i32) + 2 {
             for dx in -(r as i32) - 2..=(r as i32) + 2 {
-                let m = w.at(x as i32 + dx, y as i32 + dy);
-                if m != E || w.g[((y as i32 + dy).clamp(0, H as i32 - 1)) as usize * W + (x as i32 + dx).clamp(0, W as i32 - 1) as usize] == FLOOR {
+                let (xx, yy) = (x as i32 + dx, y as i32 + dy);
+                if !inarea(w, xx, yy) {
+                    clear = false;
+                    break 'c;
+                }
+                let i = idx(xx, yy);
+                if w.m[i] != E || matches!(w.g[i], FLOOR | PLANK) {
                     clear = false;
                     break 'c;
                 }
@@ -256,7 +365,7 @@ fn plant_trees(w: &mut World, max: i32, tries: i32, rmin: f32, rmax: f32, s: u32
             for dx in -(r as i32) - 6..=(r as i32) + 6 {
                 let (xx, yy) = (x as i32 + dx, y as i32 + dy);
                 if w.at(xx, yy) == TREE {
-                    let i = yy as usize * W + xx as usize;
+                    let i = idx(xx, yy);
                     if w.col[i] == [0, 0, 0] {
                         w.col[i] = [(dx + 128) as u8, (dy + 128) as u8, r as u8];
                     }
@@ -273,17 +382,25 @@ fn plant_trees(w: &mut World, max: i32, tries: i32, rmin: f32, rmax: f32, s: u32
     }
 }
 fn rocks(w: &mut World, n: i32, s: u32, ok: &dyn Fn(f32, f32) -> bool) {
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
     for _ in 0..n {
-        let (x, y) = (rr(20.0, W as f32 - 20.0), rr(20.0, H as f32 - 20.0));
-        if ok(x, y) {
+        let (x, y) = (rr(20.0, aw - 20.0), rr(20.0, ah - 20.0));
+        if ok(x, y) && w.at(x as i32, y as i32) == E {
             w.blob(x, y, rr(2.5, 6.0), STONE, s + 21, true);
         }
     }
 }
-/// a small stone building with a doorway on its south side
 /// a building with walls, a south doorway and (unless a ruin) a roof drawn over it
 fn building(w: &mut World, sp: &mut Spawns, x0: i32, y0: i32, bw: i32, bh: i32, door: i32, k: BKind) -> Building {
     let floor = if k == BKind::House { PLANK } else { FLOOR };
+    // clear the plot first
+    for y in y0 - 2..y0 + bh + 2 {
+        for x in x0 - 2..x0 + bw + 2 {
+            if inarea(w, x, y) && matches!(w.m[idx(x, y)], TREE | STONE | WATER | GAS) {
+                w.m[idx(x, y)] = E;
+            }
+        }
+    }
     w.ground_rect(x0, y0, x0 + bw, y0 + bh, floor, AUX_INDOOR);
     let wall = BRICK;
     let t = 4;
@@ -297,7 +414,7 @@ fn building(w: &mut World, sp: &mut Spawns, x0: i32, y0: i32, bw: i32, bh: i32, 
     for y in y0..y0 + bh {
         for x in x0..x0 + bw {
             if w.at(x, y) == BRICK {
-                w.aux[y as usize * W + x as usize] |= bit;
+                w.aux[idx(x, y)] |= bit;
             }
         }
     }
@@ -307,6 +424,15 @@ fn building(w: &mut World, sp: &mut Spawns, x0: i32, y0: i32, bw: i32, bh: i32, 
         sp.lamps.push(((x0 + bw / 2) as f32, (y0 + bh / 2) as f32, [1.0, 0.62, 0.3]));
     }
     b
+}
+/// knock holes in a ruin's walls and leave rubble about
+fn crumble(w: &mut World, b: &Building, n: i32) {
+    for _ in 0..n {
+        let (x, y) = (b.x0 + ri(b.w as usize) as i32, b.y0 + ri(b.h as usize) as i32);
+        if w.at(x, y) == BRICK {
+            w.set(x, y, RUBBLE);
+        }
+    }
 }
 fn pack(enemies: &mut Vec<(Kind, f32, f32)>, w: &World, x: f32, y: f32, n: usize, mix: &[(Kind, f32)]) {
     let tot: f32 = mix.iter().map(|m| m.1).sum();
@@ -332,12 +458,64 @@ fn pack(enemies: &mut Vec<(Kind, f32, f32)>, w: &World, x: f32, y: f32, n: usize
         placed += 1;
     }
 }
+/// scatter packs over the open ground, away from `safe` and from each other
+fn packs(sp: &mut Spawns, w: &World, n: i32, gap: f32, mix: &[(Kind, f32)], size: (usize, usize), safe: &dyn Fn(f32, f32) -> bool, pick: &mut dyn FnMut() -> (f32, f32)) {
+    let mut placed = 0;
+    for _ in 0..n * 30 {
+        if placed >= n {
+            break;
+        }
+        let (x, y) = pick();
+        if safe(x, y) || w.at(x as i32, y as i32) != E || sp.enemies.iter().any(|e| (e.1 - x).hypot(e.2 - y) < gap) {
+            continue;
+        }
+        pack(&mut sp.enemies, w, x, y, size.0 + ri(size.1 + 1), mix);
+        placed += 1;
+    }
+}
+fn open_spot(w: &World, x: f32, y: f32, r: i32) -> bool {
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let (xx, yy) = (x as i32 + dx, y as i32 + dy);
+            if !inarea(w, xx, yy) || w.m[idx(xx, yy)] != E {
+                return false;
+            }
+        }
+    }
+    true
+}
+/// chests and shrines in quiet corners; `bad` keeps them off roads and out of the start
+fn treasures(w: &World, sp: &mut Spawns, chests: i32, shrines: i32, tier: u8, bad: &dyn Fn(f32, f32) -> bool) {
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
+    let mut tries = 0;
+    let mut placed = 0;
+    while placed < chests && tries < 4000 {
+        tries += 1;
+        let (x, y) = (rr(40.0, aw - 40.0), rr(40.0, ah - 40.0));
+        if bad(x, y) || !open_spot(w, x, y, 8) || sp.chests.iter().any(|c| (c.0 - x).hypot(c.1 - y) < 220.0) {
+            continue;
+        }
+        sp.chests.push((x, y, if rnd() < 0.2 { 1 } else { tier }));
+        placed += 1;
+    }
+    let mut placed = 0;
+    tries = 0;
+    while placed < shrines && tries < 4000 {
+        tries += 1;
+        let (x, y) = (rr(60.0, aw - 60.0), rr(60.0, ah - 60.0));
+        if bad(x, y) || !open_spot(w, x, y, 12) || sp.shrines.iter().any(|c| (c.0 - x).hypot(c.1 - y) < 400.0) || sp.chests.iter().any(|c| (c.0 - x).hypot(c.1 - y) < 60.0) {
+            continue;
+        }
+        sp.shrines.push((x, y, ri(4) as u8));
+        placed += 1;
+    }
+}
 fn waypoint(w: &mut World, sp: &mut Spawns, x: f32, y: f32) {
     for dy in -12i32..=12 {
         for dx in -16i32..=16 {
             let (xx, yy) = (x as i32 + dx, y as i32 + dy);
-            if World::inb(xx, yy) && ((dx * dx) as f32 / 256.0 + (dy * dy) as f32 / 144.0) < 1.0 {
-                let i = yy as usize * W + xx as usize;
+            if inarea(w, xx, yy) && ((dx * dx) as f32 / 256.0 + (dy * dy) as f32 / 144.0) < 1.0 {
+                let i = idx(xx, yy);
                 w.m[i] = E;
                 w.g[i] = DIRT;
             }
@@ -346,14 +524,63 @@ fn waypoint(w: &mut World, sp: &mut Spawns, x: f32, y: f32) {
     w.rect(x as i32 - 1, y as i32 - 1, x as i32 + 2, y as i32 + 1, STONE);
     sp.waypoint = Some((x, y));
 }
+/// an exit through the west or east edge of the map, with its arrival point
+fn edge_exit(w: &World, sp: &mut Spawns, east: bool, y: f32, to: AreaId) {
+    let aw = w.aw as i32;
+    let (x0, x1, ax) = if east { (aw - 28, aw - 6, aw as f32 - 44.0) } else { (6, 28, 44.0) };
+    sp.exits.push(Exit { x0, y0: y as i32 - 26, x1, y1: y as i32 + 26, to, label: to.name() });
+    sp.entries.push((to, ax, y));
+}
+/// clear a round patch of ground to `g`
+fn clearing(w: &mut World, x: f32, y: f32, rx: f32, ry: f32, g: u8) {
+    for dy in -(ry as i32)..=ry as i32 {
+        for dx in -(rx as i32)..=rx as i32 {
+            let (xx, yy) = (x as i32 + dx, y as i32 + dy);
+            if inarea(w, xx, yy) && (dx * dx) as f32 / (rx * rx) + (dy * dy) as f32 / (ry * ry) < 1.0 {
+                let i = idx(xx, yy);
+                if matches!(w.m[i], TREE | STONE | WATER | GAS) {
+                    w.m[i] = E;
+                }
+                if g != 0 && rnd() < 0.85 {
+                    w.g[i] = g;
+                }
+            }
+        }
+    }
+}
+/// a still pond with a muddy rim
+fn pond(w: &mut World, px: f32, py: f32, size: f32, s: u32) {
+    let rx = (size * 1.8) as i32;
+    for dy in -rx..=rx {
+        for dx in -rx..=rx {
+            let (x, y) = (px as i32 + dx, py as i32 + dy);
+            if !inarea(w, x, y) {
+                continue;
+            }
+            let d = ((dx * dx) as f32 / 1.3 + (dy * dy) as f32).sqrt();
+            let r = size * (0.8 + 0.4 * vnoise(x as f32 * 0.05, y as f32 * 0.05, s + 9));
+            let i = idx(x, y);
+            if d < r {
+                w.m[i] = WATER;
+            } else if d < r + 6.0 {
+                w.g[i] = MUD;
+            }
+        }
+    }
+}
+/// a stack of logs or crates
+fn stack(w: &mut World, x: i32, y: i32, bw: i32, bh: i32) {
+    w.rect(x, y, x + bw, y + bh, WOOD);
+}
 
 // ------------------------------------------------------------------ Ashford
 fn town(w: &mut World, s: u32) -> Spawns {
     let mut sp = Spawns::new();
+    let aw = w.aw as f32;
     ground_noise(w, s, 0.7, 0.28);
     let (tx0, ty0, tx1, ty1) = (300, 230, 720, 550);
     let road_y = 390.0;
-    let road = path(w, &[(470.0, road_y), (620.0, road_y + 4.0), (760.0, road_y - 10.0), (900.0, road_y + 12.0), (W as f32 - 4.0, road_y)], 7.0, s);
+    let road = path(w, &[(470.0, road_y), (620.0, road_y + 4.0), (760.0, road_y - 10.0), (900.0, road_y + 12.0), (aw - 4.0, road_y)], 7.0, s);
     let cross = path(w, &[(510.0, 250.0), (512.0, 540.0)], 6.0, s + 1);
     // palisade with an east gate
     for x in tx0..tx1 + 3 {
@@ -382,7 +609,7 @@ fn town(w: &mut World, s: u32) -> Spawns {
         for dx in -55i32..=55 {
             let (x, y) = (sx as i32 + dx, sy as i32 + dy);
             if (dx * dx) as f32 / 3025.0 + (dy * dy) as f32 / 1600.0 < 1.0 {
-                w.g[y as usize * W + x as usize] = DIRT;
+                w.g[idx(x, y)] = DIRT;
             }
         }
     }
@@ -405,31 +632,35 @@ fn town(w: &mut World, s: u32) -> Spawns {
     let inside = |x: f32, y: f32, r: f32| x > tx0 as f32 - r - 8.0 && x < tx1 as f32 + r + 8.0 && y > ty0 as f32 - r - 8.0 && y < ty1 as f32 + r + 8.0;
     plant_trees(w, 170, 6000, 10.0, 16.0, s, false, &|x, y, r| !inside(x, y, r) && !near(&road, x, y, r * 0.6 + 14.0) && !near(&cross, x, y, r));
     border(w);
-    sp.exits.push(Exit { x0: W as i32 - 28, y0: road_y as i32 - 26, x1: W as i32 - 6, y1: road_y as i32 + 26, to: AreaId::Pines, label: "THE HOLLOW PINES".into() });
+    edge_exit(w, &mut sp, true, road_y, AreaId::Pines);
     sp.start = (sx + 20.0, sy + 16.0);
-    sp.entries.push((AreaId::Pines, W as f32 - 44.0, road_y));
     sp
 }
 
 // ------------------------------------------------------------------ Hollow Pines
 fn forest(w: &mut World, s: u32) -> Spawns {
     let mut sp = Spawns::new();
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
     ground_noise(w, s, 0.64, 0.3);
-    let yw = rr(300.0, 460.0);
-    let ye = rr(300.0, 460.0);
-    let mid: Vec<(f32, f32)> = (1..6).map(|k| (k as f32 * W as f32 / 6.0, rr(250.0, 520.0))).collect();
+    let yw = rr(ah * 0.4, ah * 0.6);
+    let ye = rr(ah * 0.35, ah * 0.65);
+    // a stream runs north to south through the eastern woods
+    let rx = rr(aw * 0.62, aw * 0.72);
+    let stream = river(w, &[(rx, 0.0), (rx + rr(-80.0, 80.0), ah * 0.5), (rx + rr(-120.0, 120.0), ah)], 7.0, s + 11);
+    let mid: Vec<(f32, f32)> = (1..9).map(|k| (k as f32 * aw / 9.0, rr(ah * 0.25, ah * 0.75))).collect();
     let mut ctrl = vec![(4.0, yw)];
     ctrl.extend(mid.iter().copied());
-    ctrl.push((W as f32 - 4.0, ye));
+    ctrl.push((aw - 4.0, ye));
     let road = path(w, &ctrl, 7.0, s);
-    // the crypt mausoleum, off the road to the north
-    let (mx, my) = (rr(620.0, 760.0), 150.0);
+    // the crypt mausoleum, up a side path in the north
+    let (mx, my) = (rr(aw * 0.35, aw * 0.5), 170.0);
     let (bx, by, bw, bh) = (mx as i32 - 38, my as i32 - 30, 76, 56);
-    let side = path(w, &[(mx, my + 30.0), (mx + 10.0, my + 86.0), (road[road.len() * 2 / 3].0, road[road.len() * 2 / 3].1)], 5.0, s + 2);
+    let jn = road.iter().copied().min_by(|a, b| (a.0 - mx).abs().partial_cmp(&(b.0 - mx).abs()).unwrap()).unwrap();
+    let side = path(w, &[(mx, my + 30.0), (mx + 20.0, (my + jn.1) / 2.0), jn], 5.0, s + 2);
     building(w, &mut sp, bx, by, bw, bh, 22, BKind::CryptGate);
     for y in by + 14..by + 30 {
         for x in mx as i32 - 11..mx as i32 + 11 {
-            w.g[y as usize * W + x as usize] = STAIRS;
+            w.g[idx(x, y)] = STAIRS;
         }
     }
     sp.lamps.push((mx, (by + 22) as f32, [0.45, 0.75, 1.0]));
@@ -437,89 +668,104 @@ fn forest(w: &mut World, s: u32) -> Spawns {
     sp.entries.push((AreaId::Crypt(1), mx, my + 40.0));
     sp.braziers.push((mx - 24.0, my + 36.0));
     sp.braziers.push((mx + 24.0, my + 36.0));
-    // a pond somewhere away from the road
-    for _ in 0..30 {
-        let (px, py) = (rr(150.0, 900.0), rr(120.0, 650.0));
-        if near(&road, px, py, 80.0) || (px - mx).hypot(py - my) < 120.0 {
-            continue;
-        }
-        for dy in -60i32..=60 {
-            for dx in -70i32..=70 {
-                let (x, y) = (px as i32 + dx, py as i32 + dy);
-                if !World::inb(x, y) {
-                    continue;
-                }
-                let d = ((dx * dx) as f32 / 1.3 + (dy * dy) as f32).sqrt();
-                let r = 38.0 * (0.8 + 0.4 * vnoise(x as f32 * 0.05, y as f32 * 0.05, s + 9));
-                let i = y as usize * W + x as usize;
-                if d < r {
-                    w.m[i] = WATER;
-                } else if d < r + 6.0 {
-                    w.g[i] = MUD;
-                }
-            }
-        }
-        break;
+    // the abandoned logging camp in the south
+    let (lx, ly) = (rr(aw * 0.2, aw * 0.45), ah - rr(260.0, 330.0));
+    let jl = road.iter().copied().min_by(|a, b| (a.0 - lx).abs().partial_cmp(&(b.0 - lx).abs()).unwrap()).unwrap();
+    let camp_road = path(w, &[jl, (lx + 30.0, (ly + jl.1) / 2.0), (lx, ly)], 5.0, s + 3);
+    clearing(w, lx, ly, 150.0, 95.0, DIRT);
+    for (k, &(ox, oy)) in [(-120, -70), (40, -76), (-40, 30)].iter().enumerate() {
+        let b = building(w, &mut sp, lx as i32 + ox, ly as i32 + oy, 64 + k as i32 * 6, 48, 16, BKind::Ruin);
+        crumble(w, &b, 50);
     }
-    waypoint(w, &mut sp, 90.0, yw + 34.0);
-    let keep = |x: f32, y: f32| (x < 160.0 && (y - yw).abs() < 90.0) || (x - mx).hypot(y - my) < 80.0;
-    rocks(w, 60, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
-    plant_trees(w, 135, 6000, 10.0, 16.0, s, false, &|x, y, r| {
-        let edge = x < 70.0 || y < 70.0 || x > W as f32 - 70.0 || y > H as f32 - 70.0;
-        let dens = fbm(x * 0.01, y * 0.01, s + 40) * 1.2 + if edge { 0.5 } else { 0.0 };
-        rnd() < dens && !near(&road, x, y, r * 0.6 + 12.0) && !near(&side, x, y, r * 0.5 + 8.0) && !keep(x, y)
-    });
-    border(w);
-    sp.exits.push(Exit { x0: 6, y0: yw as i32 - 26, x1: 28, y1: yw as i32 + 26, to: AreaId::Ashford, label: "ASHFORD".into() });
-    sp.exits.push(Exit { x0: W as i32 - 28, y0: ye as i32 - 26, x1: W as i32 - 6, y1: ye as i32 + 26, to: AreaId::Graveyard, label: "THE OLD GRAVEYARD".into() });
-    sp.entries.push((AreaId::Ashford, 44.0, yw));
-    sp.entries.push((AreaId::Graveyard, W as f32 - 44.0, ye));
-    sp.start = (90.0, yw);
-    // the dead: packs along the road and in the woods
-    let mix = [(Kind::Zombie, 0.7), (Kind::Crawler, 0.2), (Kind::Skeleton, 0.1)];
-    let mut packs = 0;
+    for k in 0..5 {
+        stack(w, lx as i32 + 70 + (k % 2) * 14, ly as i32 + 30 + k * 9, 30, 5);
+    }
+    sp.braziers.push((lx, ly + 4.0));
+    sp.chests.push((lx - 85.0, ly - 40.0, 0));
+    // ponds away from the road
+    let mut ponds = vec![];
     for _ in 0..200 {
-        if packs >= 10 {
+        if ponds.len() >= 4 {
             break;
         }
-        let (x, y) = if rnd() < 0.6 { road[ri(road.len())] } else { (rr(60.0, W as f32 - 60.0), rr(60.0, H as f32 - 60.0)) };
-        if x < 220.0 || w.at(x as i32, y as i32) != E || sp.enemies.iter().any(|e| (e.1 - x).hypot(e.2 - y) < 90.0) {
+        let (px, py) = (rr(150.0, aw - 150.0), rr(150.0, ah - 150.0));
+        if near(&road, px, py, 110.0) || near(&stream, px, py, 120.0) || (px - mx).hypot(py - my) < 160.0 || (px - lx).hypot(py - ly) < 220.0 || ponds.iter().any(|&(a, b): &(f32, f32)| (a - px).hypot(b - py) < 300.0) {
             continue;
         }
-        pack(&mut sp.enemies, w, x, y, 3 + ri(3), &mix);
-        packs += 1;
+        pond(w, px, py, rr(26.0, 46.0), s + ponds.len() as u32);
+        ponds.push((px, py));
     }
+    waypoint(w, &mut sp, 90.0, yw + 34.0);
+    let keep = |x: f32, y: f32| (x < 180.0 && (y - yw).abs() < 100.0) || (x - mx).hypot(y - my) < 90.0 || ((x - lx) / 160.0).powi(2) + ((y - ly) / 105.0).powi(2) < 1.0;
+    rocks(w, 240, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
+    plant_trees(w, 560, 26000, 10.0, 16.0, s, false, &|x, y, r| {
+        let edge = x < 70.0 || y < 70.0 || x > aw - 70.0 || y > ah - 70.0;
+        let dens = fbm(x * 0.008, y * 0.008, s + 40) * 1.25 + if edge { 0.5 } else { 0.0 };
+        rnd() < dens && !near(&road, x, y, r * 0.6 + 12.0) && !near(&side, x, y, r * 0.5 + 8.0) && !near(&camp_road, x, y, r * 0.5 + 8.0) && !keep(x, y)
+    });
+    border(w);
+    edge_exit(w, &mut sp, false, yw, AreaId::Ashford);
+    edge_exit(w, &mut sp, true, ye, AreaId::Graveyard);
+    sp.start = (90.0, yw);
+    // the dead: packs along the road and in the woods
+    let mix = [(Kind::Zombie, 0.65), (Kind::Crawler, 0.2), (Kind::Skeleton, 0.15)];
+    let safe = |x: f32, y: f32| x < 260.0 && (y - yw).abs() < 200.0;
+    let r2 = road.clone();
+    packs(&mut sp, w, 30, 110.0, &mix, (3, 2), &safe, &mut || if rnd() < 0.5 { r2[ri(r2.len())] } else { (rr(60.0, aw - 60.0), rr(60.0, ah - 60.0)) });
+    pack(&mut sp.enemies, w, lx, ly - 10.0, 5, &[(Kind::Zombie, 0.7), (Kind::Crawler, 0.3)]);
     sp.enemies.push((Kind::Brute, mx + 30.0, my + 60.0));
+    sp.enemies.push((Kind::Brute, lx + 20.0, ly + 10.0));
+    let (bx2, by2) = road[road.len() * 3 / 4];
+    sp.enemies.push((Kind::Brute, bx2, by2 + 10.0));
+    treasures(w, &mut sp, 5, 2, 0, &|x, y| near(&road, x, y, 30.0) || keep(x, y));
     sp
 }
 
 // ------------------------------------------------------------------ Old Graveyard
 fn graveyard(w: &mut World, s: u32) -> Spawns {
     let mut sp = Spawns::new();
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
     ground_noise(w, s, 0.6, 0.42);
-    let yw = rr(330.0, 430.0);
-    let (cx, cy) = (rr(640.0, 760.0), rr(300.0, 440.0));
-    let road = path(w, &[(4.0, yw), (200.0, yw + rr(-40.0, 40.0)), (420.0, cy + rr(-60.0, 60.0)), (cx - 70.0, cy + 20.0)], 6.0, s);
+    let yw = rr(ah * 0.4, ah * 0.6);
+    let ye = rr(ah * 0.3, ah * 0.7);
+    let (cx, cy) = (rr(aw * 0.42, aw * 0.55), rr(ah * 0.38, ah * 0.6));
+    let road = path(w, &[(4.0, yw), (aw * 0.15, yw + rr(-60.0, 60.0)), (aw * 0.3, cy + rr(-90.0, 90.0)), (cx - 70.0, cy + 70.0), (cx + 70.0, cy + 70.0), (aw * 0.7, cy + rr(-100.0, 100.0)), (aw * 0.85, ye + rr(-80.0, 80.0)), (aw - 4.0, ye)], 6.0, s);
     // ruined chapel
-    let (x0, y0, cw, ch) = (cx as i32 - 70, cy as i32 - 55, 140, 100);
-    building(w, &mut sp, x0, y0, cw, ch, 22, BKind::Ruin);
-    w.rect(x0, y0 + 30, x0 + 5, y0 + 50, E);
-    for _ in 0..90 {
-        let (x, y) = (x0 + ri(cw as usize) as i32, y0 + ri(ch as usize) as i32);
-        if w.at(x, y) == BRICK {
-            w.set(x, y, RUBBLE);
+    let (x0, y0, cw, ch) = (cx as i32 - 80, cy as i32 - 60, 160, 110);
+    let chapel = building(w, &mut sp, x0, y0, cw, ch, 22, BKind::Ruin);
+    w.rect(x0, y0 + 30, x0 + 5, y0 + 54, E);
+    crumble(w, &chapel, 110);
+    for k in 0..4 {
+        w.rect(x0 + 30 + k * 30, y0 + 30, x0 + 37 + k * 30, y0 + 37, BRICK);
+    }
+    // the altar
+    w.rect(cx as i32 - 14, y0 + 12, cx as i32 + 14, y0 + 18, STONE);
+    sp.braziers.push((cx - 50.0, cy - 30.0));
+    sp.braziers.push((cx + 50.0, cy - 30.0));
+    sp.chests.push((cx, y0 as f32 + 26.0, 1));
+    // the plague pit: an open mass grave in a far corner
+    let (qx, qy) = (if cx > aw * 0.5 { rr(200.0, 420.0) } else { rr(aw - 420.0, aw - 200.0) }, if rnd() < 0.5 { rr(160.0, 280.0) } else { rr(ah - 280.0, ah - 160.0) });
+    for dy in -50i32..=50 {
+        for dx in -80i32..=80 {
+            let (x, y) = (qx as i32 + dx, qy as i32 + dy);
+            let d = (dx * dx) as f32 / 6400.0 + (dy * dy) as f32 / 2500.0;
+            if d < 1.0 && inarea(w, x, y) {
+                let i = idx(x, y);
+                w.m[i] = E;
+                w.g[i] = MUD;
+                w.stain[i] = (rnd() * 120.0) as u8;
+                if rnd() < 0.06 * (1.0 - d) + 0.01 {
+                    w.m[i] = BONE;
+                    w.col[i] = [200, 192, 170];
+                }
+            }
         }
     }
-    for k in 0..3 {
-        w.rect(x0 + 30 + k * 32, y0 + 30, x0 + 37 + k * 32, y0 + 37, BRICK);
-    }
-    sp.braziers.push((cx - 40.0, cy - 30.0));
-    sp.braziers.push((cx + 40.0, cy - 30.0));
     // plots of graves with low fences
-    for _ in 0..14 {
-        let (px, py) = (rr(160.0, 900.0), rr(80.0, 640.0));
-        let (pw, ph) = (rr(70.0, 130.0) as i32, rr(50.0, 90.0) as i32);
-        if (px - cx).abs() < 140.0 && (py - cy).abs() < 110.0 {
+    for _ in 0..34 {
+        let (px, py) = (rr(160.0, aw - 160.0), rr(80.0, ah - 140.0));
+        let (pw, ph) = (rr(70.0, 140.0) as i32, rr(50.0, 100.0) as i32);
+        if (px - cx).abs() < 170.0 && (py - cy).abs() < 130.0 || (px - qx).abs() < 160.0 && (py - qy).abs() < 110.0 || px < 200.0 && (py - yw).abs() < 120.0 {
             continue;
         }
         let (gx0, gy0) = (px as i32, py as i32);
@@ -538,7 +784,7 @@ fn graveyard(w: &mut World, s: u32) -> Spawns {
                     if rnd() < 0.25 {
                         for dy in 3..9 {
                             for dx in 0..5 {
-                                let i = (y + dy) as usize * W + (x + dx) as usize;
+                                let i = idx(x + dx, y + dy);
                                 w.g[i] = MUD;
                                 if rnd() < 0.08 {
                                     w.m[i] = BONE;
@@ -552,37 +798,280 @@ fn graveyard(w: &mut World, s: u32) -> Spawns {
         }
     }
     // mausoleums
-    for _ in 0..5 {
-        let (x, y) = (rr(150.0, 900.0) as i32, rr(80.0, 620.0) as i32);
-        if (x as f32 - cx).abs() < 160.0 && (y as f32 - cy).abs() < 130.0 || near(&road, x as f32 + 29.0, y as f32 + 23.0, 46.0) || sp.buildings.iter().any(|b| (b.x0 - x).abs() < 90 && (b.y0 - y).abs() < 80) {
+    for _ in 0..40 {
+        if sp.buildings.iter().filter(|b| b.k == BKind::Tomb).count() >= 12 {
+            break;
+        }
+        let (x, y) = (rr(150.0, aw - 150.0) as i32, rr(80.0, ah - 130.0) as i32);
+        if (x as f32 - cx).abs() < 180.0 && (y as f32 - cy).abs() < 150.0 || near(&road, x as f32 + 29.0, y as f32 + 23.0, 46.0) || sp.buildings.iter().any(|b| (b.x0 - x).abs() < 100 && (b.y0 - y).abs() < 90) {
             continue;
         }
         building(w, &mut sp, x, y, 58, 46, 16, BKind::Tomb);
         sp.enemies.push((Kind::Skeleton, x as f32 + 29.0, y as f32 + 24.0));
+        if rnd() < 0.3 {
+            sp.chests.push((x as f32 + 29.0, y as f32 + 16.0, 0));
+        }
     }
     waypoint(w, &mut sp, 80.0, yw + 32.0);
-    let keep = |x: f32, y: f32| x < 150.0 && (y - yw).abs() < 90.0;
-    plant_trees(w, 70, 4000, 8.0, 13.0, s, true, &|x, y, r| !near(&road, x, y, r * 0.5 + 10.0) && !keep(x, y) && !((x - cx).abs() < 100.0 + r && (y - cy).abs() < 80.0 + r));
-    rocks(w, 30, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
+    let keep = |x: f32, y: f32| x < 170.0 && (y - yw).abs() < 100.0;
+    plant_trees(w, 170, 9000, 8.0, 13.0, s, true, &|x, y, r| !near(&road, x, y, r * 0.5 + 10.0) && !keep(x, y) && !((x - cx).abs() < 110.0 + r && (y - cy).abs() < 90.0 + r) && !((x - qx).abs() < 90.0 + r && (y - qy).abs() < 60.0 + r));
+    rocks(w, 90, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
     border(w);
-    sp.exits.push(Exit { x0: 6, y0: yw as i32 - 26, x1: 28, y1: yw as i32 + 26, to: AreaId::Pines, label: "THE HOLLOW PINES".into() });
-    sp.entries.push((AreaId::Pines, 44.0, yw));
+    edge_exit(w, &mut sp, false, yw, AreaId::Pines);
+    edge_exit(w, &mut sp, true, ye, AreaId::Fen);
     sp.start = (60.0, yw);
     let mix = [(Kind::Skeleton, 0.4), (Kind::Archer, 0.25), (Kind::Zombie, 0.25), (Kind::Crawler, 0.1)];
-    let mut packs = 0;
-    for _ in 0..300 {
-        if packs >= 12 {
+    let safe = |x: f32, y: f32| x < 260.0 && (y - yw).abs() < 200.0;
+    packs(&mut sp, w, 26, 100.0, &mix, (3, 2), &safe, &mut || (rr(60.0, aw - 60.0), rr(60.0, ah - 60.0)));
+    pack(&mut sp.enemies, w, qx, qy, 7, &[(Kind::Zombie, 0.5), (Kind::Crawler, 0.5)]);
+    sp.enemies.push((Kind::Brute, cx, cy + 10.0));
+    sp.enemies.push((Kind::Brute, qx + 30.0, qy));
+    sp.enemies.push((Kind::Brute, rr(aw * 0.6, aw - 200.0), rr(150.0, ah - 150.0)));
+    treasures(w, &mut sp, 4, 2, 0, &|x, y| near(&road, x, y, 30.0) || keep(x, y));
+    sp
+}
+
+// ------------------------------------------------------------------ Blackwater Fen
+fn fen(w: &mut World, s: u32) -> Spawns {
+    let mut sp = Spawns::new();
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
+    // peat, moss and mud underfoot; black water wherever the ground dips
+    for y in 0..w.ah {
+        for x in 0..w.aw {
+            let (fx, fy) = (x as f32, y as f32);
+            let n = fbm(fx * 0.014, fy * 0.014, s);
+            let i = y * W + x;
+            w.g[i] = if n > 0.6 { PEAT } else if n < 0.36 { MUD } else if fbm(fx * 0.03, fy * 0.03, s + 1) > 0.5 { MOSS } else { GRASS };
+            let wet = fbm(fx * 0.011, fy * 0.011, s + 2);
+            // keep the map edges dry so you can always arrive and leave
+            let edge = ((x.min(w.aw - x) as f32 - 60.0) / 220.0).clamp(0.0, 1.0);
+            if wet > 0.63 + (1.0 - edge) * 0.4 {
+                w.m[i] = WATER;
+            } else if wet > 0.6 {
+                w.g[i] = MUD;
+            }
+        }
+    }
+    let yw = rr(ah * 0.4, ah * 0.6);
+    let ye = rr(ah * 0.35, ah * 0.65);
+    // a raised causeway with boardwalks over the deep water
+    let mid: Vec<(f32, f32)> = (1..8).map(|k| (k as f32 * aw / 8.0, rr(ah * 0.25, ah * 0.75))).collect();
+    let mut ctrl = vec![(4.0, yw)];
+    ctrl.extend(mid.iter().copied());
+    ctrl.push((aw - 4.0, ye));
+    let road = path(w, &ctrl, 6.0, s);
+    // a few side trails to the islands
+    let mut trails = vec![];
+    for k in 0..3 {
+        let a = road[road.len() * (k + 1) / 4];
+        let b = (a.0 + rr(-200.0, 200.0), if a.1 > ah * 0.5 { rr(120.0, ah * 0.35) } else { rr(ah * 0.65, ah - 120.0) });
+        trails.extend(path(w, &[a, ((a.0 + b.0) / 2.0 + rr(-60.0, 60.0), (a.1 + b.1) / 2.0), b], 4.0, s + 20 + k as u32));
+        // a sunken hut at the end of each trail
+        clearing(w, b.0, b.1, 70.0, 50.0, PEAT);
+        let hut = building(w, &mut sp, b.0 as i32 - 32, b.1 as i32 - 34, 64, 48, 16, BKind::Ruin);
+        crumble(w, &hut, 60);
+        sp.chests.push((b.0, b.1 - 14.0, if k == 1 { 1 } else { 0 }));
+        sp.braziers.push((b.0 + 44.0, b.1 + 10.0));
+        pack(&mut sp.enemies, w, b.0, b.1 + 30.0, 4, &[(Kind::Bloater, 0.5), (Kind::Zombie, 0.5)]);
+    }
+    // the hermit's hut, still lit, near the middle of the causeway
+    let (hx, hy) = road[road.len() / 2];
+    let hy = if hy > ah * 0.5 { hy - 110.0 } else { hy + 70.0 };
+    clearing(w, hx, hy + 20.0, 80.0, 55.0, DIRT);
+    building(w, &mut sp, hx as i32 - 36, hy as i32 - 10, 72, 52, 16, BKind::House);
+    sp.chests.push((hx - 18.0, hy + 10.0, 0));
+    // swamp gas collects in the hollows
+    let mut gas = 0;
+    for _ in 0..2000 {
+        if gas >= 40 {
             break;
         }
-        let (x, y) = (rr(200.0, W as f32 - 60.0), rr(60.0, H as f32 - 60.0));
-        if w.at(x as i32, y as i32) != E || sp.enemies.iter().any(|e| (e.1 - x).hypot(e.2 - y) < 80.0) {
+        let (x, y) = (rr(200.0, aw - 200.0), rr(60.0, ah - 60.0));
+        if near(&road, x, y, 40.0) || w.at(x as i32, y as i32) != E {
             continue;
         }
-        pack(&mut sp.enemies, w, x, y, 3 + ri(3), &mix);
-        packs += 1;
+        let r = rr(6.0, 14.0);
+        w.blob(x, y, r, GAS, s + 60 + gas, true);
+        gas += 1;
     }
-    sp.enemies.push((Kind::Brute, cx, cy + 10.0));
-    sp.enemies.push((Kind::Brute, rr(300.0, 600.0), rr(150.0, 600.0)));
+    waypoint(w, &mut sp, 90.0, yw + 34.0);
+    let keep = |x: f32, y: f32| x < 180.0 && (y - yw).abs() < 100.0;
+    let huts: Vec<(f32, f32)> = sp.buildings.iter().map(|b| ((b.x0 + b.w / 2) as f32, (b.y0 + b.h / 2) as f32)).collect();
+    let by_hut = |x: f32, y: f32, r: f32| huts.iter().any(|&(a, b)| (a - x).abs() < 50.0 + r && (b - y).abs() < 40.0 + r);
+    plant_trees(w, 160, 9000, 8.0, 13.0, s, true, &|x, y, r| !near(&road, x, y, r * 0.5 + 10.0) && !near(&trails, x, y, r * 0.5 + 6.0) && !keep(x, y) && !by_hut(x, y, r));
+    plant_trees(w, 120, 9000, 9.0, 14.0, s + 5, false, &|x, y, r| fbm(x * 0.01, y * 0.01, s + 41) > 0.5 && !near(&road, x, y, r * 0.5 + 10.0) && !near(&trails, x, y, r * 0.5 + 6.0) && !keep(x, y) && !by_hut(x, y, r));
+    rocks(w, 50, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
+    border(w);
+    edge_exit(w, &mut sp, false, yw, AreaId::Graveyard);
+    edge_exit(w, &mut sp, true, ye, AreaId::Ravenhold);
+    sp.start = (60.0, yw);
+    let mix = [(Kind::Zombie, 0.4), (Kind::Bloater, 0.25), (Kind::Crawler, 0.2), (Kind::Skeleton, 0.15)];
+    let safe = |x: f32, y: f32| x < 260.0 && (y - yw).abs() < 200.0;
+    let r2 = road.clone();
+    packs(&mut sp, w, 30, 110.0, &mix, (3, 2), &safe, &mut || if rnd() < 0.5 { r2[ri(r2.len())] } else { (rr(60.0, aw - 60.0), rr(60.0, ah - 60.0)) });
+    let (bx, by) = road[road.len() * 2 / 3];
+    sp.enemies.push((Kind::Brute, bx, by + 8.0));
+    sp.enemies.push((Kind::Brute, hx + 50.0, hy + 40.0));
+    treasures(w, &mut sp, 3, 2, 0, &|x, y| near(&road, x, y, 30.0) || keep(x, y));
+    sp
+}
+
+// ------------------------------------------------------------------ Ravenhold
+fn ravenhold(w: &mut World, s: u32) -> Spawns {
+    let mut sp = Spawns::new();
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
+    ground_noise(w, s, 0.66, 0.34);
+    let yw = rr(ah * 0.42, ah * 0.58);
+    // the castle fills the east of the map
+    let (c0, r0, c1, r1) = (560, 200, w.aw as i32 - 120, w.ah as i32 - 180);
+    let gate_y = ((r0 + r1) / 2) as f32 + rr(-60.0, 60.0);
+    let road = path(w, &[(4.0, yw), (aw * 0.15, yw + rr(-50.0, 50.0)), (aw * 0.3, gate_y + rr(-40.0, 40.0)), (c0 as f32 - 40.0, gate_y), (c0 as f32 + 80.0, gate_y)], 7.0, s);
+    // the courtyard is bare packed earth
+    for y in r0..r1 {
+        for x in c0..c1 {
+            let i = idx(x, y);
+            if rnd() < 0.9 {
+                w.g[i] = if fbm(x as f32 * 0.03, y as f32 * 0.03, s + 3) > 0.55 { FLOOR } else { DIRT };
+            }
+        }
+    }
+    // curtain walls, 7 thick, with a gatehouse on the west and breaches
+    let t = 7;
+    w.rect(c0, r0, c1, r0 + t, BRICK);
+    w.rect(c0, r1 - t, c1, r1, BRICK);
+    w.rect(c0, r0, c0 + t, r1, BRICK);
+    w.rect(c1 - t, r0, c1, r1, BRICK);
+    w.rect(c0 - 2, gate_y as i32 - 18, c0 + t + 2, gate_y as i32 + 18, E);
+    for &(gx, gy) in &[(c0 - 14, gate_y as i32 - 34), (c0 - 14, gate_y as i32 + 18)] {
+        w.rect(gx, gy, gx + 30, gy + 16, BRICK);
+    }
+    sp.braziers.push((c0 as f32 - 22.0, gate_y - 26.0));
+    sp.braziers.push((c0 as f32 - 22.0, gate_y + 26.0));
+    // towers at the corners
+    for &(tx, ty) in &[(c0, r0), (c1, r0), (c0, r1), (c1, r1)] {
+        w.rect(tx - 20, ty - 20, tx + 20, ty + 20, BRICK);
+    }
+    // breaches in the walls, rubble spilling out
+    for _ in 0..4 {
+        let side = ri(4);
+        let (bx, by) = match side {
+            0 => (rr(c0 as f32 + 80.0, c1 as f32 - 80.0) as i32, r0),
+            1 => (rr(c0 as f32 + 80.0, c1 as f32 - 80.0) as i32, r1 - t),
+            2 => (c1 - t, rr(r0 as f32 + 80.0, r1 as f32 - 80.0) as i32),
+            _ => (c0, rr(r0 as f32 + 80.0, gate_y - 80.0).max(r0 as f32 + 60.0) as i32),
+        };
+        let horiz = side < 2;
+        let len = rr(16.0, 28.0) as i32;
+        if horiz {
+            w.rect(bx, by, bx + len, by + t, E);
+        } else {
+            w.rect(bx, by, bx + t, by + len, E);
+        }
+        for _ in 0..40 {
+            let (x, y) = (bx + rr(-16.0, len as f32 + 16.0) as i32, by + rr(-16.0, 22.0) as i32);
+            if w.at(x, y) == E {
+                w.set(x, y, RUBBLE);
+            }
+        }
+    }
+    // the keep: a roofless ruin with the cellar stairs inside
+    let (kw, kh) = (220, 160);
+    let (kx, ky) = (c1 - kw - 70, (r0 + r1) / 2 - kh / 2 - 20);
+    let keep_b = building(w, &mut sp, kx, ky, kw, kh, 30, BKind::Ruin);
+    crumble(w, &keep_b, 140);
+    for k in 0..3 {
+        w.rect(kx + 50 + k * 60, ky + 50, kx + 58 + k * 60, ky + 58, BRICK);
+        w.rect(kx + 50 + k * 60, ky + 104, kx + 58 + k * 60, ky + 112, BRICK);
+    }
+    let (sx, sy) = (kx + kw / 2, ky + 26);
+    for y in sy..sy + 16 {
+        for x in sx - 12..sx + 12 {
+            w.g[idx(x, y)] = STAIRS;
+        }
+    }
+    sp.exits.push(Exit { x0: sx - 13, y0: sy - 2, x1: sx + 13, y1: sy + 18, to: AreaId::Cellars(1), label: "THE CELLARS".into() });
+    sp.entries.push((AreaId::Cellars(1), sx as f32, sy as f32 + 30.0));
+    sp.lamps.push((sx as f32, sy as f32 + 8.0, [1.0, 0.55, 0.25]));
+    sp.braziers.push((sx as f32 - 30.0, sy as f32 + 24.0));
+    sp.braziers.push((sx as f32 + 30.0, sy as f32 + 24.0));
+    sp.chests.push((kx as f32 + 24.0, ky as f32 + 24.0, 1));
+    // barracks and stores along the north and south walls
+    let mut halls = vec![];
+    for k in 0..3 {
+        let bx = c0 + 70 + k * 170;
+        if bx + 110 > kx - 30 {
+            break;
+        }
+        building(w, &mut sp, bx, r0 + 24, 110, 64, 18, BKind::House);
+        halls.push((bx, r0 + 24));
+        if rnd() < 0.7 {
+            let b = building(w, &mut sp, bx + 10, r1 - 100, 90, 58, 18, BKind::Ruin);
+            crumble(w, &b, 40);
+        }
+    }
+    // the bandit camp in the courtyard: tents, cookfires, crates and spilt oil
+    let (yx0, yx1) = (c0 + 60, kx - 40);
+    for _ in 0..9 {
+        let (x, y) = (rr(yx0 as f32, yx1 as f32 - 40.0) as i32, rr(r0 as f32 + 110.0, r1 as f32 - 130.0) as i32);
+        if (y as f32 - gate_y).abs() < 30.0 || w.at(x, y) != E || w.at(x + 34, y + 22) != E {
+            continue;
+        }
+        // a tent of cloth over a pole frame
+        let tc = [[120u8, 46, 40], [96, 84, 60], [70, 66, 90]][ri(3)];
+        for ty in 0..22 {
+            let half = 6 + ty * 11 / 22;
+            for tx in -half..=half {
+                let (xx, yy) = (x + 17 + tx, y + ty);
+                if ty == 21 && tx.abs() < 3 {
+                    continue;
+                }
+                if inarea(w, xx, yy) {
+                    let i = idx(xx, yy);
+                    w.m[i] = CLOTH;
+                    w.col[i] = [(tc[0] as f32 * rr(0.85, 1.1)) as u8, (tc[1] as f32 * rr(0.85, 1.1)) as u8, (tc[2] as f32 * rr(0.85, 1.1)) as u8];
+                }
+            }
+        }
+        sp.braziers.push((x as f32 + 17.0, y as f32 + 34.0));
+    }
+    for _ in 0..14 {
+        let (x, y) = (rr(yx0 as f32, yx1 as f32) as i32, rr(r0 as f32 + 100.0, r1 as f32 - 100.0) as i32);
+        if (y as f32 - gate_y).abs() > 24.0 && w.at(x, y) == E {
+            stack(w, x, y, 7 + ri(4) as i32, 6);
+        }
+    }
+    for _ in 0..6 {
+        let (x, y) = (rr(yx0 as f32, yx1 as f32), rr(r0 as f32 + 90.0, r1 as f32 - 90.0));
+        w.splash(x, y, OIL, rr(4.0, 7.0), 0);
+    }
+    // a gallows by the gate, as a warning
+    w.rect(c0 + 40, gate_y as i32 - 70, c0 + 44, gate_y as i32 - 40, WOOD);
+    w.rect(c0 + 40, gate_y as i32 - 72, c0 + 64, gate_y as i32 - 69, WOOD);
+    waypoint(w, &mut sp, 90.0, yw + 34.0);
+    // woods and boulders outside the walls
+    let keep = |x: f32, y: f32| x < 180.0 && (y - yw).abs() < 100.0;
+    let castle = |x: f32, y: f32, r: f32| x > c0 as f32 - 50.0 - r && y > r0 as f32 - 50.0 - r && y < r1 as f32 + 50.0 + r;
+    plant_trees(w, 240, 12000, 10.0, 15.0, s, false, &|x, y, r| {
+        let dens = fbm(x * 0.009, y * 0.009, s + 42) * 1.2;
+        rnd() < dens && !near(&road, x, y, r * 0.6 + 12.0) && !keep(x, y) && !castle(x, y, r)
+    });
+    rocks(w, 120, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y) && !castle(x, y, 0.0));
+    border(w);
+    edge_exit(w, &mut sp, false, yw, AreaId::Fen);
+    sp.start = (60.0, yw);
+    // bandits: a few on the road, most inside the walls
+    let mix = [(Kind::Bandit, 0.62), (Kind::Crossbow, 0.38)];
+    let safe = |x: f32, y: f32| x < 300.0 && (y - yw).abs() < 220.0;
+    let r2 = road.clone();
+    packs(&mut sp, w, 5, 120.0, &mix, (2, 2), &safe, &mut || r2[ri(r2.len())]);
+    packs(&mut sp, w, 14, 80.0, &mix, (3, 2), &safe, &mut || (rr(c0 as f32 + 30.0, c1 as f32 - 30.0), rr(r0 as f32 + 30.0, r1 as f32 - 30.0)));
+    for &(hx, hy) in &halls {
+        pack(&mut sp.enemies, w, hx as f32 + 55.0, hy as f32 + 32.0, 3, &mix);
+    }
+    pack(&mut sp.enemies, w, sx as f32, sy as f32 + 60.0, 5, &mix);
+    sp.enemies.push((Kind::Brute, sx as f32, sy as f32 + 80.0));
+    pack(&mut sp.enemies, w, c0 as f32 - 60.0, gate_y, 4, &mix);
+    treasures(w, &mut sp, 3, 1, 0, &|x, y| near(&road, x, y, 30.0) || keep(x, y));
     sp
 }
 
@@ -599,27 +1088,33 @@ impl Room {
     }
 }
 
-fn dungeon(w: &mut World, floor: u8) -> Spawns {
+/// a dungeon floor: the Sunken Crypt, or (cellars) the vaults under Ravenhold
+fn dungeon(w: &mut World, floor: u8, cellars: bool) -> Spawns {
     let mut sp = Spawns::new();
-    for i in 0..W * H {
-        w.m[i] = ROCK;
-        w.g[i] = FLOOR;
-        w.aux[i] = AUX_INDOOR;
+    let (aw, ah) = (w.aw as i32, w.ah as i32);
+    for y in 0..w.ah {
+        for x in 0..w.aw {
+            let i = y * W + x;
+            w.m[i] = ROCK;
+            w.g[i] = FLOOR;
+            w.aux[i] = AUX_INDOOR;
+        }
     }
-    let boss = floor == CRYPT_FLOORS;
+    let last = if cellars { CELLAR_FLOORS } else { CRYPT_FLOORS };
+    let boss = floor == last;
     let mut rooms: Vec<Room> = vec![];
-    let target = 9 + ri(3);
-    // boss arena first, at one end
+    let target = 13 + ri(4);
+    // boss arena first, at the far end
     if boss {
-        rooms.push(Room { x: rr(700.0, 820.0) as i32, y: rr(200.0, 360.0) as i32, w: 170, h: 130 });
+        rooms.push(Room { x: rr(aw as f32 - 340.0, aw as f32 - 230.0) as i32, y: rr(200.0, ah as f32 - 400.0) as i32, w: 190, h: 150 });
     }
-    for _ in 0..600 {
+    for _ in 0..1200 {
         if rooms.len() >= target {
             break;
         }
-        let (rw, rh) = (rr(56.0, 120.0) as i32, rr(44.0, 86.0) as i32);
-        let (x, y) = (rr(30.0, (W as i32 - rw - 30) as f32) as i32, rr(30.0, (H as i32 - rh - 30) as f32) as i32);
-        if rooms.iter().any(|r| x < r.x + r.w + 26 && x + rw + 26 > r.x && y < r.y + r.h + 26 && y + rh + 26 > r.y) {
+        let (rw, rh) = (rr(60.0, 140.0) as i32, rr(46.0, 100.0) as i32);
+        let (x, y) = (rr(30.0, (aw - rw - 30) as f32) as i32, rr(30.0, (ah - rh - 30) as f32) as i32);
+        if rooms.iter().any(|r| x < r.x + r.w + 30 && x + rw + 30 > r.x && y < r.y + r.h + 30 && y + rh + 30 > r.y) {
             continue;
         }
         rooms.push(Room { x, y, w: rw, h: rh });
@@ -635,8 +1130,8 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
     let carve = |w: &mut World, x0: i32, y0: i32, x1: i32, y1: i32| {
         for y in y0.min(y1)..=y0.max(y1) {
             for x in x0.min(x1)..=x0.max(x1) {
-                if World::inb(x, y) {
-                    w.m[y as usize * W + x as usize] = E;
+                if x >= 6 && y >= 6 && x < aw - 6 && y < ah - 6 {
+                    w.m[idx(x, y)] = E;
                 }
             }
         }
@@ -657,31 +1152,30 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
     for k in 0..rooms.len() - 1 {
         corridor(w, rooms[k].c(), rooms[k + 1].c());
     }
-    for _ in 0..2 {
+    for _ in 0..3 {
         let (a, b) = (ri(rooms.len() - 1), ri(rooms.len() - 1));
         if a != b {
             corridor(w, rooms[a].c(), rooms[b].c());
         }
     }
-    // line the carved spaces with brick
+    // line the carved spaces with brick: paint a ring round every open cell that touches rock
     let snapshot = w.m.clone();
-    for y in 4..H - 4 {
-        for x in 4..W - 4 {
-            let i = y * W + x;
-            if snapshot[i] != ROCK {
+    for y in 5..ah - 5 {
+        for x in 5..aw - 5 {
+            let i = idx(x, y);
+            if snapshot[i] != E {
                 continue;
             }
-            let mut near_open = false;
-            'n: for dy in -4i32..=4 {
+            if snapshot[i - 1] == E && snapshot[i + 1] == E && snapshot[i - W] == E && snapshot[i + W] == E {
+                continue;
+            }
+            for dy in -4i32..=4 {
                 for dx in -4i32..=4 {
-                    if snapshot[(y as i32 + dy) as usize * W + (x as i32 + dx) as usize] == E {
-                        near_open = true;
-                        break 'n;
+                    let j = idx(x + dx, y + dy);
+                    if snapshot[j] == ROCK {
+                        w.m[j] = BRICK;
                     }
                 }
-            }
-            if near_open {
-                w.m[i] = BRICK;
             }
         }
     }
@@ -689,13 +1183,26 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
     let n = rooms.len();
     for (k, r) in rooms.iter().enumerate() {
         let (cx, cy) = r.c();
-        if k > 0 && k < n - 1 || (!boss && k == n - 1) {
-            if r.w > 80 && r.h > 60 && rnd() < 0.6 {
+        let ordinary = k > 0 && k < n - 1 || (!boss && k == n - 1);
+        if ordinary {
+            if cellars && rnd() < 0.5 {
+                // a storeroom: plank floor, crates and barrels
+                w.ground_rect(r.x, r.y, r.x + r.w, r.y + r.h, PLANK, AUX_INDOOR);
+                for _ in 0..(r.w * r.h / 900) {
+                    let (bx, by) = (r.x + 6 + ri((r.w - 18).max(1) as usize) as i32, r.y + 6 + ri((r.h - 16).max(1) as usize) as i32);
+                    if (bx - cx).abs() > 14 || (by - cy).abs() > 10 {
+                        stack(w, bx, by, 8 + ri(5) as i32, 6 + ri(3) as i32);
+                    }
+                }
+                if rnd() < 0.6 {
+                    w.splash(cx as f32 + rr(-20.0, 20.0), cy as f32 + rr(-10.0, 10.0), OIL, rr(6.0, 10.0), 0);
+                }
+            } else if r.w > 80 && r.h > 60 && rnd() < 0.6 {
                 for &(px, py) in &[(r.x + 18, r.y + 16), (r.x + r.w - 26, r.y + 16), (r.x + 18, r.y + r.h - 22), (r.x + r.w - 26, r.y + r.h - 22)] {
                     w.rect(px, py, px + 8, py + 8, BRICK);
                 }
             }
-            if rnd() < 0.35 {
+            if !cellars && rnd() < 0.35 {
                 for c in 0..3 {
                     let x = r.x + 10 + c * 18;
                     if x + 8 < r.x + r.w - 6 {
@@ -706,7 +1213,7 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
             if rnd() < 0.3 {
                 w.splash(cx as f32 + rr(-20.0, 20.0), cy as f32 + rr(-10.0, 10.0), OIL, rr(5.0, 9.0), 0);
             }
-            if rnd() < 0.18 {
+            if !cellars && rnd() < 0.18 {
                 let (ax, ay) = (cx + rr(-15.0, 15.0) as i32, cy + rr(-8.0, 8.0) as i32);
                 for dy in -9i32..=9 {
                     for dx in -13i32..=13 {
@@ -719,14 +1226,23 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
             for _ in 0..(r.w * r.h / 400) {
                 let (bx, by) = (r.x + ri(r.w as usize) as i32, r.y + ri(r.h as usize) as i32);
                 if w.at(bx, by) == E {
-                    let i = by as usize * W + bx as usize;
-                    if rnd() < 0.4 {
+                    let i = idx(bx, by);
+                    if !cellars && rnd() < 0.4 {
                         w.m[i] = BONE;
                         w.col[i] = [196, 188, 166];
                     } else {
                         w.stain[i] = w.stain[i].saturating_add(90);
                     }
                 }
+            }
+            // treasure in some rooms, a shrine now and then
+            if rnd() < 0.22 {
+                let (tx, ty) = (r.x as f32 + rr(16.0, r.w as f32 - 16.0), r.y as f32 + 14.0);
+                if open_spot(w, tx, ty, 5) {
+                    sp.chests.push((tx, ty, if rnd() < 0.3 { 1 } else { 0 }));
+                }
+            } else if rnd() < 0.08 && sp.shrines.is_empty() && open_spot(w, cx as f32, cy as f32, 10) {
+                sp.shrines.push((cx as f32, cy as f32, ri(4) as u8));
             }
         }
         sp.braziers.push((r.x as f32 + 10.0, r.y as f32 + 12.0));
@@ -735,9 +1251,14 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
         }
         // enemies
         if k > 0 && !(boss && k == n - 1) {
-            let mix = [(Kind::Skeleton, 0.45), (Kind::Archer, 0.2), (Kind::Zombie, 0.2), (Kind::Crawler, 0.15)];
             let cnt = 2 + ri(3) + if floor > 1 { 1 } else { 0 };
-            pack(&mut sp.enemies, w, cx as f32, cy as f32, cnt, &mix);
+            if cellars {
+                let mix = [(Kind::Bandit, 0.55), (Kind::Crossbow, 0.35), (Kind::Zombie, 0.1)];
+                pack(&mut sp.enemies, w, cx as f32, cy as f32, cnt, &mix);
+            } else {
+                let mix = [(Kind::Skeleton, 0.45), (Kind::Archer, 0.2), (Kind::Zombie, 0.2), (Kind::Crawler, 0.15)];
+                pack(&mut sp.enemies, w, cx as f32, cy as f32, cnt, &mix);
+            }
             if rnd() < 0.2 + floor as f32 * 0.08 {
                 sp.enemies.push((Kind::Brute, cx as f32 + rr(-10.0, 10.0), cy as f32 + rr(-6.0, 6.0)));
             }
@@ -747,27 +1268,40 @@ fn dungeon(w: &mut World, floor: u8) -> Spawns {
     let (ux, uy) = rooms[0].c();
     for y in uy - 20..uy - 8 {
         for x in ux - 9..ux + 9 {
-            w.g[y as usize * W + x as usize] = STAIRSUP;
+            w.g[idx(x, y)] = STAIRSUP;
         }
     }
-    let up = if floor == 1 { AreaId::Pines } else { AreaId::Crypt(floor - 1) };
-    sp.exits.push(Exit { x0: ux - 10, y0: uy - 22, x1: ux + 10, y1: uy - 6, to: up, label: if floor == 1 { "THE HOLLOW PINES".into() } else { format!("FLOOR {}", floor - 1) } });
+    let up = if floor > 1 {
+        if cellars { AreaId::Cellars(floor - 1) } else { AreaId::Crypt(floor - 1) }
+    } else if cellars {
+        AreaId::Ravenhold
+    } else {
+        AreaId::Pines
+    };
+    let up_label = if floor > 1 { if cellars { format!("DEPTH {}", floor - 1) } else { format!("FLOOR {}", floor - 1) } } else { up.name() };
+    sp.exits.push(Exit { x0: ux - 10, y0: uy - 22, x1: ux + 10, y1: uy - 6, to: up, label: up_label });
     sp.entries.push((up, ux as f32, uy as f32 + 6.0));
     sp.start = (ux as f32, uy as f32 + 6.0);
     let (dx, dy) = rooms[n - 1].c();
     if boss {
-        sp.enemies.push((Kind::King, dx as f32, dy as f32 - 10.0));
+        sp.enemies.push((if cellars { Kind::Chief } else { Kind::King }, dx as f32, dy as f32 - 10.0));
+        if cellars {
+            // the chief's hoard
+            sp.chests.push((dx as f32 - 60.0, dy as f32 - 50.0, 1));
+            sp.chests.push((dx as f32 + 60.0, dy as f32 - 50.0, 1));
+        }
         for k in 0..4 {
-            sp.braziers.push((dx as f32 + [-70.0, 70.0, -70.0, 70.0][k], dy as f32 + [-50.0, -50.0, 50.0, 50.0][k]));
+            sp.braziers.push((dx as f32 + [-80.0, 80.0, -80.0, 80.0][k], dy as f32 + [-58.0, -58.0, 58.0, 58.0][k]));
         }
     } else {
         for y in dy - 6..dy + 6 {
             for x in dx - 9..dx + 9 {
-                w.g[y as usize * W + x as usize] = STAIRS;
+                w.g[idx(x, y)] = STAIRS;
             }
         }
-        let down = AreaId::Crypt(floor + 1);
-        sp.exits.push(Exit { x0: dx - 10, y0: dy - 8, x1: dx + 10, y1: dy + 8, to: down, label: format!("FLOOR {}", floor + 1) });
+        let down = if cellars { AreaId::Cellars(floor + 1) } else { AreaId::Crypt(floor + 1) };
+        let label = if cellars { format!("DEPTH {}", floor + 1) } else { format!("FLOOR {}", floor + 1) };
+        sp.exits.push(Exit { x0: dx - 10, y0: dy - 8, x1: dx + 10, y1: dy + 8, to: down, label });
         sp.entries.push((down, dx as f32, dy as f32 + 18.0));
     }
     sp

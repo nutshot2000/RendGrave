@@ -3,8 +3,9 @@
 // acid eats whatever it touches. Only chunks with something happening are updated.
 use crate::rng::*;
 
-pub const W: usize = 1024;
-pub const H: usize = 768;
+/// the largest map the engine holds; each area uses its own size inside it (aw x ah)
+pub const W: usize = 2048;
+pub const H: usize = 1536;
 
 pub const E: u8 = 0;
 pub const STONE: u8 = 1;
@@ -25,6 +26,8 @@ pub const CLOTH: u8 = 15;
 pub const ASH: u8 = 16;
 /// dungeon bedrock: very tall, dark, indestructible
 pub const ROCK: u8 = 17;
+/// swamp gas: invisible-ish, explodes when fire reaches it
+pub const GAS: u8 = 18;
 
 pub const GRASS: u8 = 0;
 pub const DIRT: u8 = 1;
@@ -35,6 +38,8 @@ pub const MUD: u8 = 5;
 pub const STAIRS: u8 = 6;
 pub const STAIRSUP: u8 = 7;
 pub const PLANK: u8 = 8;
+/// bog peat: once lit it smoulders for a long time and creeps outwards
+pub const PEAT: u8 = 9;
 
 pub const AUX_TRUNK: u8 = 1;
 pub const AUX_INDOOR: u8 = 2;
@@ -88,6 +93,7 @@ const N8: [(i32, i32); 8] = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), 
 pub enum Ev {
     Steam(i32, i32),
     Fume(i32, i32),
+    Boom(i32, i32),
 }
 
 pub struct World {
@@ -104,6 +110,9 @@ pub struct World {
     pub tick: u8,
     pub zaps: Vec<(u32, u8)>,
     pub events: Vec<Ev>,
+    /// this area's size
+    pub aw: usize,
+    pub ah: usize,
 }
 
 
@@ -121,10 +130,28 @@ impl World {
             col: vec![[0; 3]; n],
             act: vec![0; CW * CH],
             stamp: vec![0; n],
+            aw: W,
+            ah: H,
             tick: 0,
             zaps: vec![],
             events: vec![],
         }
+    }
+    /// a world for an area of aw x ah cells; everything outside is solid rock
+    pub fn sized(aw: usize, ah: usize) -> World {
+        let mut w = World::new();
+        w.aw = aw.min(W);
+        w.ah = ah.min(H);
+        for y in 0..H {
+            for x in 0..W {
+                if x >= w.aw || y >= w.ah {
+                    let i = y * W + x;
+                    w.m[i] = ROCK;
+                    w.g[i] = FLOOR;
+                }
+            }
+        }
+        w
     }
     #[inline]
     pub fn inb(x: i32, y: i32) -> bool {
@@ -161,8 +188,11 @@ impl World {
         }
     }
     pub fn wake_all(&mut self) {
-        for c in self.act.iter_mut() {
-            *c = 30;
+        let (cw, ch) = (self.aw.div_ceil(CS).min(CW), self.ah.div_ceil(CS).min(CH));
+        for cy in 0..ch {
+            for cx in 0..cw {
+                self.act[cy * CW + cx] = 30;
+            }
         }
     }
     #[inline]
@@ -338,6 +368,19 @@ impl World {
         match m {
             WATER | BLOOD | OIL | ACID => self.liquid(x, y, i, m, t),
             FIRE => self.fire(x, y, i, t),
+            GAS => {
+                // drifts a little
+                if rnd() < 0.03 {
+                    if let Some((j, nx, ny)) = self.nb(x, y, N4[ri(4)]) {
+                        if self.m[j] == E {
+                            self.m[j] = GAS;
+                            self.m[i] = E;
+                            self.stamp[j] = t;
+                            self.keep(nx as usize, ny as usize);
+                        }
+                    }
+                }
+            }
             ICE => {
                 if rnd() < 0.00015 {
                     self.m[i] = WATER;
@@ -424,6 +467,21 @@ impl World {
                         self.m[j] = WATER;
                     }
                 }
+                GAS => {
+                    self.m[j] = FIRE;
+                    self.life[j] = rr(6.0, 14.0) as u8;
+                    self.stamp[j] = t;
+                    self.wake(nx, ny);
+                    if rnd() < 0.08 {
+                        self.events.push(Ev::Boom(nx, ny));
+                    }
+                }
+                E if self.g[j] == PEAT && rnd() < 0.02 => {
+                    self.m[j] = FIRE;
+                    self.life[j] = rr(150.0, 250.0) as u8;
+                    self.stamp[j] = t;
+                    self.wake(nx, ny);
+                }
                 E => {
                     let gg = self.g[j];
                     if (gg == GRASS || gg == MOSS) && rnd() < 0.035 {
@@ -451,13 +509,20 @@ impl World {
 
     fn fire(&mut self, x: usize, y: usize, i: usize, t: u8) {
         let l = self.life[i];
+        let peat = self.g[i] == PEAT;
+        if peat && l <= 1 {
+            self.g[i] = BURNT;
+        }
         if l <= 1 {
             self.m[i] = if rnd() < 0.2 { ASH } else { E };
             self.life[i] = 0;
             self.scorch[i] = self.scorch[i].saturating_add(70);
             return;
         }
-        self.life[i] = l - 1;
+        // peat smoulders: it burns slowly
+        if !(peat && rnd() < 0.8) {
+            self.life[i] = l - 1;
+        }
         if (self.g[i] == GRASS || self.g[i] == MOSS) && rnd() < 0.1 {
             self.g[i] = BURNT;
         }

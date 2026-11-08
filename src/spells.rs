@@ -38,6 +38,7 @@ impl Game {
 
     /// shared damage bookkeeping for an enemy
     pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
+        let dmg = dmg * self.power_mult();
         let e = &mut self.enemies[i];
         e.hp -= dmg;
         e.aggro = true;
@@ -558,7 +559,7 @@ impl Game {
         self.enemies.retain(|e| e.alive);
         let lvl = self.player.sk.level;
         for _ in 0..40 {
-            let (x, y) = (rr(40.0, W as f32 - 40.0), rr(40.0, H as f32 - 40.0));
+            let (x, y) = (rr(40.0, self.world.aw as f32 - 40.0), rr(40.0, self.world.ah as f32 - 40.0));
             let d = ((x - self.player.x).powi(2) + (y - self.player.y).powi(2)).sqrt();
             if d < 260.0 || self.world.at(x as i32, y as i32) != E || self.world.aux[y as usize * W + x as usize] & AUX_INDOOR != 0 {
                 continue;

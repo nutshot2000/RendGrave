@@ -258,6 +258,11 @@ pub struct Game {
     pub wp_open: bool,
     pub wp_hover: Option<usize>,
     pub king_dead: bool,
+    pub chief_dead: bool,
+    pub chests: Vec<crate::props::Chest>,
+    pub shrines: Vec<crate::props::Shrine>,
+    /// shrine blessing: (kind, frames left)
+    pub buff: Option<(u8, i32)>,
     pub fade: i32,
     pub exit_lock: i32,
     pub prompt: Option<String>,
@@ -279,6 +284,10 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         Kind::Crawler => (45.0, 1.0, 12.0, 7.0, 18),
         Kind::Archer => (35.0, 0.8, 150.0, 10.0, 34),
         Kind::King => (1500.0, 0.55, 30.0, 30.0, 40),
+        Kind::Bloater => (150.0, 0.34, 14.0, 12.0, 30),
+        Kind::Bandit => (95.0, 0.9, 16.0, 13.0, 18),
+        Kind::Crossbow => (60.0, 0.8, 175.0, 14.0, 42),
+        Kind::Chief => (2400.0, 0.62, 28.0, 34.0, 34),
         Kind::Player => (100.0, 1.0, 10.0, 0.0, 10),
     };
     let mut body = humanoid(k);
@@ -412,6 +421,10 @@ impl Game {
             wp_open: false,
             wp_hover: None,
             king_dead: false,
+            chief_dead: false,
+            chests: vec![],
+            shrines: vec![],
+            buff: None,
             fade: 0,
             exit_lock: 0,
             prompt: None,
@@ -518,6 +531,7 @@ impl Game {
             Kind::Zombie => [90u8, 30, 26],
             Kind::Skeleton | Kind::Archer | Kind::King => [200, 196, 180],
             Kind::Crawler => [90u8, 30, 26],
+            Kind::Bloater => [110, 150, 50],
             _ => [140, 14, 18],
         };
         for _ in 0..n {
@@ -596,10 +610,17 @@ impl Game {
         }
         self.world.update();
         let evs = std::mem::take(&mut self.world.events);
+        let mut booms = 0;
         for e in evs {
             match e {
                 Ev::Steam(x, y) => self.ptc(x as f32, y as f32, 2.0, rr(-0.2, 0.2), rr(-0.2, 0.2), 0.6, 50, PtK::Steam, [200, 200, 210]),
                 Ev::Fume(x, y) => self.ptc(x as f32, y as f32, 1.0, rr(-0.2, 0.2), rr(-0.2, 0.2), 0.4, 60, PtK::Steam, [150, 220, 90]),
+                Ev::Boom(x, y) => {
+                    if booms < 4 {
+                        booms += 1;
+                        self.explode(x as f32, y as f32, 3.0, 7.0);
+                    }
+                }
             }
         }
         let mut inp2 = inp.clone();
@@ -621,6 +642,7 @@ impl Game {
         self.update_whirl();
         self.update_area(&inp2);
         self.update_ground();
+        self.tick_buffs();
         self.prev = inp.clone();
     }
 
@@ -656,9 +678,6 @@ impl Game {
         }
         p.mana = (p.mana + 0.16 * (1.0 + 0.2 * p.sk.r(Sk::Wisdom) as f32) + p.gear.regen / 60.0).min(p.maxmana);
         let indoor = self.world.aux[(p.y as usize).min(H - 1) * W + (p.x as usize).min(W - 1)] & AUX_INDOOR != 0;
-        if indoor && !p.indoor {
-            self.banner = Some(("THE SUNKEN CRYPT".into(), "THE DEAD DO NOT REST HERE".into(), 220));
-        }
         self.player.indoor = indoor;
         let p = &mut self.player;
         // aim + facing
@@ -677,8 +696,9 @@ impl Game {
             dy /= l;
         }
         let u = self.under(self.player.x, self.player.y);
+        let hm = self.haste_mult();
         let p = &mut self.player;
-        let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32) * (1.0 + p.gear.speed / 100.0);
+        let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32) * (1.0 + p.gear.speed / 100.0) * hm;
         if p.whirl > 0 {
             speed *= 0.75;
         }
@@ -1210,7 +1230,7 @@ impl Game {
                 }
                 let hit_e = if kind >= 2 { None } else { hit_e };
                 let pl = &self.player;
-                let hit_p = kind == 3 && !pl.dead && (pl.y - y).abs() < 6.0 && (pl.x - x).abs() < 5.0 && z < 48.0;
+                let hit_p = (kind == 3 || kind == 4) && !pl.dead && (pl.y - y).abs() < 6.0 && (pl.x - x).abs() < 5.0 && z < 48.0;
                 if wall || ground || hit_e.is_some() || hit_p || self.projs[k].life <= 0 {
                     match kind {
                         0 => {
@@ -1218,11 +1238,11 @@ impl Game {
                             self.explode(x, y, z.max(2.0), r);
                         }
                         1 => self.acid_hit(x, y, z, hit_e),
-                        3 => {
+                        3 | 4 => {
                             self.sounds.push(Snd { k: Sfx::ArrowHit, x: x, y: y, v: 0.7 });
                             if hit_p && self.player.inv == 0 {
                                 self.sounds.push(Snd { k: Sfx::Hurt, x: self.player.x, y: self.player.y, v: 1.0 });
-                                let d = 10.0 * (1.0 + 0.1 * (self.alvl - 1) as f32) * rr(0.85, 1.15);
+                                let d = if kind == 4 { 15.0 } else { 10.0 } * (1.0 + 0.1 * (self.alvl - 1) as f32) * rr(0.85, 1.15);
                                 let d = d * self.armor_mult();
                                 self.player.hp -= d;
                                 self.player.hurt = 1.0;
@@ -1335,13 +1355,35 @@ impl Game {
         self.on_kill(i);
     }
 
+    /// a bloater bursts: acid everywhere and a cloud of swamp gas
+    fn bloater_burst(&mut self, x: f32, y: f32) {
+        self.world.splash(x, y, ACID, 8.0, 3);
+        self.world.blob(x, y - 2.0, 9.0, GAS, (self.frame as u32) & 0xffff, true);
+        self.snd(Sfx::Acid, x, y, 1.0);
+        self.snd(Sfx::Sever, x, y, 0.7);
+        for _ in 0..50 {
+            self.ptc(x, y, rr(5.0, 30.0), rr(-2.0, 2.0), rr(-1.2, 1.2), rr(0.5, 3.0), 90, PtK::Acid, [130, 220, 60]);
+        }
+        let d = ((self.player.x - x).powi(2) + ((self.player.y - y) * 1.4).powi(2)).sqrt();
+        if d < 34.0 && self.player.inv == 0 && !self.player.dead {
+            let dmg = 16.0 * (1.0 + 0.1 * (self.alvl - 1) as f32) * self.armor_mult();
+            self.player.hp -= dmg;
+            self.player.hurt = 1.0;
+            self.player.inv = 14;
+            let (px, py) = (self.player.x, self.player.y);
+            self.float(px, py - 60.0, format!("-{}", dmg as i32), [150, 255, 90], false);
+            self.snd(Sfx::Hurt, px, py, 1.0);
+        }
+    }
+
     fn on_kill(&mut self, i: usize) {
         let e = &self.enemies[i];
         let (x, y, k) = (e.x, e.y, e.k);
         self.player.kills += 1;
         let gold = match k {
-            Kind::King => 0,
+            Kind::King | Kind::Chief => 0,
             Kind::Brute => 40 + ri(30) as i32,
+            Kind::Bandit | Kind::Crossbow => 10 + ri(16) as i32,
             Kind::Skeleton | Kind::Archer => 6 + ri(10) as i32,
             _ => 3 + ri(8) as i32,
         };
@@ -1355,6 +1397,12 @@ impl Game {
         self.drop_loot(x, y, k, elite);
         if k == Kind::King {
             self.king_slain(x, y);
+        }
+        if k == Kind::Chief {
+            self.chief_slain(x, y);
+        }
+        if k == Kind::Bloater {
+            self.bloater_burst(x, y);
         }
         if rnd() < if k == Kind::Brute { 1.0 } else { 0.18 + 0.07 * fortune } {
             self.pickups.push(Pickup { k: 1, x: x + 6.0, y: y + 2.0, z: 10.0, vz: 2.0, amt: 1, t: 0 });
@@ -1425,7 +1473,7 @@ impl Game {
             e.burning = burning;
             if burning > 0 {
                 e.hp -= (burning.min(60)) as f32 * 0.004 * bm;
-                if matches!(e.k, Kind::Zombie | Kind::Crawler) && burning > 30 {
+                if e.k.shambler() && burning > 30 {
                     e.aggro = true;
                 }
             }
@@ -1490,7 +1538,7 @@ impl Game {
                 e.bleed -= 1;
                 if !k.bony() && rnd() < 0.25 {
                     let h = rr(5.0, 40.0);
-                    let c = if matches!(k, Kind::Zombie | Kind::Crawler) { [90, 30, 26] } else { [140, 14, 18] };
+                    let c = if k.shambler() { [90, 30, 26] } else { [140, 14, 18] };
                     let (x, y) = (e.x, e.y);
                     self.ptc(x + rr(-4.0, 4.0), y, h, rr(-0.4, 0.4), rr(-0.3, 0.3), rr(0.0, 0.5), 300, PtK::Blood, c);
                 }
@@ -1508,11 +1556,12 @@ impl Game {
             }
             let (dx, dy) = (px - e.x, py - e.y);
             let dist = (dx * dx + dy * dy * 1.6).sqrt();
-            if !e.aggro && dist < if e.k.big() { 130.0 } else if e.k == Kind::Archer { 190.0 } else { 160.0 } && self.world.los(e.x, e.y - 1.0, px, py - 1.0) {
+            if !e.aggro && dist < if e.k.big() { 130.0 } else if e.k.ranged() { 190.0 } else { 160.0 } && self.world.los(e.x, e.y - 1.0, px, py - 1.0) {
                 e.aggro = true;
                 let k = match e.k {
-                    Kind::Zombie | Kind::Crawler => Sfx::Groan,
-                    Kind::Brute => Sfx::Roar,
+                    Kind::Zombie | Kind::Crawler | Kind::Bloater => Sfx::Groan,
+                    Kind::Brute | Kind::Chief => Sfx::Roar,
+                    Kind::Bandit | Kind::Crossbow => Sfx::HitMetal,
                     Kind::King => Sfx::KingRoar,
                     _ => Sfx::Rattle,
                 };
@@ -1529,7 +1578,7 @@ impl Game {
                 match e.st {
                     St::Idle | St::Chase => {
                         e.st = St::Chase;
-                        if e.k == Kind::Archer {
+                        if e.k.ranged() {
                             let l = dist.max(1.0);
                             let sees = self.world.los(e.x, e.y - 1.0, px, py - 1.0);
                             if dist < 70.0 {
@@ -1546,12 +1595,26 @@ impl Game {
                             want = (dx / l * spd, dy / l * spd);
                         }
                         let e = &mut self.enemies[i];
-                        if e.k != Kind::Archer && dist < e.reach && (armed || matches!(e.k, Kind::Zombie | Kind::Crawler)) && e.hit_cd == 0 {
+                        if e.k.bandit() && e.k != Kind::Chief && e.hp < e.maxhp * 0.25 && dist < 140.0 {
+                            let l = dist.max(1.0);
+                            want = (-dx / l * spd * 1.15, -dy / l * spd * 1.15);
+                        }
+                        if e.k == Kind::Chief && dist > 50.0 && dist < 170.0 && e.hit_cd == 0 && rnd() < 0.012 {
+                            let l = dist.max(1.0);
+                            e.vx = dx / l * 7.0;
+                            e.vy = dy / l * 7.0;
+                            e.hit_cd = 50;
+                            let (ex3, ey3) = (e.x, e.y);
+                            self.sounds.push(Snd { k: Sfx::Roar, x: ex3, y: ey3, v: 1.0 });
+                            self.shake = self.shake.max(3.0);
+                        }
+                        let e = &mut self.enemies[i];
+                        if !e.k.ranged() && dist < e.reach && (armed || e.k.shambler()) && e.hit_cd == 0 {
                             e.st = St::Wind;
                             e.t = e.windup;
                             let k = match e.k {
-                                Kind::Zombie | Kind::Crawler => Some(Sfx::Groan),
-                                Kind::Brute => Some(Sfx::Roar),
+                                Kind::Zombie | Kind::Crawler | Kind::Bloater => Some(Sfx::Groan),
+                                Kind::Brute | Kind::Chief => Some(Sfx::Roar),
                                 Kind::King if rnd() < 0.3 => Some(Sfx::KingRoar),
                                 _ => None,
                             };
@@ -1569,15 +1632,16 @@ impl Game {
                             e.t = 30;
                             e.hit_cd = 20;
                             // strike
-                            let ok = dist < e.reach + 6.0 && e.k != Kind::Archer;
+                            let ok = dist < e.reach + 6.0 && !e.k.ranged();
                             let (dmg, k2) = (e.dmg, e.k);
                             let (ex2, ey2) = (e.x, e.y);
-                            if k2 == Kind::Archer {
+                            if k2.ranged() {
                                 e.hit_cd = 50;
                                 let (adx, ady) = (px - ex2, py - ey2);
                                 let l = (adx * adx + ady * ady).sqrt().max(1.0);
                                 let f = e.face;
-                                self.projs.push(Proj { k: 3, x: ex2 + f * 6.0, y: ey2 + 1.0, z: 30.0, vx: adx / l * 4.2, vy: ady / l * 4.2, vz: 0.0, life: 70 });
+                                let (pk, ps) = if k2 == Kind::Crossbow { (4, 5.8) } else { (3, 4.2) };
+                                self.projs.push(Proj { k: pk, x: ex2 + f * 6.0, y: ey2 + 1.0, z: 30.0, vx: adx / l * ps, vy: ady / l * ps, vz: 0.0, life: 70 });
                                 self.sounds.push(Snd { k: Sfx::Bow, x: ex2, y: ey2, v: 0.8 });
                             }
                             if k2.big() {
@@ -1658,7 +1722,7 @@ impl Game {
                 e.vx *= 0.82;
                 e.vy *= 0.82;
             }
-            let r = if e.k == Kind::King { 7.0 } else if e.k == Kind::Brute { 5.0 } else { 3.0 };
+            let r = if e.k == Kind::King { 7.0 } else if e.k.big() { 5.0 } else if e.k == Kind::Bloater { 4.0 } else { 3.0 };
             let (mut x, mut y) = (e.x, e.y);
             let moved = self.mv(&mut x, &mut y, mvx, mvy, r);
             if !moved && (want.0 != 0.0 || want.1 != 0.0) {
@@ -1690,27 +1754,27 @@ impl Game {
                 b.root = (0.0, -b.leg_len + 1.5 - (ph * 2.0).sin().abs() * 1.0 * w + limp);
                 let lean = match e.k {
                     Kind::Zombie | Kind::Crawler => 0.22,
-                    Kind::Brute | Kind::King => 0.12,
+                    Kind::Brute | Kind::King | Kind::Chief => 0.12,
                     _ => 0.05,
                 };
                 b.parts[T_TORSO].ang = lean + tw + if legs == 1 { 0.15 } else { 0.0 };
                 b.parts[T_LEGF].ang = ph.sin() * 0.5 * w;
                 b.parts[T_LEGB].ang = -ph.sin() * 0.5 * w;
-                b.parts[T_HEAD].ang = tw * 2.0 + if matches!(e.k, Kind::Zombie | Kind::Crawler) { 0.25 } else { 0.0 };
+                b.parts[T_HEAD].ang = tw * 2.0 + if e.k.shambler() { 0.25 } else { 0.0 };
                 match e.st {
                     St::Wind => {
                         let t = 1.0 - e.t as f32 / e.windup as f32;
                         b.parts[T_ARMF].ang = -0.5 - t * 2.4;
-                        b.parts[T_ARMB].ang = if matches!(e.k, Kind::Zombie | Kind::Crawler) { -1.4 - t } else { 0.3 };
+                        b.parts[T_ARMB].ang = if e.k.shambler() { -1.4 - t } else { 0.3 };
                         b.parts[T_TORSO].ang -= t * 0.2;
                     }
                     St::Recover if e.t > 22 => {
                         b.parts[T_ARMF].ang = 0.9;
-                        b.parts[T_ARMB].ang = if matches!(e.k, Kind::Zombie | Kind::Crawler) { 0.4 } else { 0.2 };
+                        b.parts[T_ARMB].ang = if e.k.shambler() { 0.4 } else { 0.2 };
                         b.parts[T_TORSO].ang += 0.25;
                     }
                     _ => {
-                        if matches!(e.k, Kind::Zombie | Kind::Crawler) {
+                        if e.k.shambler() {
                             b.parts[T_ARMF].ang = -1.35 + ph.sin() * 0.15;
                             b.parts[T_ARMB].ang = -1.25 - ph.sin() * 0.15;
                         } else {
@@ -2071,8 +2135,8 @@ impl Game {
         let ty = self.player.y - 26.0 - vh / 2.0 + (self.prev.mouse.1 - vh / 2.0) * 0.18;
         self.cam.0 += (tx - self.cam.0) * 0.1;
         self.cam.1 += (ty - self.cam.1) * 0.1;
-        self.cam.0 = self.cam.0.clamp(0.0, W as f32 - vw);
-        self.cam.1 = self.cam.1.clamp(-40.0, H as f32 - vh);
+        self.cam.0 = self.cam.0.clamp(0.0, (self.world.aw as f32 - vw).max(0.0));
+        self.cam.1 = self.cam.1.clamp(-20.0, (self.world.ah as f32 - vh).max(0.0));
         self.shake *= 0.86;
         self.flash *= 0.8;
     }

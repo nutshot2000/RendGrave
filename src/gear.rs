@@ -29,10 +29,10 @@ impl Game {
     /// share of damage that gets through your armour
     pub fn armor_mult(&self) -> f32 {
         let a = self.player.gear.armor;
-        1.0 - a / (a + 60.0)
+        (1.0 - a / (a + 60.0)) * self.ward_mult()
     }
     pub fn swing_frames(&self) -> i32 {
-        ((wstats(self.wkind()).frames as f32) / (1.0 + self.player.gear.swift / 100.0)).round().max(6.0) as i32
+        ((wstats(self.wkind()).frames as f32) / (1.0 + self.player.gear.swift / 100.0) / self.haste_mult()).round().max(6.0) as i32
     }
 
     /// the moment the weapon lands
@@ -232,6 +232,9 @@ impl Game {
     pub fn drop_loot(&mut self, x: f32, y: f32, k: Kind, elite: bool) {
         let (chance, rolls, luck) = match k {
             Kind::King => (1.0, 2, 0.35),
+            Kind::Chief => (1.0, 3, 0.4),
+            Kind::Bandit | Kind::Crossbow => (0.14, 1, 0.02),
+            Kind::Bloater => (0.12, 1, 0.0),
             Kind::Brute => (0.55, 1, 0.05),
             Kind::Skeleton | Kind::Archer => (0.11, 1, 0.0),
             _ => (0.09, 1, 0.0),

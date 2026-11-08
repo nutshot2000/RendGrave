@@ -1,6 +1,8 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod mapdump;
+mod props;
 mod gear;
 mod items;
 mod audio;
@@ -199,7 +201,17 @@ impl App {
         let g = &mut self.game;
         let f = g.frame as i32;
         g.player.hp = g.player.maxhp;
-        let stops = [(AreaId::Ashford, "t1_ashford"), (AreaId::Pines, "t2_pines"), (AreaId::Graveyard, "t3_graveyard"), (AreaId::Crypt(1), "t4_crypt1"), (AreaId::Crypt(2), "t5_crypt2"), (AreaId::Crypt(3), "t6_crypt3_boss")];
+        let stops = [
+            (AreaId::Ashford, "t01_ashford"),
+            (AreaId::Pines, "t02_pines"),
+            (AreaId::Graveyard, "t03_graveyard"),
+            (AreaId::Fen, "t04_fen"),
+            (AreaId::Ravenhold, "t05_ravenhold"),
+            (AreaId::Crypt(1), "t06_crypt1"),
+            (AreaId::Crypt(3), "t07_crypt3_boss"),
+            (AreaId::Cellars(1), "t08_cellars1"),
+            (AreaId::Cellars(2), "t09_cellars2_boss"),
+        ];
         for (k, (a, name)) in stops.iter().enumerate() {
             let at = 1 + k as i32 * 70;
             if f == at {
@@ -210,8 +222,8 @@ impl App {
                 for e in g.enemies.iter_mut() {
                     e.stun = 100000;
                 }
-                if *a == AreaId::Crypt(3) {
-                    if let Some(b) = g.enemies.iter().position(|e| e.k == body::Kind::King) {
+                if matches!(a, AreaId::Crypt(3) | AreaId::Cellars(2)) {
+                    if let Some(b) = g.enemies.iter().position(|e| e.k.boss()) {
                         let (bx, by) = (g.enemies[b].x, g.enemies[b].y);
                         g.player.x = bx - 70.0;
                         g.player.y = by + 10.0;
@@ -575,13 +587,13 @@ impl App {
             let g = &self.game;
             let want = if g.player.dead {
                 audio::Track::Title
-            } else if g.enemies.iter().any(|e| e.alive && e.k == body::Kind::King && e.aggro) {
+            } else if g.enemies.iter().any(|e| e.alive && e.k.boss() && e.aggro) {
                 audio::Track::Boss
             } else {
                 match g.area {
                     AreaId::Ashford => audio::Track::Ashford,
-                    AreaId::Pines | AreaId::Graveyard => audio::Track::Pines,
-                    AreaId::Crypt(_) => audio::Track::Crypt,
+                    AreaId::Pines | AreaId::Graveyard | AreaId::Fen | AreaId::Ravenhold => audio::Track::Pines,
+                    AreaId::Crypt(_) | AreaId::Cellars(_) => audio::Track::Crypt,
                 }
             };
             let duck = if g.paused || g.tree || g.wp_open || g.inv_open { 0.45 } else { 1.0 };
@@ -644,6 +656,10 @@ impl App {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--maps") {
+        mapdump::dump(&args.get(i + 1).cloned().unwrap_or_else(|| "maps".into()));
+        return;
+    }
     if let Some(i) = args.iter().position(|a| a == "--sfx-dump") {
         // write every synthesised sound effect to WAV files for listening
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "sfx".into());

@@ -9,6 +9,21 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
     cargo run --release          # continues your save
     cargo run --release -- --new # fresh character
 
+## The world
+
+| Area | Level | What's there |
+|---|---|---|
+| Ashford | 1 | The town: waypoint, campfire, houses |
+| The Hollow Pines | 2 | Big forest, a river with a bridge, an abandoned logging camp, the crypt mausoleum |
+| Sunken Crypt 1-3 | 3-5 | Dungeon floors; the Hollow King waits at the bottom |
+| The Old Graveyard | 5 | Ruined chapel, a dozen tombs, the plague pit |
+| The Blackwater Fen | 7 | Bog pools and boardwalks, peat that smoulders, swamp gas that explodes, bloaters |
+| Ravenhold | 9 | A walled bandit castle: tents, barracks, the broken keep |
+| Ravenhold Cellars 1-2 | 10-11 | Storerooms full of bandits; the Bandit Chief guards his hoard |
+
+Chests (E) spill gold, potions and gear; iron-bound ones are richer. Shrines (E) give a
+one-minute blessing: Power, Haste, Warding or Mending.
+
 ## Controls
 
 | Key | Action |
@@ -20,7 +35,7 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
 | K or Tab | Skill tree (spend skill points) |
 | Space | Dodge roll |
 | F | Drink a potion |
-| E | Use exits, stairs and waypoints |
+| E | Use exits, stairs, waypoints, chests and shrines |
 | I | Gear: equip with a click, sell with a right click |
 | M / N | Music on/off, sound effects on/off |
 | - / + | Volume |
@@ -36,10 +51,13 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
     cargo run --release -- --tour tour        # visits and screenshots every area
     cargo run --release -- --sfx-dump sfx     # writes every synthesised sound effect to WAV
     cargo run --release -- --loot loot        # every weapon type on a lineup, loot, the gear screen
+    cargo run --release -- --maps maps        # overview picture of every area's layout
 
 ## Code map
 
-- `world.rs`   the material grid: liquids, fire, acid, worldgen (forest + crypt)
+- `world.rs`   the material grid: liquids, fire, acid, peat and swamp gas
+- `areagen.rs` the area generators (towns, forests, fen, castle, dungeons)
+- `props.rs`   chests and shrines
 - `body.rs`    layered pixel bodies, cutting, burning, acid, splitting into pieces
 - `game.rs`    player, enemies and AI, spells, projectiles, gibs, particles
 - `render.rs`  CPU painting of albedo / emission / light info with depth sorting

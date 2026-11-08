@@ -129,6 +129,10 @@ fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
         DIRT => scl([92, 72, 54], 0.82 + n * 0.25 + s * 0.12),
         MUD => scl([62, 50, 40], 0.85 + s * 0.15),
         BURNT => scl([38, 33, 31], 0.85 + s * 0.2),
+        PEAT => {
+            let fib = vnoise(x as f32 * 0.5, y as f32 * 0.12, 61);
+            scl([54, 42, 32], 0.75 + fib * 0.35 + s * 0.1)
+        }
         PLANK => {
             let board = (y.rem_euclid(5) == 0) as i32 as f32;
             let seam = ((x + (y / 5) * 13).rem_euclid(23) == 0) as i32 as f32;
@@ -206,6 +210,10 @@ fn top_col(w: &World, i: usize, m: u8, x: i32, y: i32, t: u64, g: [u8; 3]) -> ([
             (if c == [0, 0, 0] { scl([84, 80, 86], 0.8 + s * 0.3) } else { c }, z)
         }
         ASH => (scl([84, 80, 78], 0.8 + s * 0.3), z),
+        GAS => {
+            let wv = vnoise(x as f32 * 0.08 + t as f32 * 0.004, y as f32 * 0.08, 71);
+            (mixc(g, [120, 170, 70], 0.18 + wv * 0.22), [0, (6.0 + wv * 10.0) as u8, 0])
+        }
         _ => (g, z),
     }
 }
@@ -281,7 +289,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     }
     for e in &g.enemies {
         if e.alive {
-            shadow(&mut c, e.x, e.y, if e.k == Kind::King { 15.0 } else if e.k == Kind::Brute { 11.0 } else { 7.0 });
+            shadow(&mut c, e.x, e.y, if e.k == Kind::King { 15.0 } else if e.k.big() { 11.0 } else if e.k == Kind::Bloater { 10.0 } else { 7.0 });
         }
     }
     // ---- walls and trees (drawn upright, depth = their ground row)
@@ -383,6 +391,77 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             let fy = (h2(k, (t / 3) as i32, 3) * 7.0) as i32;
             let col = fire_col((k * 13) as u32, t);
             c.put(sx + fx, sy - 9 - fy, by + 0.1, col, scl(col, 1.0), 9.0 + fy as f32);
+        }
+    }
+    // ---- chests: wooden boxes, iron-bound for the good ones; the lid swings open
+    for ch in &g.chests {
+        let (sx, sy) = (ch.x as i32 - cx, ch.y as i32 - cy);
+        let iron = ch.tier > 0;
+        let wood = if iron { [96, 64, 40] } else { [122, 82, 48] };
+        let band = if iron { [150, 150, 160] } else { [80, 56, 34] };
+        for dx in -6i32..=6 {
+            for k in 0..7 {
+                let edge = dx.abs() == 6 || k == 0;
+                let pc = if (dx.abs() == 3 || k == 3) && iron { band } else if edge { scl(wood, 0.7) } else { scl(wood, 0.9 + (dx + 6) as f32 * 0.012) };
+                c.put(sx + dx, sy - k, ch.y, pc, [0; 3], k as f32);
+            }
+        }
+        let open = ch.open;
+        let lid = if open { (ch.t as f32 / 10.0).min(1.0) } else { 0.0 };
+        for dx in -6i32..=6 {
+            for k in 0..4 {
+                // the lid rises and tips back as it opens
+                let (yy, zz) = (sy - 7 - k - (lid * 3.0) as i32, 7.0 + k as f32 + lid * 3.0);
+                let pc = if k == 3 { scl(wood, 1.1) } else if iron && dx.abs() == 3 { band } else { wood };
+                if !(open && lid >= 1.0 && k > 1) {
+                    c.put(sx + dx, yy - (lid * k as f32) as i32, ch.y - 0.1, pc, [0; 3], zz);
+                }
+            }
+        }
+        if !open {
+            c.put(sx, sy - 6, ch.y + 0.2, [230, 196, 90], [40, 30, 6], 6.0);
+            if (t / 40) % 3 == 0 {
+                c.glow(sx + ((t / 3) % 10) as i32 - 5, sy - 10, [60, 50, 20]);
+            }
+        } else {
+            for dx in -4..=4 {
+                c.put(sx + dx, sy - 7, ch.y + 0.1, [36, 26, 18], [0; 3], 7.0);
+            }
+        }
+    }
+    // ---- shrines: a carved stone pillar with a floating light
+    for s in &g.shrines {
+        let (sx, sy) = (s.x as i32 - cx, s.y as i32 - cy);
+        let col = crate::props::SHRINES[s.k as usize].2;
+        for dy in -5..=5 {
+            for dx in -9..=9 {
+                if (dx * dx) as f32 / 81.0 + (dy * dy) as f32 / 25.0 < 1.0 {
+                    c.put(sx + dx, sy + dy, s.y - 20.0, [70, 68, 74], [0; 3], 0.5);
+                }
+            }
+        }
+        for k in 0..20 {
+            let half = if k < 3 { 5 } else if k > 16 { 4 } else { 3 };
+            for dx in -half..=half {
+                let rune = !s.used && dx == 0 && k % 4 == 1 && k > 3;
+                let base = if dx < 0 { [120, 118, 126] } else { [92, 90, 100] };
+                c.put(sx + dx, sy - k, s.y, if rune { col } else { base }, if rune { scl(col, 0.8) } else { [0; 3] }, k as f32);
+            }
+        }
+        let bob = ((t as f32 * 0.05).sin() * 2.0) as i32;
+        let orb = if s.used { [60, 58, 64] } else { col };
+        for dy in -2i32..=2 {
+            for dx in -2i32..=2 {
+                if dx * dx + dy * dy <= 5 {
+                    c.put(sx + dx, sy - 26 + dy + bob, s.y + 0.2, orb, if s.used { [0; 3] } else { scl(col, 1.0) }, 26.0);
+                }
+            }
+        }
+        if !s.used {
+            for k in 0..3 {
+                let a = t as f32 * 0.04 + k as f32 * 2.1;
+                c.glow(sx + (a.cos() * 8.0) as i32, sy - 22 + (a.sin() * 3.0) as i32 + bob, scl(col, 0.7));
+            }
         }
     }
     // ---- waypoint: a rune circle that glows brighter once found
@@ -497,7 +576,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     // ---- projectiles
     for p in &g.projs {
         let (sx, sy) = (p.x as i32 - cx, (p.y - p.z) as i32 - cy);
-        if p.k == 3 {
+        if p.k == 3 || p.k == 4 {
             // arrow: shaft along its flight, grey head
             let l = (p.vx * p.vx + p.vy * p.vy).sqrt().max(0.01);
             let (ux, uy) = (p.vx / l, p.vy / l * 0.6);

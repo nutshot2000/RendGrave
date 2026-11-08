@@ -613,8 +613,8 @@ fn draw_waypoints(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
 fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
     let (mw, mh) = (84, 63);
     let (ox, oy) = (fw - mw - 8, 26);
-    let sx = W as f32 / mw as f32;
-    let sy = H as f32 / mh as f32;
+    let sx = g.world.aw as f32 / mw as f32;
+    let sy = g.world.ah as f32 / mh as f32;
     u.rect(ox - 2, oy - 2, mw + 4, mh + 4, [70, 58, 66], 220);
     for y in 0..mh {
         for x in 0..mw {
@@ -625,6 +625,7 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
             let c = if g_ == STAIRS || g_ == STAIRSUP { [240, 220, 140] } else { match m {
                 TREE => [24, 52, 28],
                 ROCK => [8, 7, 10],
+                GAS => [90, 120, 60],
                 STONE => [86, 84, 92],
                 BRICK => [120, 104, 112],
                 WOOD => [110, 80, 50],
@@ -636,6 +637,7 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
                     FLOOR => [60, 56, 64],
                     DIRT | MUD => [70, 56, 42],
                     BURNT => [30, 26, 26],
+                    PEAT => [44, 34, 26],
                     _ => [36, 60, 34],
                 },
             } };
@@ -653,6 +655,16 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
     for k in 0..rh {
         u.px(rx, ry + k, [200, 190, 170], 140);
         u.px(rx + rw, ry + k, [200, 190, 170], 140);
+    }
+    for ch in g.chests.iter().filter(|c| !c.open) {
+        u.px(ox + (ch.x / sx) as i32, oy + (ch.y / sy) as i32, [255, 210, 60], 255);
+    }
+    for s in g.shrines.iter().filter(|s| !s.used) {
+        let c = crate::props::SHRINES[s.k as usize].2;
+        let (x, y) = (ox + (s.x / sx) as i32, oy + (s.y / sy) as i32);
+        for &(dx, dy) in &[(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+            u.px(x + dx, y + dy, c, 255);
+        }
     }
     for e in &g.enemies {
         if e.alive {
@@ -771,10 +783,10 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         if !e.alive || e.hpbar == 0 {
             continue;
         }
-        if e.k == Kind::King {
+        if e.k.boss() {
             continue;
         }
-        let top = if e.k == Kind::Brute { 66.0 } else { 58.0 };
+        let top = if e.k.big() { 66.0 } else { 58.0 };
         let (sx, sy) = (e.x as i32 - cx, (e.y - top) as i32 - cy);
         let w = if e.k == Kind::Brute { 30 } else { 20 };
         let a = (e.hpbar.min(40) as f32 / 40.0 * 255.0) as u8;
@@ -903,13 +915,22 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     let _ = alive;
     u.text(8, 8, &g.area.name(), [220, 205, 170], 1, true);
     u.text(8, 17, &format!("AREA LEVEL {}", g.alvl), [150, 140, 150], 1, true);
+    if let Some((k, left)) = g.buff {
+        let (name, _, c) = crate::props::SHRINES[k as usize];
+        let s = left / 60;
+        let txt = format!("{}  {}:{:02}", name.trim_start_matches("SHRINE OF "), s / 60, s % 60);
+        let blink = left > 600 || (left / 15) % 2 == 0;
+        if blink {
+            u.text(8, 27, &txt, c, 1, true);
+        }
+    }
     // boss health
-    if let Some(b) = g.enemies.iter().find(|e| e.alive && e.k == Kind::King && e.aggro) {
+    if let Some(b) = g.enemies.iter().find(|e| e.alive && e.k.boss() && e.aggro) {
         let bw = (fw / 2).min(260);
         let bx = fw / 2 - bw / 2;
         u.rect(bx - 2, 62, bw + 4, 8, [10, 6, 10], 230);
         u.rect(bx, 64, (bw as f32 * (b.hp / b.maxhp).clamp(0.0, 1.0)) as i32, 4, [190, 30, 30], 255);
-        u.text_c(fw / 2, 53, "THE HOLLOW KING", [240, 200, 120], 1);
+        u.text_c(fw / 2, 53, if b.k == Kind::King { "THE HOLLOW KING" } else { "THE BANDIT CHIEF" }, [240, 200, 120], 1);
     }
     // interaction prompt
     if let Some(pr) = &g.prompt {
