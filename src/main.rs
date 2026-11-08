@@ -1,6 +1,7 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod shop;
 mod talents;
 mod nav;
 mod barrels;
@@ -257,8 +258,29 @@ impl App {
             }
         }
         if f == end + 50 {
-            g.wp_open = true;
-            return Some("t14_waypoints".into());
+            // menus stop the clock, so count steps instead of frames from here
+            g.wp_open = g.wp_open || g.merchant.is_none();
+            let sh = self.show.as_mut().unwrap();
+            sh.sub += 1;
+            match sh.sub {
+                1 => return Some("t14_waypoints".into()),
+                3 => {
+                    g.wp_open = false;
+                    g.travel(AreaId::Ashford);
+                    if let Some((mx, my)) = g.merchant {
+                        g.player.x = mx - 10.0;
+                        g.player.y = my + 24.0;
+                        g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
+                    }
+                    g.banner = None;
+                    // open the shop in the same step so the clock stays stopped
+                    g.player.gold = 3000;
+                    g.shop_open = true;
+                }
+                50 => return Some("t15_shop".into()),
+                _ => {}
+            }
+            return None;
         }
         // a powder keg in the cellars with a crowd of bandits round it
         if f == kb {
@@ -704,7 +726,7 @@ impl App {
                     AreaId::Crypt(_) | AreaId::Cellars(_) => audio::Track::Crypt,
                 }
             };
-            let duck = if g.paused || g.tree || g.wp_open || g.inv_open { 0.45 } else { 1.0 };
+            let duck = if g.paused || g.tree || g.wp_open || g.inv_open || g.shop_open { 0.45 } else { 1.0 };
             a.set_music(Some(want), duck);
             let snds = std::mem::take(&mut self.game.sounds);
             a.update(&snds, (self.game.player.x, self.game.player.y));
@@ -748,7 +770,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.tour {
-                shot.as_deref() == Some("t14_waypoints")
+                shot.as_deref() == Some("t15_shop")
             } else if sh.spells {
                 shot.as_deref() == Some("s19_fury")
             } else {

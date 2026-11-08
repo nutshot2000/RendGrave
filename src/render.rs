@@ -464,6 +464,54 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             }
         }
     }
+    // ---- the merchant's stall: a counter under a striped awning, the merchant behind it
+    if let Some((mx, my)) = g.merchant {
+        let (sx, sy) = (mx as i32 - cx, my as i32 - cy);
+        // posts
+        for k in 0..30 {
+            c.put(sx - 15, sy - k, my - 6.0, [92, 64, 40], [0; 3], k as f32);
+            c.put(sx + 15, sy - k, my - 6.0, [80, 56, 36], [0; 3], k as f32);
+        }
+        // the merchant: hooded, round, holding up a lantern
+        let robe = [70, 52, 96];
+        for k in 0..20 {
+            let half = if k < 12 { 5 } else { 4 };
+            for dx in -half..=half {
+                let shade = 0.8 + (dx + half) as f32 / (2 * half) as f32 * 0.35;
+                c.put(sx + dx, sy - 6 - k, my - 4.0, scl(robe, shade), [0; 3], 6.0 + k as f32);
+            }
+        }
+        for dy in 0..7 {
+            for dx in -3i32..=3 {
+                let face = dy > 1 && dy < 6 && dx.abs() < 3;
+                c.put(sx + dx, sy - 26 - dy, my - 4.0, if face { [214, 172, 138] } else { [56, 42, 80] }, [0; 3], 26.0 + dy as f32);
+            }
+        }
+        c.put(sx - 1, sy - 29, my - 3.9, [30, 20, 20], [0; 3], 29.0);
+        c.put(sx + 1, sy - 29, my - 3.9, [30, 20, 20], [0; 3], 29.0);
+        let flick = 0.85 + (t as f32 * 0.3).sin() * 0.1;
+        c.put(sx + 8, sy - 22, my - 3.0, [255, 220, 140], scl([255, 190, 90], flick), 22.0);
+        c.put(sx + 8, sy - 21, my - 3.0, [255, 200, 110], scl([255, 170, 70], flick), 21.0);
+        // counter with goods on it
+        for dx in -14..=14 {
+            for k in 0..9 {
+                let col = if k == 8 { [140, 100, 64] } else if dx % 5 == 0 { [86, 58, 36] } else { [112, 78, 48] };
+                c.put(sx + dx, sy - k, my + 0.2, col, [0; 3], k as f32);
+            }
+        }
+        for &(dx, col) in &[(-10, [220, 40, 60]), (-6, [220, 40, 60]), (2, [190, 190, 205]), (8, [230, 200, 90])] {
+            c.put(sx + dx, sy - 9, my + 0.3, col, [0; 3], 9.0);
+            c.put(sx + dx, sy - 10, my + 0.3, col, [0; 3], 10.0);
+        }
+        // striped awning
+        for dx in -18..=18 {
+            for k in 0..6 {
+                let stripe = ((dx + 18) / 4) % 2 == 0;
+                let col = if stripe { [170, 40, 38] } else { [222, 206, 170] };
+                c.put(sx + dx, sy - 30 - k + (dx.abs() / 6), my - 6.5, scl(col, 0.8 + k as f32 * 0.05), [0; 3], 30.0 + k as f32);
+            }
+        }
+    }
     // ---- barrels: powder kegs (painted cross), oil (dark, steel hoops), acid (green, glowing seam)
     for b in g.barrels.iter().filter(|b| b.alive) {
         let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);

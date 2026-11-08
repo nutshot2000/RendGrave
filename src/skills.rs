@@ -184,7 +184,8 @@ pub fn node(s: Sk) -> &'static Node {
 
 /// XP needed to go from `level` to the next
 pub fn xp_need(level: i32) -> i32 {
-    50 + level * 45 + level * level * 6
+    // paced so a full clear of Act 1 ends around level 18 and the whole game reaches 50
+    150 + level * 110 + level * level * 20
 }
 
 #[derive(Clone)]

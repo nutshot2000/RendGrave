@@ -48,9 +48,10 @@ impl Game {
 
     pub fn xp_for(&self, k: Kind) -> i32 {
         let base = base_xp(k);
-        let area = 1.0 + 0.25 * (self.alvl - 1) as f32;
+        let area = 0.6 + 0.2 * (self.alvl - 1) as f32;
+        // far above an area, its enemies teach you little
         let gap = self.player.sk.level - self.alvl;
-        let penalty = if gap > 8 { 0.15 } else if gap > 4 { 0.5 } else { 1.0 };
+        let penalty = if gap > 6 { 0.2 } else if gap > 3 { 0.5 } else { 1.0 };
         (base * area * penalty) as i32
     }
 }
@@ -112,6 +113,11 @@ impl Game {
         }
         self.exits = sp.exits;
         self.waypoint = sp.waypoint;
+        self.merchant = sp.merchant;
+        self.shop_open = false;
+        if to == AreaId::Ashford {
+            self.restock();
+        }
         self.player.x = x;
         self.player.y = y;
         self.player.burn = 0;
@@ -168,6 +174,17 @@ impl Game {
                     self.snd(Sfx::Click, wx, wy, 0.8);
                     self.wp_open = true;
                     self.hold_block = true;
+                }
+                return;
+            }
+        }
+        if let Some((mx, my)) = self.merchant {
+            if ((self.player.x - mx).powi(2) + ((self.player.y - my) * 1.4).powi(2)).sqrt() < 34.0 {
+                self.prompt = Some("E  TRADE WITH THE MERCHANT".into());
+                if press {
+                    self.shop_open = true;
+                    self.hold_block = true;
+                    self.snd(Sfx::Coin, mx, my, 0.7);
                 }
                 return;
             }

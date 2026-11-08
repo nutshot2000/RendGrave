@@ -290,6 +290,10 @@ pub struct Game {
     pub toast: Option<(String, i32)>,
     pub ground: Vec<GroundItem>,
     pub inv_open: bool,
+    pub shop_open: bool,
+    pub shop: Vec<Item>,
+    pub shop_hover: Option<(u8, usize)>,
+    pub merchant: Option<(f32, f32)>,
     pub inv_hover: Option<(u8, usize)>,
 }
 
@@ -463,6 +467,10 @@ impl Game {
             toast: None,
             ground: vec![],
             inv_open: false,
+            shop_open: false,
+            shop: vec![],
+            shop_hover: None,
+            merchant: None,
             inv_hover: None,
         }
     }
@@ -591,6 +599,16 @@ impl Game {
             self.hold_block = true;
             let (x, y) = (self.player.x, self.player.y);
             self.snd(Sfx::Click, x, y, 0.6);
+        }
+        if self.shop_open {
+            if (inp.close && !self.prev.close) || (inp.interact && !self.prev.interact) || (inp.inv && !self.prev.inv) {
+                self.shop_open = false;
+                self.hold_block = true;
+            } else {
+                self.update_shop(inp);
+            }
+            self.prev = inp.clone();
+            return;
         }
         if self.inv_open {
             if inp.close && !self.prev.close {

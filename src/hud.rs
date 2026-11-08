@@ -1189,6 +1189,9 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     if g.inv_open {
         draw_inventory(g, &mut u, fw, fh);
     }
+    if g.shop_open {
+        draw_shop(g, &mut u, fw, fh);
+    }
     if let Some((msg, t)) = &g.toast {
         let a = ((*t).min(20) as f32 / 20.0 * 255.0) as u8;
         let w = Ui::text_w(msg, 1);
@@ -1207,4 +1210,110 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         }
     }
     u.px(mx, my, [255, 80, 60], 255);
+}
+
+// ------------------------------------------------------------------ merchant
+fn shop_cell(k: usize) -> (i32, i32, i32) {
+    (24 + (k % 4) as i32 * 27, 50 + (k / 4) as i32 * 27, 22)
+}
+fn potion_button() -> (i32, i32, i32, i32) {
+    (24, 112, 103, 16)
+}
+/// (0 stock, k) / (1 bag, k) / (2 potion, 0)
+pub fn shop_at(m: (f32, f32), view: (f32, f32)) -> Option<(u8, usize)> {
+    let (fw, fh) = (view.0 as i32, view.1 as i32);
+    let (mx, my) = (m.0 as i32, m.1 as i32);
+    for k in 0..crate::shop::STOCK {
+        let (x, y, s) = shop_cell(k);
+        if mx >= x && mx < x + s && my >= y && my < y + s {
+            return Some((0, k));
+        }
+    }
+    let (x, y, w, h) = potion_button();
+    if mx >= x && mx < x + w && my >= y && my < y + h {
+        return Some((2, 0));
+    }
+    for k in 0..BAG_SIZE {
+        let (x, y, s) = inv_cell(1, k, fw, fh);
+        if mx >= x && mx < x + s && my >= y && my < y + s {
+            return Some((1, k));
+        }
+    }
+    None
+}
+
+fn draw_shop(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
+    let p = &g.player;
+    u.rect(0, 0, fw, fh, [10, 6, 6], 228);
+    u.text(12, 10, "MERCHANT", [240, 214, 150], 2, true);
+    let gs = format!("{} GOLD", p.gold);
+    u.text(fw - Ui::text_w(&gs, 1) - 12, 12, &gs, [255, 214, 90], 1, true);
+    u.text(fw - Ui::text_w("E CLOSE", 1) - 12, 22, "E CLOSE", [150, 140, 150], 1, true);
+    u.text(24, 38, "FOR SALE", [200, 180, 150], 1, false);
+    for k in 0..crate::shop::STOCK {
+        let (x, y, s) = shop_cell(k);
+        let hover = g.shop_hover == Some((0, k));
+        let it = g.shop.get(k);
+        u.rect(x - 1, y - 1, s + 2, s + 2, if hover { [255, 255, 255] } else if let Some(i) = it { mul_c(i.rarity.col(), 0.8) } else { [50, 42, 54] }, 255);
+        u.rect(x, y, s, s, [22, 16, 18], 255);
+        if let Some(it) = it {
+            item_icon(u, x + 3, y + 3, it);
+            if g.is_upgrade(it) {
+                for k in 0..4 {
+                    u.rect(x + s - 6 - k, y + 2 + k, 1 + k * 2, 1, [90, 240, 90], 255);
+                }
+                u.rect(x + s - 7, y + 6, 3, 3, [90, 240, 90], 255);
+            }
+        }
+    }
+    let (bx, by, bw, bh) = potion_button();
+    let hover = g.shop_hover == Some((2, 0));
+    u.rect(bx - 1, by - 1, bw + 2, bh + 2, if hover { [255, 255, 255] } else { [160, 40, 50] }, 255);
+    u.rect(bx, by, bw, bh, [36, 14, 18], 255);
+    disc(u, bx + 8, by + 9, 4.0, [220, 40, 60]);
+    u.rect(bx + 6, by + 2, 4, 3, [180, 170, 160], 255);
+    u.text(bx + 16, by + 5, &format!("POTION  {} GOLD", g.potion_price()), [240, 220, 200], 1, false);
+    u.text(24, 134, &format!("POTIONS CARRIED {}/{}", p.potions, crate::shop::MAX_POTIONS), [170, 150, 150], 1, false);
+    u.text(24, 150, "NEW STOCK EACH TIME", [120, 110, 120], 1, false);
+    u.text(24, 159, "YOU RETURN TO ASHFORD", [120, 110, 120], 1, false);
+    // your bag
+    let (gx, _, _) = inv_cell(1, 0, fw, fh);
+    u.text(gx, 38, "YOUR BAG", [200, 180, 150], 1, false);
+    for k in 0..BAG_SIZE {
+        let (x, y, s) = inv_cell(1, k, fw, fh);
+        let hover = g.shop_hover == Some((1, k));
+        let it = p.bag.get(k);
+        u.rect(x - 1, y - 1, s + 2, s + 2, if hover { [255, 255, 255] } else if let Some(i) = it { mul_c(i.rarity.col(), 0.7) } else { [50, 42, 54] }, 255);
+        u.rect(x, y, s, s, [18, 13, 20], 255);
+        if let Some(it) = it {
+            item_icon(u, x + 3, y + 3, it);
+        }
+    }
+    let (_, ly, _) = inv_cell(1, BAG_SIZE - 1, fw, fh);
+    u.text(gx, ly + 30, "CLICK TO BUY OR EQUIP   RIGHT CLICK TO SELL", [150, 140, 150], 1, false);
+    // tooltip with the price
+    let (it, price) = match g.shop_hover {
+        Some((0, k)) => (g.shop.get(k), g.shop.get(k).map(|i| (format!("BUY FOR {} GOLD", Game::price(i)), p.gold >= Game::price(i)))),
+        Some((1, k)) => (p.bag.get(k), p.bag.get(k).map(|i| (format!("SELLS FOR {} GOLD", i.value()), true))),
+        _ => (None, None),
+    };
+    if let Some(it) = it {
+        let mut all = item_lines(it);
+        if g.is_upgrade(it) {
+            all.push(("BETTER THAN WHAT YOU WEAR".into(), [120, 230, 120]));
+        }
+        if let Some((t, ok)) = price {
+            all.push((t, if ok { [255, 214, 90] } else { [240, 110, 110] }));
+        }
+        let w = all.iter().map(|l| Ui::text_w(&l.0, 1)).max().unwrap_or(60) + 12;
+        let h = all.len() as i32 * 9 + 8;
+        let (mx, my) = (g.prev.mouse.0 as i32 + 12, g.prev.mouse.1 as i32 + 8);
+        let x = mx.min(fw - w - 4);
+        let y = my.min(fh - h - 4);
+        u.rect(x, y, w, h, [16, 11, 18], 245);
+        u.rect(x, y, w, 1, it.rarity.col(), 255);
+        for (k, (t, c)) in all.iter().enumerate() {
+            u.text(x + 6, y + 5 + k as i32 * 9, t, *c, 1, false);
+        }
+    }
 }

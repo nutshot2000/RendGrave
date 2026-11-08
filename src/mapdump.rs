@@ -107,7 +107,7 @@ pub fn dump(dir: &str) {
         for c in &sp.chests {
             items += if c.2 > 0 { 1.35 } else { 0.4 * 0.5 };
         }
-        let area = 1.0 + 0.25 * (id.level() - 1) as f32;
+        let area = 0.6 + 0.2 * (id.level() - 1) as f32;
         let xp: f32 = sp.enemies.iter().map(|e| crate::areas::base_xp(e.0) * area * if matches!(e.0, Kind::King | Kind::Chief) { 1.0 } else { 1.0 + 2.0 * elite_share }).sum();
         println!("{:<12} xp {:>6.0}  lv {:>2}", id.key(), xp, id.level());
         println!("{:<12} {}x{}  {:>4.0} ms  enemies {:>3}  chests {}  shrines {}  exits {}  items ~{:.1}", id.key(), w.aw, w.ah, ms, sp.enemies.len(), sp.chests.len(), sp.shrines.len(), sp.exits.len(), items);

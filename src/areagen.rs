@@ -49,12 +49,12 @@ impl AreaId {
     pub fn level(&self) -> i32 {
         match self {
             AreaId::Ashford => 1,
-            AreaId::Pines => 2,
-            AreaId::Graveyard => 5,
-            AreaId::Fen => 7,
-            AreaId::Ravenhold => 9,
-            AreaId::Crypt(f) => 2 + *f as i32,
-            AreaId::Cellars(f) => 9 + *f as i32,
+            AreaId::Pines => 3,
+            AreaId::Graveyard => 8,
+            AreaId::Fen => 10,
+            AreaId::Ravenhold => 12,
+            AreaId::Crypt(f) => 4 + *f as i32,
+            AreaId::Cellars(f) => 12 + *f as i32,
         }
     }
     pub fn is_dungeon(&self) -> bool {
@@ -205,10 +205,12 @@ pub struct Spawns {
     pub shrines: Vec<(f32, f32, u8)>,
     /// (x, y, kind): 0 powder keg, 1 oil, 2 acid
     pub barrels: Vec<(f32, f32, u8)>,
+    /// the merchant's stall
+    pub merchant: Option<(f32, f32)>,
 }
 impl Spawns {
     fn new() -> Spawns {
-        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![] }
+        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None }
     }
     pub fn arrival(&self, from: AreaId) -> (f32, f32) {
         self.entries.iter().find(|e| e.0 == from).map(|e| (e.1, e.2)).unwrap_or(self.start)
@@ -649,6 +651,12 @@ fn town(w: &mut World, s: u32) -> Spawns {
         }
     }
     waypoint(w, &mut sp, 552.0, 418.0);
+    // the merchant's stall, just off the square on the east road
+    let (mx, my) = (600.0, 374.0);
+    clearing(w, mx, my, 26.0, 14.0, DIRT);
+    w.rect(mx as i32 - 14, my as i32 - 2, mx as i32 + 15, my as i32 + 2, WOOD);
+    sp.merchant = Some((mx, my));
+    sp.lamps.push((mx, my - 10.0, [1.0, 0.75, 0.4]));
     for &(x, y) in &[(712.0, 372.0), (712.0, 408.0), (400.0, 330.0), (620.0, 340.0), (400.0, 430.0), (620.0, 436.0)] {
         sp.braziers.push((x, y));
     }
