@@ -47,7 +47,18 @@ impl Game {
     }
 
     pub fn xp_for(&self, k: Kind) -> i32 {
-        let base = match k {
+        let base = base_xp(k);
+        let area = 1.0 + 0.25 * (self.alvl - 1) as f32;
+        let gap = self.player.sk.level - self.alvl;
+        let penalty = if gap > 8 { 0.15 } else if gap > 4 { 0.5 } else { 1.0 };
+        (base * area * penalty) as i32
+    }
+}
+
+/// XP for a kill before area scaling
+pub fn base_xp(k: Kind) -> f32 {
+    {
+        match k {
             Kind::King => 600.0,
             Kind::Chief => 900.0,
             Kind::Brute => 90.0,
@@ -58,12 +69,11 @@ impl Game {
             Kind::Skeleton => 26.0,
             Kind::Crawler => 16.0,
             _ => 20.0,
-        };
-        let area = 1.0 + 0.25 * (self.alvl - 1) as f32;
-        let gap = self.player.sk.level - self.alvl;
-        let penalty = if gap > 8 { 0.15 } else if gap > 4 { 0.5 } else { 1.0 };
-        (base * area * penalty) as i32
+        }
     }
+}
+
+impl Game {
 
     /// leave the current area and arrive in another
     pub fn travel(&mut self, to: AreaId) {
