@@ -1,6 +1,8 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod audio;
+mod synth;
 mod body;
 mod areagen;
 mod game;
@@ -41,6 +43,7 @@ struct App {
     fps_t: Instant,
     fps_n: u32,
     sel_pending: Option<usize>,
+    audio: Option<audio::Audio>,
 }
 
 impl App {
@@ -367,6 +370,30 @@ impl ApplicationHandler for App {
                         KeyCode::KeyF => i.potion = down,
                         KeyCode::KeyR => i.restart = down,
                         KeyCode::KeyE => i.interact = down,
+                        KeyCode::KeyM if down && !event.repeat => {
+                            if let Some(a) = &mut self.audio {
+                                a.toggle_music();
+                                self.game.toast = Some((if a.music_on { "MUSIC ON" } else { "MUSIC OFF" }.into(), 90));
+                            }
+                        }
+                        KeyCode::KeyN if down && !event.repeat => {
+                            if let Some(a) = &mut self.audio {
+                                a.toggle_sfx();
+                                self.game.toast = Some((if a.sfx_on { "SOUND ON" } else { "SOUND OFF" }.into(), 90));
+                            }
+                        }
+                        KeyCode::Minus | KeyCode::NumpadSubtract if down => {
+                            if let Some(a) = &mut self.audio {
+                                a.change_volume(-0.1);
+                                self.game.toast = Some((format!("VOLUME {}%", (a.volume * 100.0).round() as i32), 90));
+                            }
+                        }
+                        KeyCode::Equal | KeyCode::NumpadAdd if down => {
+                            if let Some(a) = &mut self.audio {
+                                a.change_volume(0.1);
+                                self.game.toast = Some((format!("VOLUME {}%", (a.volume * 100.0).round() as i32), 90));
+                            }
+                        }
                         KeyCode::Digit1 if down => self.sel_pending = Some(0),
                         KeyCode::Digit2 if down => self.sel_pending = Some(1),
                         KeyCode::Digit3 if down => self.sel_pending = Some(2),
@@ -450,6 +477,27 @@ impl App {
                 self.acc = 0.0;
             }
         }
+        if let Some(a) = &mut self.audio {
+            use areagen::AreaId;
+            let g = &self.game;
+            let want = if g.player.dead {
+                audio::Track::Title
+            } else if g.enemies.iter().any(|e| e.alive && e.k == body::Kind::King && e.aggro) {
+                audio::Track::Boss
+            } else {
+                match g.area {
+                    AreaId::Ashford => audio::Track::Ashford,
+                    AreaId::Pines | AreaId::Graveyard => audio::Track::Pines,
+                    AreaId::Crypt(_) => audio::Track::Crypt,
+                }
+            };
+            let duck = if g.paused || g.tree || g.wp_open { 0.45 } else { 1.0 };
+            a.set_music(Some(want), duck);
+            let snds = std::mem::take(&mut self.game.sounds);
+            a.update(&snds, (self.game.player.x, self.game.player.y));
+        } else {
+            self.game.sounds.clear();
+        }
         let Some(frame) = &mut self.frame else { return };
         if frame.w as u32 != rw || frame.h as u32 != rh {
             *frame = gfx::Frame::new(rw as usize, rh as usize);
@@ -501,6 +549,42 @@ impl App {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--sfx-dump") {
+        // write every synthesised sound effect to WAV files for listening
+        let dir = args.get(i + 1).cloned().unwrap_or_else(|| "sfx".into());
+        std::fs::create_dir_all(&dir).ok();
+        let t0 = Instant::now();
+        let bank = synth::build_bank();
+        println!("bank built in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0);
+        let mut keys: Vec<_> = bank.keys().copied().collect();
+        keys.sort_by_key(|k| format!("{:?}", k));
+        for k in keys {
+            for (n, v) in bank[&k].iter().enumerate() {
+                let path = format!("{}/{:?}_{}.wav", dir, k, n);
+                let mut out = Vec::with_capacity(44 + v.len() * 2);
+                let data = (v.len() * 2) as u32;
+                out.extend_from_slice(b"RIFF");
+                out.extend_from_slice(&(36 + data).to_le_bytes());
+                out.extend_from_slice(b"WAVEfmt ");
+                out.extend_from_slice(&16u32.to_le_bytes());
+                out.extend_from_slice(&1u16.to_le_bytes());
+                out.extend_from_slice(&1u16.to_le_bytes());
+                out.extend_from_slice(&audio::SR.to_le_bytes());
+                out.extend_from_slice(&(audio::SR * 2).to_le_bytes());
+                out.extend_from_slice(&2u16.to_le_bytes());
+                out.extend_from_slice(&16u16.to_le_bytes());
+                out.extend_from_slice(b"data");
+                out.extend_from_slice(&data.to_le_bytes());
+                for s in v {
+                    out.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+                }
+                std::fs::write(&path, out).ok();
+                let peak = v.iter().fold(0.0f32, |a, b| a.max(b.abs()));
+                println!("{:?}_{}  {:.2}s  peak {:.2}", k, n, v.len() as f32 / audio::SR as f32, peak);
+            }
+        }
+        return;
+    }
     let lab = args.iter().any(|a| a == "--lab");
     let spells = args.iter().any(|a| a == "--spells");
     let tour = args.iter().any(|a| a == "--tour");
@@ -513,6 +597,7 @@ fn main() {
     let seed = if show.is_some() { 7 } else { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1) };
     let el = EventLoop::new().expect("event loop");
     el.set_control_flow(ControlFlow::Poll);
+    let testing = show.is_some();
     let mut app = App {
         gfx: None,
         game: if show.is_some() { game::Game::new(seed) } else { game::Game::start(!fresh) },
@@ -526,6 +611,7 @@ fn main() {
         fps_t: Instant::now(),
         fps_n: 0,
         sel_pending: None,
+        audio: if testing { None } else { audio::Audio::new() },
     };
     el.run_app(&mut app).expect("run");
 }

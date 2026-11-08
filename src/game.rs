@@ -6,6 +6,7 @@ use crate::world::*;
 use crate::skills::*;
 use crate::spells::*;
 use crate::areagen::*;
+use crate::audio::{Sfx, Snd};
 
 #[derive(Default, Clone)]
 pub struct Input {
@@ -253,6 +254,8 @@ pub struct Game {
     pub saving: bool,
     pub buildings: Vec<Building>,
     pub lamps: Vec<(f32, f32, [f32; 3])>,
+    pub sounds: Vec<Snd>,
+    pub toast: Option<(String, i32)>,
 }
 
 fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
@@ -394,6 +397,8 @@ impl Game {
             saving: false,
             buildings: vec![],
             lamps: vec![],
+            sounds: vec![],
+            toast: None,
         }
     }
 
@@ -402,6 +407,9 @@ impl Game {
         if self.ptcs.len() < 7000 {
             self.ptcs.push(Ptc { x, y, z, vx, vy, vz, life, max: life, k, c });
         }
+    }
+    pub fn snd(&mut self, k: Sfx, x: f32, y: f32, v: f32) {
+        self.sounds.push(Snd { k, x, y, v });
     }
     pub fn light(&mut self, x: f32, y: f32, r: f32, i: f32, c: [f32; 3], t: i32) {
         self.lights.push(Lt { x, y, r, i, c, t, max: t });
@@ -529,6 +537,8 @@ impl Game {
             if inp.lmb && !self.prev.lmb {
                 if let Some(i) = self.tree_hover {
                     if self.player.sk.learn(i) {
+                        let (x, y) = (self.player.x, self.player.y);
+                        self.snd(Sfx::Chime, x, y, 0.7);
                         self.recalc();
                         self.flash = self.flash.max(0.05);
                     }
@@ -641,6 +651,7 @@ impl Game {
             let (ddx, ddy) = if l > 0.0 { (dx, dy) } else { (aim.cos(), aim.sin() * 0.6) };
             p.dodge = 16;
             p.dodge_cd = 38;
+            self.sounds.push(Snd { k: Sfx::Dodge, x: p.x, y: p.y, v: 0.8 });
             p.inv = 18;
             p.dv = (ddx * 3.1, ddy * 3.1);
         }
@@ -657,7 +668,11 @@ impl Game {
         p.x = x;
         p.y = y;
         if p.moving {
+            let before = (p.phase / std::f32::consts::PI) as i32;
             p.phase += 0.2;
+            if (p.phase / std::f32::consts::PI) as i32 != before && p.dodge == 0 {
+                self.sounds.push(Snd { k: Sfx::Step, x: p.x, y: p.y, v: 0.5 });
+            }
         }
         if p.wet > 0 {
             p.wet -= 1;
@@ -686,6 +701,7 @@ impl Game {
         // potion
         if inp.potion && !self.prev.potion && p.potions > 0 && p.hp < p.maxhp {
             p.potions -= 1;
+            self.sounds.push(Snd { k: Sfx::Potion, x: p.x, y: p.y, v: 1.0 });
             p.hp = (p.hp + 45.0).min(p.maxhp);
             let (x, y) = (p.x, p.y);
             for _ in 0..30 {
@@ -697,6 +713,7 @@ impl Game {
         // sword
         if inp.lmb && p.swing == 0 && p.dodge == 0 && p.whirl == 0 {
             p.swing = 16;
+            self.sounds.push(Snd { k: Sfx::Swing, x: p.x, y: p.y, v: 0.8 });
             p.swung = false;
             p.swing_a = aim;
             p.swing_side = -p.swing_side;
@@ -770,6 +787,7 @@ impl Game {
         b.compute();
         if p.hp <= 0.0 && !p.dead {
             p.dead = true;
+            self.sounds.push(Snd { k: Sfx::Death, x: p.x, y: p.y, v: 1.0 });
             p.hp = 0.0;
             let (x, y) = (p.x, p.y);
             self.banner = Some(("YOU DIED".into(), "PRESS R TO WAKE IN ASHFORD".into(), 100000));
@@ -800,6 +818,7 @@ impl Game {
                 if da < 1.2 && self.world.at(x, y) == WOOD && rnd() < 0.5 {
                     self.world.set(x, y, E);
                     self.ptc(x as f32, y as f32, rr(2.0, 8.0), rr(-1.0, 1.0), rr(-1.0, 1.0), rr(0.5, 1.5), 200, PtK::Debris, [120, 86, 52]);
+                    self.sounds.push(Snd { k: Sfx::Wood, x: x as f32, y: y as f32, v: 0.6 });
                 }
             }
         }
@@ -845,6 +864,7 @@ impl Game {
     }
 
     pub fn cast_lightning(&mut self, mx: f32, my: f32, _inp: &Input) {
+        self.sounds.push(Snd { k: Sfx::Zap, x: self.player.x, y: self.player.y, v: 0.7 });
         let (px, py) = (self.player.x, self.player.y);
         let hand = (px + self.player.face * 9.0, py - 30.0);
         // the enemy under the cursor, or the closest one to it
@@ -962,6 +982,7 @@ impl Game {
     }
 
     pub fn cast_fireball(&mut self, mx: f32, my: f32) {
+        self.sounds.push(Snd { k: Sfx::Fireball, x: self.player.x, y: self.player.y, v: 0.8 });
         let p = &self.player;
         let (dx, dy) = (mx - p.x, my - p.y);
         let l = (dx * dx + dy * dy).sqrt().max(1.0);
@@ -969,6 +990,7 @@ impl Game {
         self.projs.push(Proj { k: 0, x: sx, y: sy, z: 26.0, vx: dx / l * 4.0, vy: dy / l * 4.0, vz: 0.0, life: 90 });
     }
     pub fn cast_acid(&mut self, mx: f32, my: f32) {
+        self.sounds.push(Snd { k: Sfx::Swing, x: self.player.x, y: self.player.y, v: 0.5 });
         let n = 3 + self.rank(Sk::Corrosion);
         let p = &self.player;
         let (dx, dy) = (mx - p.x, my - p.y);
@@ -984,6 +1006,7 @@ impl Game {
         }
     }
     pub fn cast_nova(&mut self) {
+        self.sounds.push(Snd { k: Sfx::Frost, x: self.player.x, y: self.player.y, v: 1.0 });
         let (x, y) = (self.player.x, self.player.y);
         self.novas.push(Nova { x, y, r: 4.0, t: 0 });
         self.light(x, y, 150.0, 2.0, [0.5, 0.8, 1.0], 30);
@@ -991,6 +1014,7 @@ impl Game {
     }
 
     pub fn explode(&mut self, x: f32, y: f32, z: f32, r: f32) {
+        self.sounds.push(Snd { k: Sfx::Explosion, x: x, y: y, v: (r / 16.0).min(1.3) });
         self.shake = self.shake.max(6.0);
         self.hitstop = self.hitstop.max(3);
         self.flash = self.flash.max(0.12);
@@ -1136,7 +1160,9 @@ impl Game {
                         }
                         1 => self.acid_hit(x, y, z, hit_e),
                         3 => {
+                            self.sounds.push(Snd { k: Sfx::ArrowHit, x: x, y: y, v: 0.7 });
                             if hit_p && self.player.inv == 0 {
+                                self.sounds.push(Snd { k: Sfx::Hurt, x: self.player.x, y: self.player.y, v: 1.0 });
                                 let d = 10.0 * (1.0 + 0.1 * (self.alvl - 1) as f32) * rr(0.85, 1.15);
                                 self.player.hp -= d;
                                 self.player.hurt = 1.0;
@@ -1191,6 +1217,7 @@ impl Game {
     }
 
     fn acid_hit(&mut self, x: f32, y: f32, z: f32, e: Option<usize>) {
+        self.sounds.push(Snd { k: Sfx::Acid, x: x, y: y, v: 0.7 });
         if let Some(i) = e {
             let en = &mut self.enemies[i];
             en.aggro = true;
@@ -1216,6 +1243,7 @@ impl Game {
     }
 
     pub fn shatter(&mut self, i: usize) {
+        self.sounds.push(Snd { k: Sfx::Shatter, x: self.enemies[i].x, y: self.enemies[i].y, v: 1.0 });
         let e = &mut self.enemies[i];
         e.alive = false;
         e.hp = 0.0;
@@ -1347,6 +1375,9 @@ impl Game {
             let m = e.body.mirror;
             let k = e.k;
             if had {
+                if big_piece {
+                    self.sounds.push(Snd { k: Sfx::Sever, x: ex, y: ey, v: 1.0 });
+                }
                 e.bleed = 160;
                 e.flash = 4;
                 e.hpbar = 180;
@@ -1405,6 +1436,14 @@ impl Game {
             let dist = (dx * dx + dy * dy * 1.6).sqrt();
             if !e.aggro && dist < if e.k.big() { 130.0 } else if e.k == Kind::Archer { 190.0 } else { 160.0 } && self.world.los(e.x, e.y - 1.0, px, py - 1.0) {
                 e.aggro = true;
+                let k = match e.k {
+                    Kind::Zombie | Kind::Crawler => Sfx::Groan,
+                    Kind::Brute => Sfx::Roar,
+                    Kind::King => Sfx::KingRoar,
+                    _ => Sfx::Rattle,
+                };
+                let (ex3, ey3) = (e.x, e.y);
+                self.sounds.push(Snd { k, x: ex3, y: ey3, v: 0.9 });
             }
             let e = &mut self.enemies[i];
             let mut want = (0.0f32, 0.0f32);
@@ -1436,6 +1475,16 @@ impl Game {
                         if e.k != Kind::Archer && dist < e.reach && (armed || matches!(e.k, Kind::Zombie | Kind::Crawler)) && e.hit_cd == 0 {
                             e.st = St::Wind;
                             e.t = e.windup;
+                            let k = match e.k {
+                                Kind::Zombie | Kind::Crawler => Some(Sfx::Groan),
+                                Kind::Brute => Some(Sfx::Roar),
+                                Kind::King if rnd() < 0.3 => Some(Sfx::KingRoar),
+                                _ => None,
+                            };
+                            if let Some(k) = k {
+                                let (ex3, ey3) = (e.x, e.y);
+                                self.sounds.push(Snd { k, x: ex3, y: ey3, v: 0.7 });
+                            }
                         }
                         e.face = if dx < 0.0 { -1.0 } else { 1.0 };
                     }
@@ -1455,6 +1504,7 @@ impl Game {
                                 let l = (adx * adx + ady * ady).sqrt().max(1.0);
                                 let f = e.face;
                                 self.projs.push(Proj { k: 3, x: ex2 + f * 6.0, y: ey2 + 1.0, z: 30.0, vx: adx / l * 4.2, vy: ady / l * 4.2, vz: 0.0, life: 70 });
+                                self.sounds.push(Snd { k: Sfx::Bow, x: ex2, y: ey2, v: 0.8 });
                             }
                             if k2.big() {
                                 self.shake = self.shake.max(7.0);
@@ -1473,7 +1523,12 @@ impl Game {
                                     }
                                 }
                             }
+                            if k2.big() {
+                                self.sounds.push(Snd { k: Sfx::Crumble, x: ex2, y: ey2, v: 0.8 });
+                            }
                             if ok && self.player.inv == 0 && !self.player.dead {
+                                self.sounds.push(Snd { k: Sfx::Hurt, x: self.player.x, y: self.player.y, v: 1.0 });
+                                self.sounds.push(Snd { k: Sfx::HitFlesh, x: self.player.x, y: self.player.y, v: 0.8 });
                                 self.player.hp -= dmg * rr(0.85, 1.15);
                                 self.player.hurt = 1.0;
                                 self.player.inv = 14;
@@ -1798,6 +1853,12 @@ impl Game {
     }
 
     fn update_misc(&mut self) {
+        if let Some(t) = &mut self.toast {
+            t.1 -= 1;
+            if t.1 <= 0 {
+                self.toast = None;
+            }
+        }
         let br = self.rank(Sk::Brittle);
         // chimney smoke
         if self.frame % 7 == 0 {
@@ -1916,13 +1977,16 @@ impl Game {
             let p = self.pickups.swap_remove(i);
             if p.k == 0 {
                 self.player.gold += p.amt;
+                self.sounds.push(Snd { k: Sfx::Coin, x: px, y: py, v: 0.8 });
                 self.float(px, py - 56.0, format!("+{} GOLD", p.amt), [255, 214, 90], false);
             } else if p.k == 1 {
                 self.player.potions += 1;
+                self.sounds.push(Snd { k: Sfx::Coin, x: px, y: py, v: 0.6 });
                 self.float(px, py - 56.0, "+POTION".into(), [255, 110, 120], false);
             } else {
                 let i = p.amt as usize;
                 self.player.sk.tomes[i] = true;
+                self.sounds.push(Snd { k: Sfx::Chime, x: px, y: py, v: 1.0 });
                 self.banner = Some((format!("TOME OF {}", NODES[i].name), "LEARN IT IN THE SKILL TREE AT LEVEL 30".into(), 260));
             }
         }

@@ -21,6 +21,8 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
 | Space | Dodge roll |
 | F | Drink a potion |
 | E | Use exits, stairs and waypoints |
+| M / N | Music on/off, sound effects on/off |
+| - / + | Volume |
 | R | After dying: wake in Ashford |
 | F11 | Fullscreen |
 | Esc | Pause (or close the skill tree). Close the window to quit |
@@ -31,6 +33,7 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
     cargo run --release -- --lab lab          # enemy lineup, one effect each, close-up screenshots
     cargo run --release -- --spells spl       # every spell unlocked and cast, plus the skill tree screen
     cargo run --release -- --tour tour        # visits and screenshots every area
+    cargo run --release -- --sfx-dump sfx     # writes every synthesised sound effect to WAV
 
 ## Code map
 

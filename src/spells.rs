@@ -5,6 +5,7 @@ use crate::game::*;
 use crate::rng::*;
 use crate::skills::*;
 use crate::world::*;
+use crate::audio::Sfx;
 
 pub struct Field {
     pub k: u8, // 0 thunderstorm (follows you), 1 acid rain, 2 blizzard
@@ -59,7 +60,17 @@ impl Game {
         let cut = e.body.cut(ax, h + ax * slope, bx, h + bx * slope, power);
         let metal = cut.iter().filter(|c| c.2 == PM_METAL).count();
         let flesh = cut.len() - metal;
+        let bone = cut.iter().filter(|c| c.2 == PM_BONE).count();
         let mut d = if flesh > 0 { dmg + flesh as f32 * 0.6 } else { dmg * 0.2 };
+        let (sx, sy) = (e.x, e.y);
+        let k = if flesh == 0 && metal > 0 {
+            Sfx::HitMetal
+        } else if bone * 2 > flesh || e.k.bony() {
+            Sfx::HitBone
+        } else {
+            Sfx::HitFlesh
+        };
+        self.sounds.push(crate::audio::Snd { k, x: sx, y: sy, v: 1.0 });
         if crit {
             d *= 1.6;
         }
@@ -92,6 +103,8 @@ impl Game {
 
     /// A lightning strike on an enemy: damage, stun, a scorched path through the body.
     pub fn zap_enemy(&mut self, i: usize, base: f32) {
+        let (zx, zy) = (self.enemies[i].x, self.enemies[i].y);
+        self.snd(Sfx::Zap, zx, zy, 0.6);
         let mult = 1.0 + 0.15 * self.rank(Sk::ChainMastery) as f32;
         let e = &mut self.enemies[i];
         let wet = e.wet > 0;
@@ -135,6 +148,8 @@ impl Game {
                 self.projs.push(Proj { k: 2, x: p.x + p.face * 8.0, y: p.y + 1.0, z: 22.0, vx: dx / l * 1.1, vy: dy / l * 1.1, vz: 0.0, life: 330 });
             }
             Sk::Thunderstorm => {
+                let (x, y) = (self.player.x, self.player.y);
+                self.snd(Sfx::Thunder, x, y, 1.0);
                 self.fields.push(Field { k: 0, x: 0.0, y: 0.0, t: 0, max: 360, r: 150.0 });
                 self.flash = self.flash.max(0.2);
                 self.banner_small("THE SKY ANSWERS");
@@ -154,9 +169,14 @@ impl Game {
                     self.spikes.push(Spike { x: px + dx / l * d + rr(-2.0, 2.0), y: py + dy / l * d + rr(-1.5, 1.5), t: -(k * 3), h: rr(12.0, 18.0) });
                 }
             }
-            Sk::Blizzard => self.fields.push(Field { k: 2, x: mx, y: my, t: 0, max: 360, r: 46.0 }),
+            Sk::Blizzard => {
+                self.snd(Sfx::Frost, mx, my, 1.0);
+                self.fields.push(Field { k: 2, x: mx, y: my, t: 0, max: 360, r: 46.0 })
+            }
             Sk::Whirlwind => {
                 self.player.whirl = 30;
+                let (x, y) = (self.player.x, self.player.y);
+                self.snd(Sfx::Whirl, x, y, 1.0);
             }
             _ => {}
         }
@@ -235,6 +255,7 @@ impl Game {
                             (x + rr(-r, r) * 0.7, y + rr(-r, r) * 0.5, None)
                         };
                         self.add_bolt((tx + rr(-30.0, 30.0), ty - 200.0), (tx, ty));
+                        self.snd(Sfx::Thunder, tx, ty, 0.9);
                         self.flash = self.flash.max(0.08);
                         self.shake = self.shake.max(2.0);
                         self.world.ignite(tx as i32, ty as i32);
@@ -371,6 +392,7 @@ impl Game {
                         }
                     }
                 }
+                self.snd(Sfx::Crumble, x, y, 1.0);
                 self.shake = 12.0;
                 self.hitstop = 6;
                 self.flash = self.flash.max(0.12);
@@ -393,6 +415,7 @@ impl Game {
         }
         let new: Vec<(f32, f32)> = self.spikes.iter().filter(|s| s.t == 1).map(|s| (s.x, s.y)).collect();
         for (x, y) in new {
+            self.snd(Sfx::Shatter, x, y, 0.4);
             for _ in 0..6 {
                 self.ptc(x, y, rr(0.0, 12.0), rr(-1.0, 1.0), rr(-0.6, 0.6), rr(0.5, 2.0), 50, PtK::Ice, [210, 240, 255]);
             }
@@ -493,6 +516,8 @@ impl Game {
             ups += 1;
         }
         if ups > 0 {
+            let (lx, ly) = (self.player.x, self.player.y);
+            self.snd(Sfx::LevelUp, lx, ly, 1.0);
             let lvl = self.player.sk.level;
             self.recalc();
             let p = &mut self.player;

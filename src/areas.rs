@@ -5,6 +5,7 @@ use crate::game::*;
 use crate::areagen::*;
 use crate::rng::*;
 use crate::skills::*;
+use crate::audio::Sfx;
 
 pub const SAVE_FILE: &str = "rendgrave_save.txt";
 
@@ -88,6 +89,7 @@ impl Game {
         self.wp_open = false;
         self.exit_lock = 30;
         self.banner = Some((to.name(), to.sub().to_string(), 200));
+        self.snd(Sfx::Travel, x, y, 0.8);
         if to == AreaId::Ashford && !self.discovered.contains(&AreaId::Ashford) {
             self.discovered.push(AreaId::Ashford);
         }
@@ -126,11 +128,13 @@ impl Game {
                 if !self.discovered.contains(&self.area) {
                     self.discovered.push(self.area);
                     self.banner = Some(("WAYPOINT FOUND".into(), "TRAVEL BETWEEN WAYPOINTS WITH E".into(), 160));
+                    self.snd(Sfx::Chime, wx, wy, 1.0);
                     self.light(wx, wy, 150.0, 2.0, [0.5, 0.7, 1.0], 40);
                     self.save();
                 }
                 self.prompt = Some("E  WAYPOINT".into());
                 if press {
+                    self.snd(Sfx::Click, wx, wy, 0.8);
                     self.wp_open = true;
                     self.hold_block = true;
                 }
@@ -183,6 +187,7 @@ impl Game {
         e.summoned = true;
         let (x, y) = (e.x, e.y);
         self.banner = Some(("RISE, MY SERVANTS".into(), "THE HOLLOW KING CALLS THE DEAD".into(), 150));
+        self.snd(Sfx::KingRoar, x, y, 1.2);
         self.shake = 8.0;
         for k in 0..5 {
             let a = k as f32 / 5.0 * std::f32::consts::TAU;

@@ -710,12 +710,19 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         u.rect(0, 0, fw, fh, [6, 3, 8], 170);
         u.text_c(fw / 2, fh / 3, "PAUSED", [240, 214, 150], 3);
         u.text_c(fw / 2, fh / 3 + 22, "ESC RESUME    K SKILL TREE    CLOSE THE WINDOW TO QUIT", [200, 190, 190], 1);
+        u.text_c(fw / 2, fh / 3 + 34, "M MUSIC ON-OFF    N SOUND ON-OFF    - AND + VOLUME", [150, 140, 150], 1);
     }
     if g.tree {
         draw_tree(g, &mut u, fw, fh);
     }
     if g.wp_open {
         draw_waypoints(g, &mut u, fw, fh);
+    }
+    if let Some((msg, t)) = &g.toast {
+        let a = ((*t).min(20) as f32 / 20.0 * 255.0) as u8;
+        let w = Ui::text_w(msg, 1);
+        u.rect(fw / 2 - w / 2 - 5, 74, w + 10, 13, [10, 6, 10], a.min(210));
+        u.text(fw / 2 - w / 2, 78, msg, [240, 220, 170], 1, false);
     }
     if g.fade > 0 {
         u.rect(0, 0, fw, fh, [0, 0, 0], (g.fade.min(30) as f32 / 30.0 * 255.0) as u8);
