@@ -230,22 +230,29 @@ impl Game {
     }
 
     // ------------------------------------------------------------ loot
+    /// drops are rare: most of the dead carry nothing, champions and brutes often do,
+    /// bosses always do. Plain (common) items stop dropping once you are past the start
+    /// and become a little gold instead, so what you do find is worth a look
     pub fn drop_loot(&mut self, x: f32, y: f32, k: Kind, elite: bool) {
-        let (chance, rolls, luck) = match k {
-            Kind::King => (1.0, 2, 0.35),
-            Kind::Chief => (1.0, 3, 0.4),
-            Kind::Bandit | Kind::Crossbow => (0.14, 1, 0.02),
-            Kind::Bloater => (0.12, 1, 0.0),
-            Kind::Brute => (0.55, 1, 0.05),
-            Kind::Skeleton | Kind::Archer => (0.11, 1, 0.0),
-            _ => (0.09, 1, 0.0),
-        };
-        let (chance, rolls, luck) = if elite { ((chance * 3.0f32).min(1.0), rolls + 1, luck + 0.15) } else { (chance, rolls, luck) };
+        let (chance, rolls, luck) = loot_odds(k, elite);
         for r in 0..rolls {
             if rnd() < chance {
                 let item = roll(self.alvl, luck);
+                if item.rarity == Rarity::Common && self.player.sk.level >= 4 {
+                    self.pickups.push(crate::game::Pickup { k: 0, x: x + rr(-6.0, 6.0), y: y + rr(-3.0, 3.0), z: 10.0, vz: 1.8, amt: item.value() * 2, t: 0 });
+                    continue;
+                }
                 self.ground.push(GroundItem { item, x: x + rr(-8.0, 8.0), y: y + rr(-4.0, 4.0), z: 12.0, vz: rr(1.8, 3.2), t: -(r as i32) * 8 });
             }
+        }
+    }
+
+    /// is this better than what you're wearing in its slot?
+    pub fn is_upgrade(&self, it: &Item) -> bool {
+        let s = SLOTS.iter().position(|x| *x == it.slot).unwrap_or(0);
+        match &self.player.equip[s] {
+            Some(cur) => it.score() > cur.score() * 1.05,
+            None => true,
         }
     }
 
@@ -278,6 +285,10 @@ impl Game {
             let gi = self.ground.swap_remove(k);
             let it = gi.item;
             self.float(px, py - 62.0, it.name.clone(), it.rarity.col(), it.rarity >= Rarity::Rare);
+            if self.is_upgrade(&it) {
+                self.float(px, py - 74.0, "UPGRADE - PRESS I".into(), [120, 255, 120], true);
+                self.snd(Sfx::Chime, px, py, 0.6);
+            }
             self.sounds.push(Snd { k: if it.rarity >= Rarity::Rare { Sfx::Chime } else { Sfx::Coin }, x: px, y: py, v: 0.8 });
             if it.rarity == Rarity::Legendary {
                 self.banner = Some((it.name.clone(), "LEGENDARY - PRESS I TO EQUIP".into(), 220));
@@ -366,5 +377,22 @@ impl Game {
         b.mirror = self.player.face < 0.0;
         b.compute();
         self.player.body = b;
+    }
+}
+
+/// (chance to drop, how many tries, rarity luck) for a kill
+pub fn loot_odds(k: Kind, elite: bool) -> (f32, i32, f32) {
+    let (chance, rolls, luck) = match k {
+        Kind::King => (1.0, 2, 0.45),
+        Kind::Chief => (1.0, 3, 0.5),
+        Kind::Brute => (0.25, 1, 0.12),
+        Kind::Bandit | Kind::Crossbow => (0.035, 1, 0.02),
+        Kind::Bloater | Kind::Skeleton | Kind::Archer => (0.03, 1, 0.0),
+        _ => (0.025, 1, 0.0),
+    };
+    if elite {
+        ((chance * 8.0f32).min(0.7), rolls, luck + 0.2)
+    } else {
+        (chance, rolls, luck)
     }
 }

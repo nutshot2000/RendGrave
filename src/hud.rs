@@ -539,6 +539,13 @@ fn draw_inventory(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         u.rect(x, y, s, s, [18, 13, 20], 255);
         if let Some(it) = it {
             item_icon(u, x + 3, y + 3, it);
+            if g.is_upgrade(it) {
+                // a green arrow: better than what you're wearing
+                for k in 0..4 {
+                    u.rect(x + s - 6 - k, y + 2 + k, 1 + k * 2, 1, [90, 240, 90], 255);
+                }
+                u.rect(x + s - 7, y + 6, 3, 3, [90, 240, 90], 255);
+            }
         }
     }
     let (bx, by, _) = inv_cell(1, BAG_SIZE - 1, fw, fh);

@@ -245,11 +245,11 @@ pub fn starter_armor() -> Item {
 /// roll a random item for an area level; `luck` shifts rarity upward
 pub fn roll(ilvl: i32, luck: f32) -> Item {
     let r = rnd() - luck;
-    let rarity = if r < 0.02 + ilvl as f32 * 0.002 {
+    let rarity = if r < 0.006 + ilvl as f32 * 0.0008 {
         Rarity::Legendary
-    } else if r < 0.13 + ilvl as f32 * 0.005 {
+    } else if r < 0.07 + ilvl as f32 * 0.004 {
         Rarity::Rare
-    } else if r < 0.45 {
+    } else if r < 0.40 {
         Rarity::Magic
     } else {
         Rarity::Common
@@ -326,6 +326,31 @@ impl Item {
             Legend::WintersGrudge => "HITS FREEZE - FROZEN FOES BURST IN FROST",
             Legend::Pyre => "THRUSTS BREATHE FIRE",
         })
+    }
+    /// a rough measure of how good an item is, for "is this an upgrade?"
+    pub fn score(&self) -> f32 {
+        let mut s = match self.slot {
+            Slot::Weapon => self.base as f32,
+            Slot::Ring => 0.0,
+            _ => self.base as f32 * 1.6,
+        };
+        let mut mult = 1.0;
+        for a in &self.affixes {
+            match *a {
+                Affix::Damage(v) => mult += v as f32 / 100.0,
+                Affix::Swift(v) => mult += v as f32 / 140.0,
+                Affix::Keen(v) | Affix::Crit(v) => s += v as f32 * 0.8,
+                Affix::Burning | Affix::Thundering | Affix::Corroding | Affix::Freezing => s += 6.0,
+                Affix::Leech(v) => s += v as f32 * 3.0,
+                Affix::Might(v) | Affix::Wisdom(v) => s += v as f32 * 0.3,
+                Affix::Armor(v) => s += v as f32 * 1.6,
+                Affix::Regen(v) | Affix::Speed(v) => s += v as f32 * 1.2,
+            }
+        }
+        if self.legend.is_some() {
+            s += 20.0;
+        }
+        s * mult
     }
     pub fn value(&self) -> i32 {
         let r = match self.rarity {

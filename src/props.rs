@@ -122,8 +122,9 @@ impl Game {
         if rnd() < 0.5 + 0.3 * tier as f32 {
             self.pickups.push(Pickup { k: 1, x: x + rr(-8.0, 8.0), y: y + 8.0, z: 8.0, vz: 2.4, amt: 1, t: 6 });
         }
-        let items = if tier > 0 { 2 + (rnd() < 0.5) as i32 } else { 1 + (rnd() < 0.35) as i32 };
-        let luck = if tier > 0 { 0.25 } else { 0.08 };
+        // plain chests are mostly gold; iron ones always hold something good
+        let items = if tier > 0 { 1 + (rnd() < 0.35) as i32 } else { (rnd() < 0.4) as i32 };
+        let luck = if tier > 0 { 0.3 } else { 0.1 };
         for r in 0..items {
             let item = roll(lv, luck);
             self.ground.push(GroundItem { item, x: x + rr(-10.0, 10.0), y: y + rr(6.0, 12.0), z: 10.0, vz: rr(2.0, 3.4), t: -(r * 8) });

@@ -95,6 +95,18 @@ pub fn dump(dir: &str) {
         enc.set_depth(png::BitDepth::Eight);
         let mut wr = enc.write_header().expect("png header");
         wr.write_image_data(&img).expect("png data");
-        println!("{:<12} {}x{}  {:>4.0} ms  enemies {:>3}  chests {}  shrines {}  exits {}", id.key(), w.aw, w.ah, ms, sp.enemies.len(), sp.chests.len(), sp.shrines.len(), sp.exits.len());
+        // expected items worth picking up (magic or better) from clearing the whole area
+        let elite_share = if id == AreaId::Ashford { 0.0 } else { 0.07 };
+        let mut items = 0.0;
+        for e in &sp.enemies {
+            for (el, share) in [(false, 1.0 - elite_share), (true, elite_share)] {
+                let (c, r, luck) = crate::gear::loot_odds(e.0, el);
+                items += share * c * r as f32 * (0.40 + luck).min(1.0);
+            }
+        }
+        for c in &sp.chests {
+            items += if c.2 > 0 { 1.35 } else { 0.4 * 0.5 };
+        }
+        println!("{:<12} {}x{}  {:>4.0} ms  enemies {:>3}  chests {}  shrines {}  exits {}  items ~{:.1}", id.key(), w.aw, w.ah, ms, sp.enemies.len(), sp.chests.len(), sp.shrines.len(), sp.exits.len(), items);
     }
 }
