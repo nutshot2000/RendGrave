@@ -34,10 +34,15 @@ pub const BURNT: u8 = 4;
 pub const MUD: u8 = 5;
 pub const STAIRS: u8 = 6;
 pub const STAIRSUP: u8 = 7;
+pub const PLANK: u8 = 8;
 
 pub const AUX_TRUNK: u8 = 1;
 pub const AUX_INDOOR: u8 = 2;
 pub const AUX_DEAD: u8 = 4;
+/// wall cells of a timber-framed house
+pub const AUX_HOUSE: u8 = 8;
+/// wall cells of a stone tomb or chapel
+pub const AUX_TOMB: u8 = 16;
 
 #[inline]
 pub fn is_wall(m: u8) -> bool {

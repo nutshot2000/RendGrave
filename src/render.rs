@@ -7,6 +7,7 @@ use crate::gfx::{Frame, GLight};
 use crate::hud;
 use crate::rng::*;
 use crate::world::*;
+use crate::areagen::{BKind, Building};
 use crate::skills::*;
 use crate::spells::METEOR_T;
 
@@ -127,6 +128,11 @@ fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
         DIRT => scl([92, 72, 54], 0.82 + n * 0.25 + s * 0.12),
         MUD => scl([62, 50, 40], 0.85 + s * 0.15),
         BURNT => scl([38, 33, 31], 0.85 + s * 0.2),
+        PLANK => {
+            let board = (y.rem_euclid(5) == 0) as i32 as f32;
+            let seam = ((x + (y / 5) * 13).rem_euclid(23) == 0) as i32 as f32;
+            scl([104, 74, 50], 0.8 + h2(x / 23, y / 5, 4) * 0.3 + s * 0.08 - board * 0.3 - seam * 0.2)
+        }
         STAIRS | STAIRSUP => {
             // steps going down into darkness (or up into light)
             let step = (y.rem_euclid(4) == 0) as i32 as f32;
@@ -311,7 +317,15 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                 }
                 BRICK => {
                     let edge = north != BRICK;
-                    scl([96, 88, 100], 0.85 + s * 0.15 + if edge { 0.25 } else { 0.0 })
+                    let aux = w.aux[i];
+                    let base = if aux & AUX_HOUSE != 0 {
+                        [92, 66, 46]
+                    } else if aux & AUX_TOMB != 0 {
+                        [132, 128, 134]
+                    } else {
+                        [96, 88, 100]
+                    };
+                    scl(base, 0.85 + s * 0.15 + if edge { 0.25 } else { 0.0 })
                 }
                 ROCK => scl([20, 18, 24], 0.8 + s * 0.4),
                 _ => {
@@ -328,10 +342,15 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                     let hh = (h - k) as f32;
                     let col = match m {
                         BRICK => {
-                            let row = k / 4;
-                            let mortar = k % 4 == 0 || (wx + row * 3) % 8 == 0;
-                            let base = if mortar { [52, 46, 58] } else { scl([92, 80, 96], 0.85 + h2(wx / 8, row, 2) * 0.25) };
-                            scl(base, 1.0 - k as f32 / h as f32 * 0.35)
+                            let st = style_of(w.aux[i]);
+                            if st == 0 {
+                                let row = k / 4;
+                                let mortar = k % 4 == 0 || (wx + row * 3) % 8 == 0;
+                                let base = if mortar { [52, 46, 58] } else { scl([92, 80, 96], 0.85 + h2(wx / 8, row, 2) * 0.25) };
+                                scl(base, 1.0 - k as f32 / h as f32 * 0.35)
+                            } else {
+                                wall_px(st, wx, h - k, s)
+                            }
                         }
                         STONE => scl([84, 82, 90], 0.95 - k as f32 / h as f32 * 0.35 + s * 0.1),
                         ROCK => scl([46, 42, 48], 0.9 - k as f32 / h as f32 * 0.5 + h2(wx, k / 3, 7) * 0.2),
@@ -342,6 +361,11 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                 }
             }
         }
+    }
+    // ---- roofs, doorways, windows, pillars
+    let pl = if g.player.dead { None } else { Some((g.player.x, g.player.y)) };
+    for b in &g.buildings {
+        draw_building(&mut c, b, pl);
     }
     // ---- braziers: little fire pits on metal stands
     for &(bx, by) in &g.braziers {
@@ -642,6 +666,10 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
         let fl = 1.0 + (t as f32 * 0.21 + bx).sin() * 0.08 + (t as f32 * 0.73 + by).sin() * 0.05;
         add(bx, by + 1.0, 120.0, 1.4 * fl, [1.0, 0.55, 0.22]);
     }
+    for &(lx, ly, lc) in &g.lamps {
+        let fl = 1.0 + (t as f32 * 0.17 + lx).sin() * 0.06;
+        add(lx, ly, 90.0, 1.3 * fl, lc);
+    }
     for l in &g.lights {
         let k = if l.max > 0 { l.t as f32 / l.max as f32 } else { 1.0 };
         add(l.x, l.y, l.r, l.i * k, l.c);
@@ -706,6 +734,262 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     *lights_out = ls;
     // ---------------------------------------------------- UI
     hud::draw(g, c.f, inp, cx, cy);
+}
+
+/// 0 plain brick, 1 timber-framed house, 2 stone tomb
+fn style_of(aux: u8) -> u8 {
+    if aux & AUX_HOUSE != 0 {
+        1
+    } else if aux & AUX_TOMB != 0 {
+        2
+    } else {
+        0
+    }
+}
+
+/// one pixel of a building's front wall at column x, height z above the ground
+fn wall_px(style: u8, x: i32, z: i32, s: f32) -> [u8; 3] {
+    match style {
+        1 => {
+            // timber frame: dark beams over warm plaster, a stone footing
+            if z < 4 {
+                let joint = z == 0 || (x + z / 2) % 9 == 0;
+                return if joint { [62, 58, 62] } else { scl([112, 108, 112], 0.85 + s * 0.2) };
+            }
+            let post = x.rem_euclid(14) < 2;
+            let rail = (z - 4).rem_euclid(19) < 2 || z >= 42;
+            let px = x.rem_euclid(14) as i32;
+            let pz = (z - 4).rem_euclid(19);
+            let brace = (px - 2 - pz * 11 / 17).abs() < 1 && (x / 14) % 2 == 0;
+            if post || rail || brace {
+                scl([66, 44, 30], 0.85 + h2(x, z, 3) * 0.25)
+            } else {
+                let n = vnoise(x as f32 * 0.3, z as f32 * 0.3, 21);
+                scl([186, 166, 132], 0.78 + n * 0.25 + s * 0.06 - (z as f32 / 44.0) * 0.08)
+            }
+        }
+        _ => {
+            // big weathered stone blocks with moss creeping up from the ground
+            let row = z / 7;
+            let off = if row % 2 == 0 { 0 } else { 7 };
+            let joint = z.rem_euclid(7) == 0 || (x + off).rem_euclid(14) == 0;
+            let mut c = if joint { [70, 66, 74] } else { scl([124, 120, 126], 0.78 + h2((x + off) / 14, row, 5) * 0.3 + s * 0.08) };
+            let moss = vnoise(x as f32 * 0.2, z as f32 * 0.25, 33);
+            if z < 14 && moss > 0.55 + z as f32 * 0.02 {
+                c = mixc(c, [58, 84, 46], 0.7);
+            }
+            c
+        }
+    }
+}
+
+/// Roof, doorway, windows and trim for one building. Pixels are depth-tested against
+/// the building's south edge so things in front draw over it and things behind are hidden.
+fn draw_building(c: &mut Ctx, b: &Building, player: Option<(f32, f32)>) {
+    let wh = wall_h(BRICK);
+    let (x0, y0, bw, bh) = (b.x0, b.y0, b.w, b.h);
+    let gy = y0 + bh - 1; // ground row of the front wall
+    let depth = gy as f32;
+    let cy = c.cy;
+    let cx = c.cx;
+    let t = c.t;
+    let dc = b.door_c();
+    let half = b.door / 2;
+    let style = if b.k == BKind::House { 1 } else { 2 };
+    // --- wall above the doorway, with a lintel or an arch
+    for x in dc - half..dc + half {
+        let dx = (x - dc) as f32 + 0.5;
+        let dh = if style == 1 {
+            30
+        } else {
+            25 + ((half as f32 * half as f32 - dx * dx).max(0.0).sqrt() * 0.6) as i32
+        };
+        for z in dh..=wh {
+            let mut col = wall_px(style, x, z, 0.5);
+            if style == 1 && z < dh + 3 {
+                col = [72, 48, 32];
+            } else if style == 2 && z < dh + 3 {
+                col = scl([160, 156, 162], 0.9 + h2(x, z, 9) * 0.15);
+            }
+            c.put(x - cx, gy - z - cy, depth, col, [0; 3], z as f32);
+        }
+        for wy in gy - 3..=gy {
+            c.put(x - cx, wy - wh - cy, wy as f32, if style == 1 { [92, 66, 46] } else { [132, 128, 134] }, [0; 3], (wh + 1) as f32);
+        }
+    }
+    // --- windows (houses) with warm light
+    if style == 1 {
+        let lit = b.look > 0.2;
+        for wx0 in [x0 + bw / 5, x0 + bw * 4 / 5 - 8] {
+            for z in 12..=27 {
+                for x in wx0 - 1..wx0 + 9 {
+                    let frame = z == 12 || z == 27 || x == wx0 - 1 || x == wx0 + 8;
+                    let mull = x == wx0 + 3 || x == wx0 + 4 || z == 20;
+                    let (col, e) = if frame {
+                        ([58, 40, 28], [0; 3])
+                    } else if mull {
+                        ([70, 50, 34], [0; 3])
+                    } else if lit {
+                        let fl = 0.85 + (t as f32 * 0.07 + b.look * 9.0).sin() * 0.1;
+                        ([255, 206, 130], scl([230, 150, 70], fl))
+                    } else {
+                        ([30, 34, 48], [0; 3])
+                    };
+                    c.put(x - cx, gy - z - cy, depth + 0.1, col, e, z as f32);
+                }
+            }
+            // sill
+            for x in wx0 - 2..wx0 + 10 {
+                c.put(x - cx, gy - 11 - cy, depth + 0.1, [96, 72, 52], [0; 3], 11.0);
+            }
+        }
+    }
+    // --- pillars and a carved slab by tomb doors
+    if style == 2 {
+        for px0 in [dc - half - 5, dc + half + 1] {
+            for z in 0..=40 {
+                let cap = z >= 37 || z <= 2;
+                let (a, bb) = if cap { (px0 - 1, px0 + 5) } else { (px0, px0 + 4) };
+                for x in a..bb {
+                    let shade = 1.15 - (x - a) as f32 * 0.12;
+                    let col = scl([166, 162, 168], shade * if cap { 1.05 } else { 0.95 });
+                    c.put(x - cx, gy - z - cy, depth + 1.5, col, [0; 3], z as f32);
+                }
+            }
+        }
+        let rune = b.k == BKind::CryptGate;
+        for z in 33..=37 {
+            for x in dc - 6..dc + 6 {
+                let carve = (x + z) % 3 == 0 && z > 33 && z < 37;
+                let (col, e) = if rune && carve {
+                    let p = 0.6 + (t as f32 * 0.05).sin() * 0.4;
+                    ([140, 190, 255], scl([60, 110, 255], p))
+                } else if carve {
+                    ([60, 56, 62], [0; 3])
+                } else {
+                    ([96, 92, 100], [0; 3])
+                };
+                c.put(x - cx, gy - z - cy, depth + 0.2, col, e, z as f32);
+            }
+        }
+    }
+    // --- the roof (hidden while you're inside)
+    if b.k == BKind::Ruin {
+        return;
+    }
+    if let Some((px, py)) = player {
+        if b.inside(px, py) {
+            return;
+        }
+    }
+    let ov = 3;
+    let r = b.roof_r();
+    let ym = y0 as f32 + bh as f32 / 2.0;
+    let ridge = ym - wh as f32 - r;
+    let hd = bh as f32 / 2.0 + ov as f32;
+    let slate = b.look > 0.55;
+    let base: [u8; 3] = match b.k {
+        BKind::House if slate => [78, 82, 98],
+        BKind::House => [124, 78, 52],
+        BKind::CryptGate => [96, 92, 104],
+        _ => [130, 126, 134],
+    };
+    let row_h = if style == 1 { 3.0 } else { 5.0 };
+    // walk each column from the back eave to the front eave: the surface height gives the
+    // screen row; nearer rows overwrite farther ones and gaps on the steep front are filled
+    for x in x0 - ov..x0 + bw + ov {
+        let edge_x = x == x0 - ov || x == x0 + bw + ov - 1;
+        let zh = b.roof_z(x);
+        let mut prev: Option<i32> = None;
+        for wy in y0 - ov..y0 + bh + ov {
+            let dyy = (wy as f32 + 0.5 - ym).abs();
+            let zm = (r * (1.0 - dyy / hd)).max(0.0);
+            let (zz, face) = if zm <= zh {
+                (zm, if (wy as f32 + 0.5) < ym { 1 } else { 0 })
+            } else {
+                (zh, if x < x0 + bw / 2 { 2 } else { 3 })
+            };
+            let sy = wy - wh - zz.round() as i32;
+            let start = match prev {
+                Some(p) if sy > p + 1 => p + 1,
+                _ => sy,
+            };
+            prev = Some(sy);
+            // shading by which way the surface faces (light from the upper left)
+            let mut l: f32 = match face {
+                0 => 1.02 - (1.0 - zz / r.max(1.0)) * 0.16,
+                1 => 0.5,
+                2 => 0.9,
+                _ => 0.62,
+            };
+            let rowc = zz / row_h;
+            let row = rowc as i32;
+            let frac = rowc - row as f32;
+            if frac < 0.24 {
+                l *= 0.64;
+            }
+            let along = if face >= 2 { wy } else { x };
+            if (along + row * 3).rem_euclid(if style == 1 { 7 } else { 13 }) == 0 {
+                l *= 0.78;
+            }
+            l += (h2(along / 5 + row * 7, row, 7) - 0.5) * 0.14;
+            if face <= 1 && zz > r - 1.3 {
+                l = 0.74;
+            }
+            if face <= 1 && (zm - zh).abs() < 1.0 && zh < r {
+                l *= 0.78;
+            }
+            let mut col = scl(base, l);
+            if style == 2 && vnoise(x as f32 * 0.15, wy as f32 * 0.2 + zz * 0.1, 44) > 0.66 {
+                col = mixc(col, [64, 92, 52], 0.55);
+            }
+            if wy >= y0 + bh + ov - 1 || edge_x {
+                col = scl(col, 0.58);
+            }
+            for yy in start..=sy {
+                c.put_w(x - cx, yy - cy, depth + 0.6, col, [0; 3], wh as f32 + zz);
+            }
+        }
+    }
+    let south = (y0 + bh + ov - wh) as f32;
+    // eave shadow on the wall below
+    for x in x0..x0 + bw {
+        for k in 1..4 {
+            c.blend(x - cx, south as i32 + k - cy, depth + 0.6, [0, 0, 0], 0.35 - k as f32 * 0.08);
+        }
+    }
+    // chimney standing on the roof
+    if let Some((chx, _)) = b.chimney() {
+        let rz = b.roof_z(chx + 3);
+        let base_y = (ym - wh as f32 - rz) as i32 + 4;
+        for sy in base_y - 15..=base_y {
+            for x in chx..chx + 6 {
+                let cap = sy < base_y - 13;
+                let mortar = (sy - base_y).rem_euclid(3) == 0 || (x + (sy / 3) * 2).rem_euclid(4) == 0;
+                let col = if cap { [70, 66, 70] } else if mortar { [70, 50, 44] } else { scl([136, 82, 64], 1.1 - (x - chx) as f32 * 0.07) };
+                c.put_w(x - cx, sy - cy, depth + 0.7, col, [0; 3], (wh as f32 + rz + 8.0).min(127.0));
+            }
+        }
+    }
+    // a cross on tomb ridges, finials on the crypt gate
+    if style == 2 {
+        let col = [150, 146, 154];
+        let rx = x0 + bw / 2;
+        let ry = ridge as i32;
+        for k in 0..9 {
+            c.put_w(rx - cx, ry - k - cy, depth + 0.7, col, [0; 3], wh as f32 + r);
+        }
+        for dx in -3..=3 {
+            c.put_w(rx + dx - cx, ry - 6 - cy, depth + 0.7, col, [0; 3], wh as f32 + r);
+        }
+        if b.k == BKind::CryptGate {
+            for fx in [x0 - ov + 2, x0 + bw + ov - 3] {
+                for k in 0..6 {
+                    c.put_w(fx - cx, ry - k - cy, depth + 0.7, [120, 116, 124], [0; 3], wh as f32 + r);
+                }
+            }
+        }
+    }
 }
 
 /// One cell of a tree. Canopy cells draw a domed leafy top high in the air plus a hanging

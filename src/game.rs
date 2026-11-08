@@ -251,6 +251,8 @@ pub struct Game {
     pub exit_lock: i32,
     pub prompt: Option<String>,
     pub saving: bool,
+    pub buildings: Vec<Building>,
+    pub lamps: Vec<(f32, f32, [f32; 3])>,
 }
 
 fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
@@ -390,6 +392,8 @@ impl Game {
             exit_lock: 0,
             prompt: None,
             saving: false,
+            buildings: vec![],
+            lamps: vec![],
         }
     }
 
@@ -1795,6 +1799,14 @@ impl Game {
 
     fn update_misc(&mut self) {
         let br = self.rank(Sk::Brittle);
+        // chimney smoke
+        if self.frame % 7 == 0 {
+            let chims: Vec<(i32, i32, f32)> = self.buildings.iter().filter_map(|b| b.chimney().map(|(x, y)| (x, y, b.roof_z(x + 3)))).collect();
+            for (x, y, rz) in chims {
+                let z = 44.0 + rz + 15.0;
+                self.ptc(x as f32 + 2.0, y as f32, z, rr(-0.05, 0.05) + 0.06, 0.0, rr(0.2, 0.35), rr(120.0, 200.0) as i32, PtK::Smoke, [70, 66, 70]);
+            }
+        }
         // lights
         self.lights.retain_mut(|l| {
             if l.t > 0 {

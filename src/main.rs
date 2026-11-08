@@ -125,6 +125,10 @@ impl App {
                         g.player.y = by + 10.0;
                         g.enemies[b].aggro = true;
                     }
+                } else if let Some(b) = g.buildings.iter().find(|b| b.k != areagen::BKind::Ruin).copied() {
+                    // stand in front of a building to check how it looks
+                    g.player.x = b.door_c() as f32 + 34.0;
+                    g.player.y = (b.y0 + b.h) as f32 + 34.0;
                 } else if *a != AreaId::Ashford {
                     place_near_enemy(g, 80.0);
                 }

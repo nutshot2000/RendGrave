@@ -5,7 +5,6 @@ use crate::game::*;
 use crate::areagen::*;
 use crate::rng::*;
 use crate::skills::*;
-use crate::world::*;
 
 pub const SAVE_FILE: &str = "rendgrave_save.txt";
 
@@ -76,6 +75,8 @@ impl Game {
         self.spikes.clear();
         let (x, y) = if from == to { sp.start } else { sp.arrival(from) };
         self.braziers = sp.braziers.clone();
+        self.buildings = sp.buildings.clone();
+        self.lamps = sp.lamps.clone();
         self.exits = sp.exits;
         self.waypoint = sp.waypoint;
         self.player.x = x;
