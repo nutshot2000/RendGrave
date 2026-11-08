@@ -1,6 +1,7 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod talents;
 mod nav;
 mod barrels;
 mod mapdump;
@@ -35,6 +36,8 @@ struct Showcase {
     spells: bool,
     tour: bool,
     loot: bool,
+    /// steps taken while the game is paused (the skill tree stops the clock)
+    sub: i32,
 }
 
 struct App {
@@ -321,10 +324,13 @@ impl App {
             g.player.x = 70.0;
             g.player.y = 660.0;
             g.player.sk.level = 40;
-            g.player.sk.points = 60;
+            g.player.sk.points = 400;
             g.player.sk.tomes = [true; N];
-            for i in 0..N {
-                while g.player.sk.learn(i) {}
+            // several passes: some skills need ones later in the list
+            for _ in 0..4 {
+                for i in 0..N {
+                    while g.player.sk.learn(i) {}
+                }
             }
             g.recalc();
             let kinds = [Kind::Zombie, Kind::Skeleton, Kind::Zombie, Kind::Brute, Kind::Zombie, Kind::Skeleton, Kind::Zombie, Kind::Zombie];
@@ -341,12 +347,70 @@ impl App {
         g.cam = (40.0, 655.0 - 26.0 - g.view.1 / 2.0);
         g.player.hp = g.player.maxhp;
         g.player.mana = 999.0;
+        // with the tree open the clock stops: page through every school
+        if g.tree && f == 699 {
+            let sh = self.show.as_mut().unwrap();
+            sh.sub += 1;
+            let k = sh.sub;
+            let pages = [(0, "s11_tab_storm"), (2, "s12_tab_venom"), (3, "s13_tab_frost"), (4, "s14_tab_blade"), (5, "s15_tab_body")];
+            for (n, (tab, name)) in pages.iter().enumerate() {
+                let at = 4 + n as i32 * 4;
+                if k == at {
+                    g.tree_tab = *tab;
+                    g.tree_hover = None;
+                }
+                if k == at + 2 {
+                    return Some(name.to_string());
+                }
+            }
+            if k == 30 {
+                g.tree = false;
+            }
+            return None;
+        }
+        if f == 705 {
+            // a fresh crowd for the new skills
+            g.enemies.clear();
+            g.fields.clear();
+            for k in 0..8 {
+                let mut e = game::Game::new_enemy(Kind::Zombie, 170.0 + (k % 4) as f32 * 30.0, 645.0 + (k / 4) as f32 * 26.0);
+                e.stun = 100000;
+                e.hp = 400.0;
+                e.maxhp = 400.0;
+                g.enemies.push(e);
+            }
+            g.player.x = 90.0;
+            g.player.y = 660.0;
+        }
         let at = |g: &game::Game, i: usize| (g.enemies[i].x, g.enemies[i].y);
         let mut cast = |g: &mut game::Game, s: Sk, x: f32, y: f32| {
             let i2 = inp.clone();
             g.cast(s, x, y, &i2);
         };
         match f {
+            712 => cast(g, Sk::Fireball, 220.0, 655.0),
+            732 => {
+                for e in g.enemies.iter_mut() {
+                    e.body.tint_all(|p| {
+                        if p.m == body::PM_CLOTH || p.m == body::PM_FLESH {
+                            p.burn = 200;
+                        }
+                    });
+                }
+            }
+            740 => cast(g, Sk::Combustion, 0.0, 0.0),
+            770 => cast(g, Sk::PoisonCloud, 230.0, 660.0),
+            820 => {
+                cast(g, Sk::StormShield, 0.0, 0.0);
+                cast(g, Sk::IceArmor, 0.0, 0.0);
+            }
+            840 => g.blast(260.0, 670.0, 20.0),
+            856 => cast(g, Sk::RotBurst, 260.0, 670.0),
+            875 => {
+                g.player.x = 200.0;
+                g.player.y = 665.0;
+                cast(g, Sk::BladeFury, 0.0, 0.0);
+            }
             20 => {
                 let (x, y) = at(g, 3);
                 cast(g, Sk::Meteor, x, y);
@@ -368,6 +432,7 @@ impl App {
             }
             699 => {
                 g.tree = true;
+                g.tree_tab = 1;
                 g.tree_hover = Some(Sk::Meteor as usize);
             }
             _ => {}
@@ -375,7 +440,7 @@ impl App {
         if f > 700 {
             g.frame += 0;
         }
-        let shots = [(66, "s01_meteor_spikes"), (80, "s02_meteor_impact"), (190, "s03_acid_rain"), (240, "s04_firewall"), (320, "s05_blizzard"), (360, "s06_ball"), (470, "s07_storm"), (570, "s08_flood"), (612, "s09_whirl"), (699, "s10_tree")];
+        let shots = [(716, "s16_splinter"), (745, "s17_combustion"), (815, "s18_poison"), (826, "s18b_shields"), (860, "s18c_rotburst"), (905, "s19_fury"), (66, "s01_meteor_spikes"), (80, "s02_meteor_impact"), (190, "s03_acid_rain"), (240, "s04_firewall"), (320, "s05_blizzard"), (360, "s06_ball"), (470, "s07_storm"), (570, "s08_flood"), (612, "s09_whirl"), (699, "s10_tree")];
         for (fr, name) in shots {
             if f == fr {
                 return Some(name.to_string());
@@ -685,7 +750,7 @@ impl App {
             } else if sh.tour {
                 shot.as_deref() == Some("t14_waypoints")
             } else if sh.spells {
-                shot.as_deref() == Some("s10_tree")
+                shot.as_deref() == Some("s19_fury")
             } else {
                 self.game.frame > if sh.lab { 330 } else { 900 }
             };
@@ -755,7 +820,7 @@ fn main() {
     let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot").map(|i| {
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "shots".into());
         std::fs::create_dir_all(&dir).ok();
-        Showcase { dir, log: vec![], lab, spells, tour, loot }
+        Showcase { dir, log: vec![], lab, spells, tour, loot, sub: 0 }
     });
     let seed = if show.is_some() { 7 } else { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1) };
     let el = EventLoop::new().expect("event loop");

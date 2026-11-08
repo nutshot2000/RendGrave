@@ -329,23 +329,200 @@ pub fn icon(u: &mut Ui, x: i32, y: i32, s: Sk, t: u64) {
             disc(u, x + 8, y + 8, 5.5, [220, 170, 50]);
             disc(u, x + 8, y + 8, 3.5, [255, 230, 130]);
         }
+        Sk::Conductor => {
+            drop(u, x + 5, y + 4, 5, [80, 140, 230]);
+            bolt(u, x + 9, y + 2, 2, [255, 245, 170]);
+        }
+        Sk::Overload => {
+            disc(u, x + 8, y + 8, 6.0, [60, 70, 140]);
+            bolt(u, x + 5, y + 1, 2, [255, 255, 255]);
+        }
+        Sk::StaticField => {
+            for k in 0..5 {
+                let a = k as f32 * 1.26 + t as f32 * 0.05;
+                u.px(x + 8 + (a.cos() * 6.0) as i32, y + 8 + (a.sin() * 6.0) as i32, [200, 220, 255], 255);
+            }
+            bolt(u, x + 5, y + 3, 2, [180, 200, 255]);
+        }
+        Sk::StormShield => {
+            disc(u, x + 8, y + 8, 6.5, [90, 120, 220]);
+            disc(u, x + 8, y + 8, 4.5, [24, 20, 40]);
+            bolt(u, x + 5, y + 3, 2, [220, 235, 255]);
+        }
+        Sk::EyeOfStorm => {
+            disc(u, x + 8, y + 8, 6.5, [70, 80, 120]);
+            disc(u, x + 8, y + 8, 3.0, [255, 245, 170]);
+            disc(u, x + 8, y + 8, 1.2, [20, 20, 30]);
+        }
+        Sk::Searing => {
+            for k in 0..5 {
+                u.rect(x + 3 + k * 2, y + 12 - (k % 3) * 2, 2, 3 + (k % 3) * 2, fire(k), 255);
+            }
+            u.rect(x + 4, y + 2, 8, 2, [255, 240, 200], 255);
+        }
+        Sk::Splinter => {
+            disc(u, x + 8, y + 8, 3.0, [255, 200, 90]);
+            for &(dx, dy) in &[(-5, -4), (5, -3), (0, 6)] {
+                disc(u, x + 8 + dx, y + 8 + dy, 2.0, fire(dx + dy));
+            }
+        }
+        Sk::Fireproof => {
+            disc(u, x + 8, y + 8, 6.0, [120, 110, 120]);
+            u.rect(x + 5, y + 6, 6, 5, fire(1), 255);
+        }
+        Sk::Combustion => {
+            for k in 0..8 {
+                let a = k as f32 * 0.785;
+                u.rect(x + 8 + (a.cos() * 5.0) as i32, y + 8 + (a.sin() * 5.0) as i32, 2, 2, fire(k), 255);
+            }
+            disc(u, x + 8, y + 8, 2.5, [255, 240, 200]);
+        }
+        Sk::MeteorShower => {
+            for &(dx, dy) in &[(3, 4), (9, 2), (6, 10)] {
+                disc(u, x + dx + 2, y + dy + 2, 2.0, fire(dx));
+                u.px(x + dx, y + dy, [255, 200, 120], 200);
+            }
+        }
+        Sk::Caustic => {
+            u.rect(x + 2, y + 10, 12, 4, [110, 210, 50], 255);
+            for k in 0..3 {
+                u.px(x + 4 + k * 4, y + 7 - (k % 2), [200, 255, 140], 255);
+            }
+        }
+        Sk::PoisonCloud => {
+            disc(u, x + 6, y + 9, 4.0, [70, 120, 40]);
+            disc(u, x + 10, y + 7, 4.5, [90, 150, 50]);
+            disc(u, x + 9, y + 11, 3.0, [110, 180, 60]);
+        }
+        Sk::AcidPools => {
+            disc(u, x + 8, y + 10, 5.5, [70, 150, 40]);
+            disc(u, x + 8, y + 10, 3.0, [140, 230, 70]);
+            drop(u, x + 8, y + 1, 4, [140, 230, 70]);
+        }
+        Sk::RotBurst => {
+            u.rect(x + 4, y + 9, 8, 3, [190, 180, 160], 255);
+            for k in 0..6 {
+                let a = k as f32 * 1.05;
+                u.px(x + 8 + (a.cos() * 6.0) as i32, y + 8 + (a.sin() * 5.0) as i32, [140, 230, 60], 255);
+            }
+        }
+        Sk::Plague => {
+            for k in 0..6 {
+                drop(u, x + 2 + k * 2, y + 2 + (k % 3) * 4, 3, [120, 220, 60]);
+            }
+        }
+        Sk::Chill => {
+            u.rect(x + 7, y + 2, 2, 12, [190, 230, 255], 255);
+            u.rect(x + 2, y + 7, 12, 2, [190, 230, 255], 255);
+        }
+        Sk::IceArmor => {
+            u.rect(x + 3, y + 3, 10, 10, [140, 200, 240], 255);
+            u.rect(x + 5, y + 5, 6, 6, [210, 240, 255], 255);
+        }
+        Sk::Shatterstorm => {
+            for k in 0..6 {
+                let a = k as f32 * 1.05 + 0.3;
+                u.rect(x + 8 + (a.cos() * 5.0) as i32, y + 8 + (a.sin() * 5.0) as i32, 2, 1, [210, 240, 255], 255);
+            }
+            disc(u, x + 8, y + 8, 1.5, [255, 255, 255]);
+        }
+        Sk::DeepFreeze => {
+            disc(u, x + 8, y + 8, 6.0, [80, 140, 200]);
+            disc(u, x + 8, y + 8, 3.5, [200, 235, 255]);
+        }
+        Sk::AbsoluteZero => {
+            for k in 0..4 {
+                let a = k as f32 * 0.785;
+                let (cx, cy) = (a.cos() * 6.0, a.sin() * 6.0);
+                for s in -6..=6 {
+                    let f = s as f32 / 6.0;
+                    u.px(x + 8 + (cx * f) as i32, y + 8 + (cy * f) as i32, [230, 245, 255], 255);
+                }
+            }
+        }
+        Sk::Cleave => {
+            for k in 0..9 {
+                let a = 3.4 + k as f32 * 0.32;
+                u.px(x + 8 + (a.cos() * 7.0) as i32, y + 10 + (a.sin() * 7.0) as i32, [240, 240, 250], 255);
+            }
+        }
+        Sk::Dismember => {
+            u.rect(x + 3, y + 4, 4, 9, [222, 184, 152], 255);
+            u.rect(x + 9, y + 4, 4, 9, [222, 184, 152], 255);
+            u.rect(x + 7, y + 2, 2, 12, [200, 30, 40], 255);
+        }
+        Sk::Momentum => {
+            for k in 0..3 {
+                u.rect(x + 2 + k * 4, y + 4 + k, 3, 8 - k * 2, [230, 225, 215], 255);
+            }
+        }
+        Sk::BladeFury => {
+            for k in 0..12 {
+                let a = k as f32 * 0.52 + t as f32 * 0.2;
+                u.px(x + 8 + (a.cos() * 6.0) as i32, y + 8 + (a.sin() * 6.0) as i32, if k % 3 == 0 { [255, 255, 255] } else { [180, 180, 200] }, 255);
+            }
+            disc(u, x + 8, y + 8, 1.5, [200, 40, 40]);
+        }
+        Sk::Warlord => {
+            u.rect(x + 3, y + 9, 10, 4, [220, 180, 60], 255);
+            for k in 0..3 {
+                u.rect(x + 3 + k * 4, y + 5 + (k % 2), 2, 4, [220, 180, 60], 255);
+            }
+        }
+        Sk::Toughness => {
+            u.rect(x + 3, y + 3, 10, 9, [150, 150, 165], 255);
+            u.rect(x + 5, y + 12, 6, 2, [150, 150, 165], 255);
+        }
+        Sk::SecondWind => {
+            u.rect(x + 6, y + 2, 4, 3, [180, 170, 160], 255);
+            disc(u, x + 8, y + 10, 4.5, [220, 40, 60]);
+        }
+        Sk::Regeneration => {
+            u.rect(x + 7, y + 3, 2, 10, [255, 90, 110], 255);
+            u.rect(x + 3, y + 7, 10, 2, [255, 90, 110], 255);
+        }
+        Sk::LastStand => {
+            u.rect(x + 7, y + 2, 2, 12, [230, 225, 215], 255);
+            disc(u, x + 8, y + 10, 3.0, [200, 30, 40]);
+        }
+        Sk::Titan => {
+            disc(u, x + 8, y + 5, 3.0, [240, 110, 120]);
+            u.rect(x + 3, y + 8, 10, 6, [240, 110, 120], 255);
+        }
     }
 }
 
-/// layout of the skill tree screen: (x, y) of each node's top-left corner and the box size
+/// layout of the skill tree screen: one school per tab, three paths side by side.
+/// Returns the (x, y) of the node's top-left corner and the box size.
 pub fn node_pos(i: usize, fw: i32, _fh: i32) -> (i32, i32, i32) {
     let n = &NODES[i];
-    let cw = (fw - 20) / 6;
     let bs = 20;
-    let x = 10 + n.col as i32 * cw + cw / 2 - bs / 2;
-    let y = 46 + n.row as i32 * 42;
+    let x = fw / 2 + (n.lane as i32 - 1) * 150 - 60;
+    let y = 50 + n.row as i32 * 31;
     (x, y, bs)
 }
-pub fn node_at(m: (f32, f32), view: (f32, f32)) -> Option<usize> {
+/// the tabs along the top
+fn tab_rect(k: usize, fw: i32) -> (i32, i32, i32, i32) {
+    let tw = (fw - 20) / 6;
+    (10 + k as i32 * tw, 28, tw - 2, 14)
+}
+pub fn tab_at(m: (f32, f32), view: (f32, f32)) -> Option<usize> {
+    let fw = view.0 as i32;
+    (0..6).find(|&k| {
+        let (x, y, w, h) = tab_rect(k, fw);
+        let (mx, my) = (m.0 as i32, m.1 as i32);
+        mx >= x && mx < x + w && my >= y && my < y + h
+    })
+}
+pub fn node_at(m: (f32, f32), view: (f32, f32), tab: usize) -> Option<usize> {
     let (fw, fh) = (view.0 as i32, view.1 as i32);
     for i in 0..N {
+        if NODES[i].col != tab {
+            continue;
+        }
         let (x, y, bs) = node_pos(i, fw, fh);
-        if m.0 as i32 >= x - 2 && m.0 as i32 <= x + bs + 2 && m.1 as i32 >= y - 2 && m.1 as i32 <= y + bs + 2 {
+        // the name to the right of the box counts too
+        if m.0 as i32 >= x - 2 && m.0 as i32 <= x + bs + 70 && m.1 as i32 >= y - 2 && m.1 as i32 <= y + bs + 2 {
             return Some(i);
         }
     }
@@ -696,28 +873,52 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
 fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     let t = g.frame;
     let sk = &g.player.sk;
+    let tab = g.tree_tab.min(5);
     u.rect(0, 0, fw, fh, [8, 5, 10], 225);
     u.text(12, 10, "SKILLS", [240, 214, 150], 2, true);
     let info = format!("LEVEL {}    SKILL POINTS {}", sk.level, sk.points);
     u.text(fw - Ui::text_w(&info, 1) - 12, 10, &info, if sk.points > 0 { [255, 220, 120] } else { [200, 190, 190] }, 1, true);
-    u.text(fw - Ui::text_w("K CLOSE", 1) - 12, 20, "K CLOSE", [150, 140, 150], 1, true);
-    let cw = (fw - 20) / 6;
+    u.text(fw - Ui::text_w("A D OR CLICK A TAB    K CLOSE", 1) - 12, 19, "A D OR CLICK A TAB    K CLOSE", [150, 140, 150], 1, true);
+    // tabs: school name and points spent; a dot where something can be learned
     for (c, (name, col)) in SCHOOLS.iter().enumerate() {
-        u.text_c(10 + c as i32 * cw + cw / 2, 34, name, *col, 1);
+        let (x, y, w, h) = tab_rect(c, fw);
+        let on = c == tab;
+        u.rect(x, y, w, h, if on { mul_c(*col, 0.35) } else { [20, 15, 22] }, 255);
+        u.rect(x, y + h - 1, w, 1, if on { *col } else { [60, 50, 64] }, 255);
+        let spent = sk.spent(c);
+        let label = if spent > 0 { format!("{} {}", name, spent) } else { name.to_string() };
+        u.text_c(x + w / 2, y + 4, &label, if on { [255, 250, 240] } else { mul_c(*col, 0.8) }, 1);
+        let can = (0..N).any(|i| NODES[i].col == c && sk.can_learn(i).is_ok());
+        if can && (t / 15) % 2 == 0 {
+            u.rect(x + w - 5, y + 2, 3, 3, [255, 214, 90], 255);
+        }
     }
-    // links
+    let scol = SCHOOLS[tab].1;
+    // links from each skill to the ones it opens
     for i in 0..N {
         let n = &NODES[i];
-        if n.row == 0 {
+        if n.col != tab {
             continue;
         }
         let (x, y, bs) = node_pos(i, fw, fh);
-        let lit = sk.rank[i] > 0;
-        let col = if lit { SCHOOLS[n.col].1 } else { [60, 50, 64] };
-        u.rect(x + bs / 2, y - 22 + 4, 1, 20, col, 255);
+        for r in n.req {
+            let j = *r as usize;
+            let (px, py, _) = node_pos(j, fw, fh);
+            let lit = sk.rank[j] > 0;
+            let c = if lit { mul_c(scol, if sk.rank[i] > 0 { 1.0 } else { 0.6 }) } else { [55, 46, 58] };
+            let (ax, ay) = (px + bs / 2, py + bs + 6);
+            let (bx, by) = (x + bs / 2, y - 2);
+            let my = (ay + by) / 2;
+            u.rect(ax, ay, 1, (my - ay).max(1), c, 255);
+            u.rect(ax.min(bx), my, (bx - ax).abs() + 1, 1, c, 255);
+            u.rect(bx, my, 1, (by - my).max(1), c, 255);
+        }
     }
     for i in 0..N {
         let n = &NODES[i];
+        if n.col != tab {
+            continue;
+        }
         let (x, y, bs) = node_pos(i, fw, fh);
         let r = sk.rank[i];
         let can = sk.can_learn(i).is_ok();
@@ -725,7 +926,7 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         let rim = if hover {
             [255, 255, 255]
         } else if r > 0 {
-            SCHOOLS[n.col].1
+            scol
         } else if can {
             if (t / 15) % 2 == 0 { [255, 210, 90] } else { [180, 140, 60] }
         } else {
@@ -748,6 +949,10 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         if n.active {
             u.px(x + bs - 3, y + 2, [255, 255, 255], 200);
         }
+        let nc = if r > 0 { [240, 230, 215] } else if can { [220, 200, 150] } else { [120, 110, 120] };
+        u.text(x + bs + 5, y + 3, n.name, nc, 1, false);
+        let kind = if n.active { "SPELL" } else { "PASSIVE" };
+        u.text(x + bs + 5, y + 12, &format!("{}  LV {}", kind, min_level(i)), [110, 100, 112], 1, false);
     }
     // tooltip
     let i = g.tree_hover.unwrap_or(usize::MAX);
@@ -774,7 +979,8 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         u.text(fw - Ui::text_w(&extra, 1) - 18, ty + th - 10, &extra, [150, 180, 255], 1, true);
     } else {
         u.text(18, ty + 8, "HOVER A SKILL TO SEE WHAT IT DOES. EARN POINTS BY LEVELLING UP.", [200, 190, 190], 1, false);
-        u.text(18, ty + 18, "EACH TIER NEEDS THE ONE ABOVE IT AND A MINIMUM LEVEL. ULTIMATES NEED A TOME.", [160, 150, 160], 1, false);
+        u.text(18, ty + 18, "EACH SCHOOL SPLITS INTO TWO PATHS. EITHER PATH LEADS TO ITS ULTIMATE.", [160, 150, 160], 1, false);
+        u.text(18, ty + 28, "ULTIMATE SPELLS ALSO NEED THEIR TOME, FOUND IN THE WORLD.", [160, 150, 160], 1, false);
     }
 }
 

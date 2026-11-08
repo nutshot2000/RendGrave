@@ -29,10 +29,10 @@ impl Game {
     /// share of damage that gets through your armour
     pub fn armor_mult(&self) -> f32 {
         let a = self.player.gear.armor;
-        (1.0 - a / (a + 60.0)) * self.ward_mult()
+        (1.0 - a / (a + 60.0)) * self.ward_mult() * (1.0 - 0.04 * self.rank(Sk::Toughness) as f32) * if self.player.ice > 0 { 0.6 } else { 1.0 }
     }
     pub fn swing_frames(&self) -> i32 {
-        ((wstats(self.wkind()).frames as f32) / (1.0 + self.player.gear.swift / 100.0) / self.haste_mult()).round().max(6.0) as i32
+        ((wstats(self.wkind()).frames as f32) / (1.0 + self.player.gear.swift / 100.0) / self.haste_mult() / (1.0 + 0.06 * self.rank(Sk::Momentum) as f32)).round().max(6.0) as i32
     }
 
     /// the moment the weapon lands
@@ -59,7 +59,7 @@ impl Game {
             }
             let a = dy.atan2(dx);
             let da = (a - aim).sin().atan2((a - aim).cos()).abs();
-            if da > ws.arc && d > 10.0 {
+            if da > ws.arc * (1.0 + 0.15 * self.rank(Sk::Cleave) as f32) && d > 10.0 {
                 continue;
             }
             targets.push((d, i));
@@ -80,7 +80,7 @@ impl Game {
             };
             let crit = rnd() < crit_ch;
             crit_any |= crit;
-            let power = ws.power + edge as f32 * 8.0 + g.keen + if crit { 20.0 + 6.0 * ex_r as f32 } else { 0.0 };
+            let power = (ws.power + edge as f32 * 8.0 + g.keen + if crit { 20.0 + 6.0 * ex_r as f32 } else { 0.0 }) * (1.0 + 0.2 * self.rank(Sk::Dismember) as f32);
             let dmg = g.weapon_dmg * ws.dmg_mult * (1.0 + g.dmg_pct / 100.0) * (1.0 + 0.1 * edge as f32);
             match wk {
                 WKind::Hammer => self.crush_enemy(i, h, dmg, crit),

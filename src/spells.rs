@@ -38,14 +38,31 @@ impl Game {
 
     /// shared damage bookkeeping for an enemy
     pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
-        let dmg = dmg * self.power_mult();
+        let mut dmg = dmg * self.power_mult();
+        let (sear, deep, chill, war) = (self.rank(Sk::Searing), self.rank(Sk::DeepFreeze), self.rank(Sk::Chill), self.rank(Sk::Warlord));
         let e = &mut self.enemies[i];
+        if e.burning > 0 {
+            dmg *= 1.0 + 0.15 * sear as f32;
+        }
+        if e.frozen > 0 {
+            dmg *= 1.0 + 0.2 * deep as f32;
+        }
+        if chill > 0 {
+            e.slow = e.slow.max(60 * chill);
+        }
         e.hp -= dmg;
         e.aggro = true;
         e.hpbar = 180;
         e.flash = e.flash.max(4);
+        let executed = war > 0 && big && !e.k.boss() && e.hp > 0.0 && e.hp < e.maxhp * 0.3;
+        if executed {
+            e.hp = 0.0;
+        }
         let (x, y) = (e.x, e.y);
         self.float(x + rr(-4.0, 4.0), y - 62.0, format!("{}", dmg.round() as i32), col, big);
+        if executed {
+            self.float(x, y - 74.0, "EXECUTED".into(), [255, 90, 70], true);
+        }
     }
 
     /// A blade stroke through an enemy at height `h` (negative = above the feet), coming from `src_x`.
@@ -107,10 +124,11 @@ impl Game {
         let (zx, zy) = (self.enemies[i].x, self.enemies[i].y);
         self.snd(Sfx::Zap, zx, zy, 0.6);
         let mult = 1.0 + 0.15 * self.rank(Sk::ChainMastery) as f32;
+        let (cond, stat) = (self.rank(Sk::Conductor), self.rank(Sk::StaticField));
         let e = &mut self.enemies[i];
-        let wet = e.wet > 0;
-        let dmg = base * mult * if wet { 1.7 } else { 1.0 } * rr(0.85, 1.15);
-        e.stun = e.stun.max(26);
+        let wet = e.wet > 0 || (cond > 0 && e.bleed > 0);
+        let dmg = base * mult * if wet { 1.7 + 0.3 * cond as f32 } else { 1.0 } * rr(0.85, 1.15);
+        e.stun = e.stun.max(26 + 13 * stat);
         e.twitch = 26;
         if e.frozen > 0 {
             e.frozen = 0;
@@ -137,6 +155,9 @@ impl Game {
     }
 
     pub fn cast(&mut self, s: Sk, mx: f32, my: f32, inp: &Input) {
+        if self.cast_talent(s, mx, my) {
+            return;
+        }
         match s {
             Sk::Lightning => self.cast_lightning(mx, my, inp),
             Sk::Fireball => self.cast_fireball(mx, my),
@@ -151,7 +172,7 @@ impl Game {
             Sk::Thunderstorm => {
                 let (x, y) = (self.player.x, self.player.y);
                 self.snd(Sfx::Thunder, x, y, 1.0);
-                self.fields.push(Field { k: 0, x: 0.0, y: 0.0, t: 0, max: 360, r: 150.0 });
+                self.fields.push(Field { k: 0, x: 0.0, y: 0.0, t: 0, max: if self.rank(Sk::EyeOfStorm) > 0 { 720 } else { 360 }, r: 150.0 });
                 self.flash = self.flash.max(0.2);
                 self.banner_small("THE SKY ANSWERS");
             }
@@ -159,7 +180,10 @@ impl Game {
             Sk::Meteor => {
                 self.meteors.push(Meteor { x: mx, y: my, t: 0 });
             }
-            Sk::AcidRain => self.fields.push(Field { k: 1, x: mx, y: my, t: 0, max: 300, r: 34.0 }),
+            Sk::AcidRain => {
+                let pl = self.rank(Sk::Plague) > 0;
+                self.fields.push(Field { k: 1, x: mx, y: my, t: 0, max: if pl { 420 } else { 300 }, r: if pl { 56.0 } else { 34.0 } })
+            }
             Sk::AcidFlood => self.cast_flood(mx, my),
             Sk::IceSpikes => {
                 let (px, py) = (self.player.x, self.player.y);
@@ -218,7 +242,8 @@ impl Game {
     }
 
     fn cast_flood(&mut self, mx: f32, my: f32) {
-        self.world.splash(mx, my, ACID, 9.0, 16);
+        let pl = if self.rank(Sk::Plague) > 0 { 1.6 } else { 1.0 };
+        self.world.splash(mx, my, ACID, 9.0 * pl, 16);
         for _ in 0..6 {
             let (ox, oy) = (rr(-14.0, 14.0), rr(-9.0, 9.0));
             self.world.splash(mx + ox, my + oy, ACID, 4.0, 12);
@@ -242,7 +267,7 @@ impl Game {
             let (x, y) = if kind == 0 { (self.player.x, self.player.y) } else { (f.x, f.y) };
             match kind {
                 0 => {
-                    if t % 16 == 0 {
+                    if t % (if self.rank(Sk::EyeOfStorm) > 0 { 9 } else { 16 }) == 0 {
                         let cands: Vec<usize> = (0..self.enemies.len())
                             .filter(|&i| {
                                 let e = &self.enemies[i];
@@ -307,6 +332,7 @@ impl Game {
                         }
                     }
                 }
+                3 => self.poison_field(x, y, t, r),
                 _ => {
                     for _ in 0..4 {
                         let a = rnd() * std::f32::consts::TAU;
@@ -350,10 +376,22 @@ impl Game {
             let light = match kind {
                 1 => Some((60.0, 0.5, [0.5, 1.0, 0.3])),
                 2 => Some((90.0, 0.7, [0.6, 0.85, 1.0])),
+                3 => Some((50.0, 0.3, [0.4, 0.8, 0.3])),
                 _ => None,
             };
             if let Some((lr, li, lc)) = light {
                 self.light(x, y, lr, li, lc, 1);
+            }
+            if kind == 2 && self.fields[k].t == self.fields[k].max - 1 && self.rank(Sk::AbsoluteZero) > 0 {
+                // everything in the blizzard freezes solid
+                for e in self.enemies.iter_mut() {
+                    if e.alive && ((e.x - x).powi(2) + ((e.y - y) / 0.7).powi(2)).sqrt() < r {
+                        e.frozen = e.frozen.max(if e.k.boss() { 60 } else { 240 });
+                        e.chill = 0;
+                    }
+                }
+                self.snd(Sfx::Frost, x, y, 1.0);
+                self.flash = self.flash.max(0.1);
             }
             if self.fields[k].t >= self.fields[k].max {
                 self.fields.swap_remove(k);
@@ -458,7 +496,7 @@ impl Game {
             return;
         }
         self.player.whirl -= 1;
-        if w == 26 || w == 16 || w == 6 {
+        if w == 26 || w == 16 || w == 6 || (w > 30 && w % 10 == 6) {
             let (px, py) = (self.player.x, self.player.y);
             let a0 = rnd() * std::f32::consts::TAU;
             self.slashes.push(Slash { x: px, y: py - 22.0, a0, a1: a0 + std::f32::consts::TAU, t: 9 });
@@ -538,8 +576,9 @@ impl Game {
     pub fn recalc(&mut self) {
         let v = self.rank(Sk::Vigor) as f32;
         let w = self.rank(Sk::Wisdom) as f32;
+        let titan = if self.rank(Sk::Titan) > 0 { 1.2 } else { 1.0 };
         let p = &mut self.player;
-        p.maxhp = 100.0 + 15.0 * v + p.gear.hp;
+        p.maxhp = (100.0 + 15.0 * v + p.gear.hp) * titan;
         p.maxmana = 60.0 + 15.0 * w + p.gear.mana;
         p.hp = p.hp.min(p.maxhp);
         p.mana = p.mana.min(p.maxmana);

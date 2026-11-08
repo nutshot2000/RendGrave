@@ -70,6 +70,8 @@ pub struct Enemy {
     pub elite: bool,
     /// on its back after slipping in oil
     pub slip: i32,
+    /// slowed by frost or poison
+    pub slow: i32,
     pub bleed_dot: i32,
     pub bleed_amt: f32,
 }
@@ -110,6 +112,10 @@ pub struct Player {
     /// sliding helplessly on spilt oil
     pub slip: i32,
     pub slide: (f32, f32),
+    /// Storm Shield, Ice Armour and Last Stand timers
+    pub shield: i32,
+    pub ice: i32,
+    pub stand_cd: i32,
     pub equip: [Option<Item>; 4],
     pub bag: Vec<Item>,
     pub gear: GearStats,
@@ -253,6 +259,8 @@ pub struct Game {
     pub spawn_t: i32,
     pub tree: bool,
     pub tree_hover: Option<usize>,
+    /// which school the skill tree screen shows
+    pub tree_tab: usize,
     pub paused: bool,
     pub hold_block: bool,
     pub area: AreaId,
@@ -333,6 +341,7 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         summoned: false,
         elite: false,
         slip: 0,
+        slow: 0,
         bleed_dot: 0,
         bleed_amt: 0.0,
     }
@@ -389,6 +398,9 @@ impl Game {
             swing_max: 16,
             slip: 0,
             slide: (0.0, 0.0),
+            shield: 0,
+            ice: 0,
+            stand_cd: 0,
             equip: [Some(starter_weapon()), None, Some(starter_armor()), None],
             bag: vec![],
             gear: GearStats::default(),
@@ -423,6 +435,7 @@ impl Game {
             spawn_t: 1500,
             tree: false,
             tree_hover: None,
+            tree_tab: 0,
             paused: false,
             hold_block: false,
             area: AreaId::Ashford,
@@ -603,7 +616,20 @@ impl Game {
             return;
         }
         if self.tree {
-            self.tree_hover = crate::hud::node_at(inp.mouse, self.view);
+            if inp.left && !self.prev.left {
+                self.tree_tab = (self.tree_tab + 5) % 6;
+            }
+            if inp.right && !self.prev.right {
+                self.tree_tab = (self.tree_tab + 1) % 6;
+            }
+            if inp.lmb && !self.prev.lmb {
+                if let Some(t) = crate::hud::tab_at(inp.mouse, self.view) {
+                    self.tree_tab = t;
+                    let (x, y) = (self.player.x, self.player.y);
+                    self.snd(Sfx::Click, x, y, 0.5);
+                }
+            }
+            self.tree_hover = crate::hud::node_at(inp.mouse, self.view, self.tree_tab);
             if inp.lmb && !self.prev.lmb {
                 if let Some(i) = self.tree_hover {
                     if self.player.sk.learn(i) {
@@ -724,7 +750,7 @@ impl Game {
         }
         if u[3] {
             speed *= 0.78;
-            if l > 0.0 && p.dodge == 0 && p.slip == 0 && rnd() < 0.005 {
+            if l > 0.0 && p.dodge == 0 && p.slip == 0 && p.sk.r(Sk::Titan) == 0 && rnd() < 0.005 {
                 p.slip = 34;
                 p.slide = (dx * 2.6, dy * 2.6);
                 self.sounds.push(Snd { k: Sfx::Dodge, x: p.x, y: p.y, v: 0.9 });
@@ -778,7 +804,7 @@ impl Game {
         }
         if p.burn > 0 {
             p.burn -= 1;
-            p.hp -= 0.09;
+            p.hp -= 0.09 * (1.0 - 0.3 * p.sk.r(Sk::Fireproof) as f32).max(0.1);
             p.hurt = p.hurt.max(0.2);
             if p.burn % 4 == 0 {
                 let (x, y) = (p.x + rr(-5.0, 5.0), p.y);
@@ -794,7 +820,7 @@ impl Game {
         if inp.potion && !self.prev.potion && p.potions > 0 && p.hp < p.maxhp {
             p.potions -= 1;
             self.sounds.push(Snd { k: Sfx::Potion, x: p.x, y: p.y, v: 1.0 });
-            p.hp = (p.hp + 45.0).min(p.maxhp);
+            p.hp = (p.hp + 45.0 * (1.0 + 0.25 * p.sk.r(Sk::SecondWind) as f32)).min(p.maxhp);
             let (x, y) = (p.x, p.y);
             for _ in 0..30 {
                 self.ptc(x + rr(-6.0, 6.0), y, rr(0.0, 40.0), 0.0, 0.0, rr(0.3, 1.0), 50, PtK::Heal, [255, 80, 90]);
@@ -840,6 +866,12 @@ impl Game {
                 p.cast_t = 14;
                 p.face = if ax < 0.0 { -1.0 } else { 1.0 };
                 self.cast(s, mwx, mwy, inp);
+                let ov = self.rank(Sk::Overload);
+                if ov > 0 && node(s).col == 0 && rnd() < 0.12 * ov as f32 {
+                    self.player.mana += node(s).mana;
+                    self.player.cd[s as usize] = 0;
+                    self.banner_small("OVERLOAD");
+                }
             } else if !self.prev.rmb {
                 let (x, y) = (p.x, p.y);
                 self.float(x, y - 56.0, "NO MANA".into(), [120, 160, 255], false);
@@ -887,6 +919,8 @@ impl Game {
             b.parts[T_TORSO].ang = 0.1;
         }
         b.compute();
+        self.last_stand();
+        let p = &mut self.player;
         if p.hp <= 0.0 && !p.dead {
             p.dead = true;
             self.sounds.push(Snd { k: Sfx::Death, x: p.x, y: p.y, v: 1.0 });
@@ -1287,6 +1321,14 @@ impl Game {
                         0 => {
                             let r = 13.0 + 2.0 * self.rank(Sk::Kindling) as f32;
                             self.explode(x, y, z.max(2.0), r);
+                            if self.rank(Sk::Splinter) > 0 {
+                                let n1 = self.lights.len();
+                                for q in 0..3 {
+                                    let a = q as f32 * 2.1 + rr(-0.4, 0.4);
+                                    self.explode(x + a.cos() * 16.0, y + a.sin() * 10.0, 2.0, r * 0.55);
+                                }
+                                self.lights.truncate(n1);
+                            }
                         }
                         1 => self.acid_hit(x, y, z, hit_e),
                         3 | 4 => {
@@ -1365,7 +1407,7 @@ impl Game {
                 self.ptc(x, y, z, rr(-1.0, 1.0), rr(-0.6, 0.6), rr(0.0, 1.0), 200, PtK::Acid, [130, 220, 60]);
             }
         } else {
-            self.world.splash(x, y, ACID, 3.5, 3);
+            self.world.splash(x, y, ACID, 3.5 + 1.2 * self.rank(Sk::AcidPools) as f32, 3);
             for _ in 0..10 {
                 self.ptc(x, y, 1.0, rr(-1.0, 1.0), rr(-0.6, 0.6), rr(0.5, 1.5), 40, PtK::Acid, [140, 230, 70]);
             }
@@ -1397,6 +1439,7 @@ impl Game {
         }
         let dir = ((ex - self.player.x).signum(), 0.0);
         self.spawn_gibs(ex, ey, m, pieces, dir, 1.8, true);
+        self.shatter_shards(ex, ey);
         for _ in 0..40 {
             self.ptc(ex, ey, rr(0.0, 50.0), rr(-2.0, 2.0), rr(-1.0, 1.0), rr(0.0, 2.0), 80, PtK::Ice, [200, 230, 255]);
         }
@@ -1468,6 +1511,8 @@ impl Game {
 
     fn update_enemies(&mut self) {
         let bm = self.burn_mult();
+        let caustic = 1.0 + 0.4 * self.rank(Sk::Caustic) as f32;
+        let mut retal: Vec<usize> = vec![];
         let (px, py) = (self.player.x, self.player.y);
         if self.frame % 8 == 0 || self.nav_dirty {
             self.nav.build(&self.world, px, py);
@@ -1518,7 +1563,7 @@ impl Game {
                         p.acid = p.acid.max(160);
                     }
                 });
-                e.hp -= 0.05;
+                e.hp -= 0.05 * caustic;
             }
             if u[2] {
                 e.body.each_in(0.0, -2.0, 8.0, |p, _, _| p.burn = 0);
@@ -1627,6 +1672,9 @@ impl Game {
             }
             let e = &mut self.enemies[i];
             let mut want = (0.0f32, 0.0f32);
+            if e.slow > 0 {
+                e.slow -= 1;
+            }
             if e.slip > 0 {
                 e.slip -= 1;
             } else if u[3] && e.aggro && !e.k.big() && e.frozen == 0 && legs == 2 && rnd() < 0.012 {
@@ -1639,7 +1687,7 @@ impl Game {
             }
             let e = &mut self.enemies[i];
             let crawling = legs == 0 || e.slip > 0;
-            let spd = e.speed * if u[3] { 0.7 } else { 1.0 } * if legs == 2 { 1.0 } else if legs == 1 { 0.55 } else { 0.35 } * if e.burning > 25 && !e.k.bony() { 1.5 } else { 1.0 };
+            let spd = e.speed * if e.slow > 0 { 0.55 } else { 1.0 } * if u[3] { 0.7 } else { 1.0 } * if legs == 2 { 1.0 } else if legs == 1 { 0.55 } else { 0.35 } * if e.burning > 25 && !e.k.bony() { 1.5 } else { 1.0 };
             if e.stun > 0 {
                 e.stun -= 1;
             } else if e.aggro && !pdead {
@@ -1743,6 +1791,7 @@ impl Game {
                                 self.sounds.push(Snd { k: Sfx::HitFlesh, x: self.player.x, y: self.player.y, v: 0.8 });
                                 let am = self.armor_mult();
                                 self.player.hp -= dmg * rr(0.85, 1.15) * am;
+                                retal.push(i);
                                 self.player.hurt = 1.0;
                                 self.player.inv = 14;
                                 self.shake = self.shake.max(4.0);
@@ -1859,6 +1908,9 @@ impl Game {
                 }
             }
             b.compute();
+        }
+        for i in retal {
+            self.retaliate(i);
         }
         for (x, y, z) in flames {
             self.ptc(x, y, z, rr(-0.15, 0.15), 0.0, rr(0.3, 0.8), rr(14.0, 26.0) as i32, PtK::Flame, [255, 150, 50]);
