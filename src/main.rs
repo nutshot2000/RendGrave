@@ -1,6 +1,7 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod menu;
 mod shop;
 mod talents;
 mod nav;
@@ -37,6 +38,7 @@ struct Showcase {
     spells: bool,
     tour: bool,
     loot: bool,
+    menus: bool,
     /// steps taken while the game is paused (the skill tree stops the clock)
     sub: i32,
 }
@@ -470,7 +472,42 @@ impl App {
         }
         None
     }
+    /// the title screen, the pause menu and the end-of-act card
+    fn step_menus(&mut self) -> Option<String> {
+        let sh = self.show.as_mut().unwrap();
+        sh.sub += 1;
+        let k = sh.sub;
+        match k {
+            1 => self.game = title_game(),
+            80 => return Some("m1_title".into()),
+            81 => {
+                let mut g = game::Game::new(7);
+                g.saving = false;
+                g.travel(areagen::AreaId::Ashford);
+                g.banner = None;
+                g.paused = true;
+                g.menu_hover = Some(1);
+                self.game = g;
+            }
+            140 => return Some("m2_pause".into()),
+            141 => {
+                let g = &mut self.game;
+                g.paused = false;
+                g.ending = -1;
+                g.player.kills = 412;
+                g.player.gold = 1830;
+                g.player.sk.level = 17;
+                g.played = 60 * 60 * 60 * 3 + 60 * 60 * 24;
+            }
+            146 => return Some("m3_ending".into()),
+            _ => {}
+        }
+        None
+    }
     fn step_showcase(&mut self) -> Option<String> {
+        if self.show.as_ref().map(|s| s.menus).unwrap_or(false) {
+            return self.step_menus();
+        }
         if self.show.as_ref().map(|s| s.loot).unwrap_or(false) {
             return self.step_loot();
         }
@@ -676,7 +713,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         if let Some(g) = &self.gfx {
             g.window.request_redraw();
         }
@@ -712,10 +749,50 @@ impl App {
                 self.acc = 0.0;
             }
         }
+        // menu requests the game can't carry out itself
+        if let Some(r) = self.game.req.take() {
+            use menu::Req;
+            match r {
+                Req::Quit => {
+                    self.game.save();
+                    el.exit();
+                }
+                Req::Fullscreen => {
+                    if let Some(g) = &self.gfx {
+                        let full = g.window.fullscreen().is_some();
+                        g.window.set_fullscreen(if full { None } else { Some(winit::window::Fullscreen::Borderless(None)) });
+                    }
+                }
+                Req::Music => {
+                    if let Some(a) = &mut self.audio {
+                        a.toggle_music();
+                    }
+                }
+                Req::Sound => {
+                    if let Some(a) = &mut self.audio {
+                        a.toggle_sfx();
+                    }
+                }
+                Req::Volume(d) => {
+                    if let Some(a) = &mut self.audio {
+                        a.change_volume(d);
+                    }
+                }
+                Req::NewGame => self.game = game::Game::start(false),
+                Req::Continue => self.game = game::Game::start(true),
+                Req::ToTitle => {
+                    self.game.save();
+                    self.game = title_game();
+                }
+            }
+        }
+        if let Some(a) = &self.audio {
+            self.game.audio_state = (a.music_on, a.sfx_on, a.volume);
+        }
         if let Some(a) = &mut self.audio {
             use areagen::AreaId;
             let g = &self.game;
-            let want = if g.player.dead {
+            let want = if g.player.dead || g.title {
                 audio::Track::Title
             } else if g.enemies.iter().any(|e| e.alive && e.k.boss() && e.aggro) {
                 audio::Track::Boss
@@ -769,6 +846,8 @@ impl App {
         if let Some(sh) = &self.show {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
+            } else if sh.menus {
+                shot.as_deref() == Some("m3_ending")
             } else if sh.tour {
                 shot.as_deref() == Some("t15_shop")
             } else if sh.spells {
@@ -838,11 +917,12 @@ fn main() {
     let spells = args.iter().any(|a| a == "--spells");
     let tour = args.iter().any(|a| a == "--tour");
     let loot = args.iter().any(|a| a == "--loot");
+    let menus = args.iter().any(|a| a == "--menus");
     let fresh = args.iter().any(|a| a == "--new");
-    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot").map(|i| {
+    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot" || a == "--menus").map(|i| {
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "shots".into());
         std::fs::create_dir_all(&dir).ok();
-        Showcase { dir, log: vec![], lab, spells, tour, loot, sub: 0 }
+        Showcase { dir, log: vec![], lab, spells, tour, loot, menus, sub: 0 }
     });
     let seed = if show.is_some() { 7 } else { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1) };
     let el = EventLoop::new().expect("event loop");
@@ -850,7 +930,7 @@ fn main() {
     let testing = show.is_some();
     let mut app = App {
         gfx: None,
-        game: if show.is_some() { game::Game::new(seed) } else { game::Game::start(!fresh) },
+        game: if show.is_some() { game::Game::new(seed) } else if fresh { game::Game::start(false) } else { title_game() },
         input: game::Input::default(),
         frame: None,
         last: Instant::now(),
@@ -939,6 +1019,19 @@ fn low_test() {
         let b = &g.barrels[0];
         println!("arrow at a {}: alive {}, fuse {}", name, b.alive, b.fuse);
     }
+}
+
+/// the title screen: Ashford at night behind the menu
+fn title_game() -> game::Game {
+    let mut g = game::Game::new(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1));
+    g.saving = false;
+    g.travel(areagen::AreaId::Ashford);
+    g.banner = None;
+    g.fade = 60;
+    g.title = true;
+    g.has_save = std::path::Path::new(areas::SAVE_FILE).exists();
+    g.sounds.clear();
+    g
 }
 
 /// test helper: stand a little to the west of the first reachable enemy

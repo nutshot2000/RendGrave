@@ -272,6 +272,20 @@ pub struct Game {
     pub wp_hover: Option<usize>,
     pub king_dead: bool,
     pub chief_dead: bool,
+    /// the title screen is up (the town behind it is just scenery)
+    pub title: bool,
+    pub has_save: bool,
+    pub menu_hover: Option<usize>,
+    pub confirm_new: bool,
+    /// something for main.rs to do (quit, fullscreen, audio, new game)
+    pub req: Option<crate::menu::Req>,
+    /// (music on, sound on, volume), kept up to date by main.rs for the menus
+    pub audio_state: (bool, bool, f32),
+    pub act1_done: bool,
+    /// counts down to the end-of-act card; -1 while the card is showing
+    pub ending: i32,
+    /// frames played
+    pub played: u64,
     pub chests: Vec<crate::props::Chest>,
     pub shrines: Vec<crate::props::Shrine>,
     pub barrels: Vec<crate::barrels::Barrel>,
@@ -451,6 +465,15 @@ impl Game {
             wp_hover: None,
             king_dead: false,
             chief_dead: false,
+            title: false,
+            has_save: false,
+            menu_hover: None,
+            confirm_new: false,
+            req: None,
+            audio_state: (true, true, 0.7),
+            act1_done: false,
+            ending: 0,
+            played: 0,
             chests: vec![],
             shrines: vec![],
             barrels: vec![],
@@ -582,14 +605,40 @@ impl Game {
         if self.fade > 0 {
             self.fade -= 1;
         }
+        if self.title {
+            // the town drifts by behind the title
+            self.frame += 1;
+            self.cam.0 = 380.0 + (self.frame as f32 * 0.002).sin() * 120.0;
+            self.cam.1 = 250.0 + (self.frame as f32 * 0.0013).cos() * 40.0;
+            self.world.update();
+            self.update_menu(inp);
+            self.prev = inp.clone();
+            return;
+        }
+        if self.ending == -1 {
+            if (inp.lmb && !self.prev.lmb) || (inp.close && !self.prev.close) || (inp.interact && !self.prev.interact) {
+                self.ending = 0;
+                self.hold_block = true;
+            }
+            self.prev = inp.clone();
+            return;
+        }
+        if self.ending > 0 {
+            self.ending -= 1;
+            if self.ending == 0 {
+                self.ending = -1;
+            }
+        }
+        let menu_up = self.inv_open || self.shop_open || self.wp_open;
         if inp.tree && !self.prev.tree && !self.player.dead {
             self.tree = !self.tree;
             self.hold_block = true;
         } else if inp.close && !self.prev.close {
             if self.tree {
                 self.tree = false;
-            } else if !self.player.dead {
+            } else if !self.player.dead && !menu_up {
                 self.paused = !self.paused;
+                self.menu_hover = None;
             }
             self.hold_block = true;
         }
@@ -630,6 +679,7 @@ impl Game {
             return;
         }
         if self.paused && !self.tree {
+            self.update_menu(inp);
             self.prev = inp.clone();
             return;
         }
@@ -662,6 +712,7 @@ impl Game {
             return;
         }
         self.frame += 1;
+        self.played += 1;
         if self.hitstop > 0 {
             self.hitstop -= 1;
             self.prev = inp.clone();

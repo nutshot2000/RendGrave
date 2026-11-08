@@ -274,6 +274,7 @@ impl Game {
         }
         self.flash = 0.2;
         self.save();
+        self.check_act_end();
     }
 
     pub fn king_slain(&mut self, x: f32, y: f32) {
@@ -290,6 +291,7 @@ impl Game {
         }
         self.flash = 0.25;
         self.save();
+        self.check_act_end();
     }
 
     // ---------------------------------------------------------------- saving
@@ -312,6 +314,8 @@ impl Game {
             format!("waypoints {}", join(self.discovered.iter().map(|a| a.key()).collect())),
             format!("king {}", self.king_dead as u8),
             format!("chief {}", self.chief_dead as u8),
+            format!("act1 {}", self.act1_done as u8),
+            format!("played {}", self.played),
         ];
         let mut lines: Vec<String> = lines.to_vec();
         for (k, it) in self.player.equip.iter().enumerate() {
@@ -352,6 +356,8 @@ impl Game {
                 "waypoints" => self.discovered = v.split(',').filter_map(AreaId::from_key).collect(),
                 "king" => self.king_dead = v == "1",
                 "chief" => self.chief_dead = v == "1",
+                "act1" => self.act1_done = v == "1",
+                "played" => self.played = v.parse().unwrap_or(0),
                 "equip0" | "equip1" | "equip2" | "equip3" => {
                     if !gear_loaded {
                         self.player.equip = [None, None, None, None];
