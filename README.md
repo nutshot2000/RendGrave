@@ -14,13 +14,14 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
 | Key | Action |
 |---|---|
 | WASD | Move |
-| Left mouse | Sword (aim at the legs to take them off) |
+| Left mouse | Attack with your weapon (aim at the legs to take them off) |
 | Right mouse | Cast the selected spell |
 | 1-9 / mouse wheel | Choose a spell from the spell bar |
 | K or Tab | Skill tree (spend skill points) |
 | Space | Dodge roll |
 | F | Drink a potion |
 | E | Use exits, stairs and waypoints |
+| I | Gear: equip with a click, sell with a right click |
 | M / N | Music on/off, sound effects on/off |
 | - / + | Volume |
 | R | After dying: wake in Ashford |
@@ -34,6 +35,7 @@ fire chars and burns, lightning scorches and arcs through puddles, and frost sha
     cargo run --release -- --spells spl       # every spell unlocked and cast, plus the skill tree screen
     cargo run --release -- --tour tour        # visits and screenshots every area
     cargo run --release -- --sfx-dump sfx     # writes every synthesised sound effect to WAV
+    cargo run --release -- --loot loot        # every weapon type on a lineup, loot, the gear screen
 
 ## Code map
 

@@ -21,6 +21,7 @@ impl Game {
             g.travel(to);
             g.banner = Some(("WELCOME BACK".into(), to.name(), 200));
         } else {
+            g.apply_gear();
             g.travel(AreaId::Ashford);
             g.banner = Some(("RENDGRAVE".into(), "ASHFORD - THE LAST SAFE HEARTH".into(), 260));
         }
@@ -34,6 +35,14 @@ impl Game {
         e.hp *= 1.0 + 0.18 * l;
         e.maxhp = e.hp;
         e.dmg *= 1.0 + 0.1 * l;
+        // now and then a champion: tougher, glowing, better loot
+        if k != Kind::King && self.area != AreaId::Ashford && rnd() < 0.07 {
+            e.elite = true;
+            e.hp *= 2.6;
+            e.maxhp = e.hp;
+            e.dmg *= 1.3;
+            e.speed *= 1.1;
+        }
         e
     }
 
@@ -69,6 +78,7 @@ impl Game {
         self.lights.clear();
         self.floats.clear();
         self.pickups.clear();
+        self.ground.clear();
         self.slashes.clear();
         self.novas.clear();
         self.fields.clear();
@@ -99,13 +109,12 @@ impl Game {
     /// back to town after dying: keep everything but a tenth of the gold
     pub fn revive(&mut self) {
         let p = &mut self.player;
-        p.body = humanoid(Kind::Player);
-        p.body.compute();
         p.dead = false;
         p.hp = p.maxhp;
         p.mana = p.maxmana;
         p.gold = p.gold * 9 / 10;
         p.inv = 120;
+        self.apply_gear();
         self.area = AreaId::Ashford;
         self.travel(AreaId::Ashford);
         self.banner = Some(("YOU WAKE IN ASHFORD".into(), "THE DEAD TOOK A TENTH OF YOUR GOLD".into(), 220));
@@ -241,10 +250,20 @@ impl Game {
             format!("waypoints {}", join(self.discovered.iter().map(|a| a.key()).collect())),
             format!("king {}", self.king_dead as u8),
         ];
+        let mut lines: Vec<String> = lines.to_vec();
+        for (k, it) in self.player.equip.iter().enumerate() {
+            if let Some(it) = it {
+                lines.push(format!("equip{} {}", k, it.encode()));
+            }
+        }
+        for it in &self.player.bag {
+            lines.push(format!("bag {}", it.encode()));
+        }
         let _ = std::fs::write(SAVE_FILE, lines.join("\n"));
     }
     fn load(&mut self) -> bool {
         let Ok(txt) = std::fs::read_to_string(SAVE_FILE) else { return false };
+        let mut gear_loaded = false;
         for line in txt.lines() {
             let mut it = line.splitn(2, ' ');
             let (k, v) = (it.next().unwrap_or(""), it.next().unwrap_or("").trim());
@@ -269,10 +288,23 @@ impl Game {
                 "potions" => self.player.potions = v.parse().unwrap_or(3),
                 "waypoints" => self.discovered = v.split(',').filter_map(AreaId::from_key).collect(),
                 "king" => self.king_dead = v == "1",
+                "equip0" | "equip1" | "equip2" | "equip3" => {
+                    if !gear_loaded {
+                        self.player.equip = [None, None, None, None];
+                        gear_loaded = true;
+                    }
+                    let s: usize = k[5..].parse().unwrap_or(0);
+                    self.player.equip[s] = crate::items::Item::decode(v);
+                }
+                "bag" => {
+                    if let Some(it) = crate::items::Item::decode(v) {
+                        self.player.bag.push(it);
+                    }
+                }
                 _ => {}
             }
         }
-        self.recalc();
+        self.apply_gear();
         self.player.hp = self.player.maxhp;
         self.player.mana = self.player.maxmana;
         true

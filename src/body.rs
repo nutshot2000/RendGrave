@@ -995,3 +995,103 @@ pub fn shatter(d: &Detached, chunk: i32) -> Vec<Detached> {
     }
     out
 }
+
+/// the weapon in the player's hand, shaped by its type; rarer weapons have richer metal,
+/// legendaries carry glowing runes along the blade
+pub fn weapon_part(wk: crate::items::WKind, rarity: crate::items::Rarity, glow: bool, attach: (f32, f32)) -> Part {
+    use crate::items::{Rarity, WKind};
+    let steel: [u8; 3] = match rarity {
+        Rarity::Common => [170, 176, 190],
+        Rarity::Magic => [160, 180, 235],
+        Rarity::Rare => [226, 206, 130],
+        Rarity::Legendary => [90, 84, 96],
+    };
+    let rune: [u8; 3] = [255, 140, 50];
+    let lit = |c: [u8; 3], left: bool| if left { mul(c, 1.25) } else { mul(c, 0.85) };
+    let wood = [96u8, 62, 38];
+    let par = T_ARMF as i32;
+    match wk {
+        WKind::Sword => mk(PK::Weapon, 5, 26, (2.5, 21.5), par, attach, move |x, y| {
+            let fx = x as f32 - 2.0;
+            if y >= 22 {
+                return if fx.abs() < 1.0 { Some((PM_WOOD, wood, 0, [0; 3])) } else { None };
+            }
+            if y == 20 || y == 21 {
+                return Some((PM_METAL, [214, 180, 80], 0, [0; 3]));
+            }
+            if fx.abs() < 1.5 && !(y == 0 && fx.abs() > 0.5) {
+                if glow && fx.abs() < 0.5 && y % 3 == 1 {
+                    return Some((PM_GLOW, rune, 0, [0; 3]));
+                }
+                return Some((PM_METAL, lit(steel, fx < 0.0), 0, [0; 3]));
+            }
+            None
+        }),
+        WKind::Axe => mk(PK::Weapon, 9, 28, (2.0, 24.5), par, attach, move |x, y| {
+            let haft = x == 1 || x == 2;
+            let head = y < 10 && x >= 3 && {
+                let dy = (y as f32 - 4.5).abs();
+                (x as f32) < 4.0 + (5.0 - dy * 0.55) + if y < 2 || y > 7 { 0.0 } else { 0.8 }
+            };
+            if head {
+                if glow && x == 4 && y % 2 == 0 {
+                    return Some((PM_GLOW, rune, 0, [0; 3]));
+                }
+                let edge = x >= 7;
+                return Some((PM_METAL, if edge { mul(steel, 1.3) } else { lit(steel, y < 5) }, 0, [0; 3]));
+            }
+            if haft && y >= 1 {
+                return Some((PM_WOOD, if x == 1 { mul(wood, 1.15) } else { wood }, 0, [0; 3]));
+            }
+            None
+        }),
+        WKind::Hammer => mk(PK::Weapon, 8, 28, (4.0, 24.5), par, attach, move |x, y| {
+            let head = y < 7 && x <= 7;
+            if head {
+                if glow && (x == 2 || x == 5) && y == 3 {
+                    return Some((PM_GLOW, [140, 220, 255], 0, [0; 3]));
+                }
+                let face = x == 0 || x == 7;
+                return Some((PM_METAL, if face { mul(steel, 0.75) } else { lit(steel, y < 3) }, 0, [0; 3]));
+            }
+            if (x == 3 || x == 4) && y >= 7 {
+                return Some((PM_WOOD, if x == 3 { mul(wood, 1.15) } else { wood }, 0, [0; 3]));
+            }
+            None
+        }),
+        WKind::Spear => mk(PK::Weapon, 5, 44, (2.0, 32.5), par, attach, move |x, y| {
+            let fx = x as f32 - 2.0;
+            if y < 8 {
+                let w = if y < 2 { 0.6 } else if y < 6 { 1.6 } else { 1.0 };
+                if fx.abs() <= w {
+                    if glow && fx.abs() < 0.5 && y > 1 {
+                        return Some((PM_GLOW, rune, 0, [0; 3]));
+                    }
+                    return Some((PM_METAL, lit(steel, fx < 0.0), 0, [0; 3]));
+                }
+                return None;
+            }
+            if fx.abs() < 1.0 {
+                return Some((PM_WOOD, if y % 9 == 0 { mul(wood, 0.7) } else { wood }, 0, [0; 3]));
+            }
+            None
+        }),
+        WKind::Dagger => mk(PK::Weapon, 5, 14, (2.5, 10.5), par, attach, move |x, y| {
+            let fx = x as f32 - 2.0;
+            if y >= 11 {
+                return if fx.abs() < 1.0 { Some((PM_WOOD, wood, 0, [0; 3])) } else { None };
+            }
+            if y == 9 || y == 10 {
+                return Some((PM_METAL, [200, 170, 90], 0, [0; 3]));
+            }
+            let w = if y < 2 { 0.5 } else { 1.2 };
+            if fx.abs() <= w {
+                if glow && fx.abs() < 0.5 && y % 2 == 0 {
+                    return Some((PM_GLOW, [140, 255, 100], 0, [0; 3]));
+                }
+                return Some((PM_METAL, lit(steel, fx < 0.0), 0, [0; 3]));
+            }
+            None
+        }),
+    }
+}

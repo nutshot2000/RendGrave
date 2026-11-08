@@ -7,6 +7,7 @@ use crate::gfx::{Frame, GLight};
 use crate::hud;
 use crate::rng::*;
 use crate::world::*;
+use crate::items::{Rarity, Slot};
 use crate::areagen::{BKind, Building};
 use crate::skills::*;
 use crate::spells::METEOR_T;
@@ -437,6 +438,35 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             }
         }
     }
+    // ---- loot on the ground: a little shape in its rarity colour, rare and better throw a beam of light
+    for gi in &g.ground {
+        if gi.t < 0 {
+            continue;
+        }
+        let it = &gi.item;
+        let rc = it.rarity.col();
+        let (sx, sy) = (gi.x as i32 - cx, (gi.y - gi.z) as i32 - cy);
+        let shape: &[(i32, i32)] = match it.slot {
+            Slot::Weapon => &[(-4, 0), (-3, 0), (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (3, -1), (-3, -1), (-3, 1)],
+            Slot::Helm => &[(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (-1, -1), (0, -1), (1, -1)],
+            Slot::Armor => &[(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (-1, -1), (0, -1), (1, -1), (-1, 1), (0, 1), (1, 1)],
+            Slot::Ring => &[(-1, 0), (1, 0), (0, -1), (0, 1)],
+        };
+        let pulse = 0.6 + (t as f32 * 0.1 + gi.x).sin() * 0.3;
+        for &(dx, dy) in shape {
+            c.put(sx + dx, sy + dy, gi.y + 0.2, mixc([160, 160, 170], rc, 0.5), scl(rc, 0.35 * pulse), 1.0);
+        }
+        if it.rarity >= Rarity::Rare {
+            for k in 1..40 {
+                let a = (1.0 - k as f32 / 40.0) * pulse;
+                c.glow(sx, sy - k, scl(rc, a * 0.5));
+                if k % 2 == 0 {
+                    c.glow(sx - 1, sy - k, scl(rc, a * 0.15));
+                    c.glow(sx + 1, sy - k, scl(rc, a * 0.15));
+                }
+            }
+        }
+    }
     // ---- gibs
     for gb in &g.gibs {
         let xf = Xf::new(0.0, 0.0, gb.a);
@@ -460,6 +490,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             shock: e.twitch > 0 && (t / 2) % 2 == 0,
             windup: e.st == St::Wind && e.k.big(),
             burn: false,
+            elite: e.elite,
         };
         draw_body(&mut c, &e.body, e.x + jitter, e.y, tint);
     }
@@ -688,7 +719,16 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             _ => {}
         }
     }
+    for gi in &g.ground {
+        if gi.item.rarity >= Rarity::Rare {
+            let rc = gi.item.rarity.col();
+            add(gi.x, gi.y, 45.0, 0.7, [rc[0] as f32 / 255.0, rc[1] as f32 / 255.0, rc[2] as f32 / 255.0]);
+        }
+    }
     for e in &g.enemies {
+        if e.alive && e.elite {
+            add(e.x, e.y, 60.0, 0.6, [1.0, 0.75, 0.3]);
+        }
         if e.alive && !matches!(e.k, Kind::Zombie | Kind::Crawler) && e.frozen == 0 {
             let col = if e.k == Kind::King { [0.5, 0.7, 1.0] } else if e.k.bony() { [1.0, 0.25, 0.15] } else { [1.0, 0.5, 0.15] };
             add(e.x, e.y + 1.0, 22.0, 0.5, col);
@@ -1067,6 +1107,7 @@ pub struct Tint {
     pub shock: bool,
     pub windup: bool,
     pub burn: bool,
+    pub elite: bool,
 }
 
 fn draw_body(c: &mut Ctx, b: &Body, x: f32, y: f32, tint: Tint) {
@@ -1144,6 +1185,13 @@ fn draw_part(c: &mut Ctx, p: &Part, xf: &Xf, mirror: bool, x: f32, y: f32, depth
             }
             if tint.windup && (t / 4) % 2 == 0 {
                 e = [e[0].saturating_add(70), e[1].saturating_add(20), e[2]];
+            }
+            if tint.elite {
+                let edge = p.get(lx - 1, ly).is_none() || p.get(lx + 1, ly).is_none() || p.get(lx, ly - 1).is_none();
+                if edge {
+                    let pulse = 0.55 + ((t as f32 * 0.12) + ly as f32 * 0.3).sin() * 0.25;
+                    e = [(255.0 * pulse) as u8, (190.0 * pulse) as u8, (60.0 * pulse) as u8];
+                }
             }
             if tint.burn && h2(lx, ly + (t / 3) as i32, 9) < 0.15 {
                 e = [200, 110, 30];

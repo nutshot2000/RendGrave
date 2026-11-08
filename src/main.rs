@@ -1,6 +1,8 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod gear;
+mod items;
 mod audio;
 mod synth;
 mod body;
@@ -28,6 +30,7 @@ struct Showcase {
     lab: bool,
     spells: bool,
     tour: bool,
+    loot: bool,
 }
 
 struct App {
@@ -97,6 +100,92 @@ impl App {
             g.explode(g.enemies[4].x + 10.0, g.enemies[4].y, 20.0, 13.0);
         }
         let shots = [(9, "lab_00_before"), (14, "lab_01_hit"), (60, "lab_02_1s"), (160, "lab_03_2s"), (320, "lab_04_5s")];
+        for (fr, name) in shots {
+            if f == fr {
+                return Some(name.to_string());
+            }
+        }
+        None
+    }
+    /// gear test: every weapon type on a lineup, loot on the ground, the inventory screen
+    fn step_loot(&mut self) -> Option<String> {
+        use body::Kind;
+        use items::*;
+        let g = &mut self.game;
+        let f = g.frame;
+        if f == 1 {
+            for y in 560..760 {
+                for x in 20..440 {
+                    g.world.set(x, y, world::E);
+                    g.world.g[y as usize * world::W + x as usize] = world::GRASS;
+                }
+            }
+            g.enemies.clear();
+            for (k, kind) in [Kind::Zombie, Kind::Skeleton, Kind::Brute, Kind::Zombie, Kind::Skeleton].iter().enumerate() {
+                let mut e = game::Game::new_enemy(*kind, 140.0 + k as f32 * 60.0, 660.0);
+                e.stun = 100000;
+                e.hp = 4000.0;
+                e.maxhp = 4000.0;
+                e.body.mirror = true;
+                e.elite = k >= 3;
+                g.enemies.push(e);
+            }
+            g.player.x = 70.0;
+            g.player.y = 690.0;
+            g.player.bag.clear();
+            for l in [Legend::Stormcaller, Legend::Gravecleaver, Legend::WintersGrudge] {
+                g.player.bag.push(legendary(l, 6));
+            }
+            for _ in 0..15 {
+                g.player.bag.push(roll(6, 0.2));
+            }
+            for k in 0..5 {
+                let it = if k == 0 { legendary(Legend::Pyre, 5) } else { roll(5, 0.25) };
+                g.ground.push(gear::GroundItem { item: it, x: 60.0 + k as f32 * 14.0, y: 720.0 + (k % 2) as f32 * 8.0, z: 0.0, vz: 0.0, t: 100 });
+            }
+            g.banner = None;
+        }
+        g.cam = (30.0, 662.0 - 26.0 - g.view.1 / 2.0);
+        g.player.hp = g.player.maxhp;
+        let tests: [(u64, WKind, Option<Legend>, usize); 5] = [(20, WKind::Axe, None, 0), (60, WKind::Hammer, None, 1), (100, WKind::Spear, None, 2), (140, WKind::Dagger, None, 3), (180, WKind::Sword, Some(Legend::Stormcaller), 4)];
+        for (at, wk, leg, ti) in tests {
+            if f == at || f == at + 12 {
+                let mut it = match leg {
+                    Some(l) => legendary(l, 6),
+                    None => {
+                        let mut it = roll(6, 0.0);
+                        it.slot = Slot::Weapon;
+                        it.wk = wk;
+                        it.name = format!("TEST {:?}", wk).to_uppercase();
+                        it.legend = None;
+                        it
+                    }
+                };
+                it.base = 20;
+                if f == at {
+                    g.player.equip[0] = Some(it);
+                    g.apply_gear();
+                }
+                let (ex, ey) = (g.enemies[ti].x, g.enemies[ti].y);
+                g.player.x = ex - 22.0;
+                g.player.y = ey;
+                let mut inp = self.input.clone();
+                inp.mouse = (ex - g.cam.0, ey - 12.0 - g.cam.1);
+                g.weapon_hit(0.0, &inp);
+            }
+        }
+        if f == 230 {
+            g.player.x = 70.0;
+            g.player.y = 690.0;
+        }
+        if f == 240 {
+            g.inv_open = true;
+            g.inv_hover = Some((1, 0));
+            let (cx0, cy0, _) = hud::inv_cell(1, 1, g.view.0 as i32, g.view.1 as i32);
+            self.input.mouse = (cx0 as f32 + 10.0, cy0 as f32 + 10.0);
+            g.prev.mouse = self.input.mouse;
+        }
+        let shots = [(36, "g1_axe"), (76, "g2_hammer"), (116, "g3_spear"), (156, "g4_dagger_elite"), (196, "g5_stormcaller"), (236, "g6_ground_loot"), (240, "g7_inventory")];
         for (fr, name) in shots {
             if f == fr {
                 return Some(name.to_string());
@@ -240,6 +329,9 @@ impl App {
         None
     }
     fn step_showcase(&mut self) -> Option<String> {
+        if self.show.as_ref().map(|s| s.loot).unwrap_or(false) {
+            return self.step_loot();
+        }
         if self.show.as_ref().map(|s| s.tour).unwrap_or(false) {
             return self.step_tour();
         }
@@ -370,6 +462,7 @@ impl ApplicationHandler for App {
                         KeyCode::KeyF => i.potion = down,
                         KeyCode::KeyR => i.restart = down,
                         KeyCode::KeyE => i.interact = down,
+                        KeyCode::KeyI => i.inv = down,
                         KeyCode::KeyM if down && !event.repeat => {
                             if let Some(a) = &mut self.audio {
                                 a.toggle_music();
@@ -491,7 +584,7 @@ impl App {
                     AreaId::Crypt(_) => audio::Track::Crypt,
                 }
             };
-            let duck = if g.paused || g.tree || g.wp_open { 0.45 } else { 1.0 };
+            let duck = if g.paused || g.tree || g.wp_open || g.inv_open { 0.45 } else { 1.0 };
             a.set_music(Some(want), duck);
             let snds = std::mem::take(&mut self.game.sounds);
             a.update(&snds, (self.game.player.x, self.game.player.y));
@@ -532,7 +625,9 @@ impl App {
             self.fps_n = 0;
         }
         if let Some(sh) = &self.show {
-            let done = if sh.tour {
+            let done = if sh.loot {
+                shot.as_deref() == Some("g7_inventory")
+            } else if sh.tour {
                 shot.as_deref() == Some("t7_waypoints")
             } else if sh.spells {
                 shot.as_deref() == Some("s10_tree")
@@ -588,11 +683,12 @@ fn main() {
     let lab = args.iter().any(|a| a == "--lab");
     let spells = args.iter().any(|a| a == "--spells");
     let tour = args.iter().any(|a| a == "--tour");
+    let loot = args.iter().any(|a| a == "--loot");
     let fresh = args.iter().any(|a| a == "--new");
-    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour").map(|i| {
+    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot").map(|i| {
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "shots".into());
         std::fs::create_dir_all(&dir).ok();
-        Showcase { dir, log: vec![], lab, spells, tour }
+        Showcase { dir, log: vec![], lab, spells, tour, loot }
     });
     let seed = if show.is_some() { 7 } else { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1) };
     let el = EventLoop::new().expect("event loop");

@@ -538,8 +538,8 @@ impl Game {
         let v = self.rank(Sk::Vigor) as f32;
         let w = self.rank(Sk::Wisdom) as f32;
         let p = &mut self.player;
-        p.maxhp = 100.0 + 15.0 * v;
-        p.maxmana = 60.0 + 15.0 * w;
+        p.maxhp = 100.0 + 15.0 * v + p.gear.hp;
+        p.maxmana = 60.0 + 15.0 * w + p.gear.mana;
         p.hp = p.hp.min(p.maxhp);
         p.mana = p.mana.min(p.maxmana);
     }

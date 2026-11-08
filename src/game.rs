@@ -7,6 +7,8 @@ use crate::skills::*;
 use crate::spells::*;
 use crate::areagen::*;
 use crate::audio::{Sfx, Snd};
+use crate::gear::GroundItem;
+use crate::items::*;
 
 #[derive(Default, Clone)]
 pub struct Input {
@@ -24,6 +26,7 @@ pub struct Input {
     pub tree: bool,
     pub close: bool,
     pub interact: bool,
+    pub inv: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -64,6 +67,9 @@ pub struct Enemy {
     pub hit_cd: i32,
     pub chill: i32,
     pub summoned: bool,
+    pub elite: bool,
+    pub bleed_dot: i32,
+    pub bleed_amt: f32,
 }
 
 pub struct Player {
@@ -98,6 +104,10 @@ pub struct Player {
     pub maxhp: f32,
     pub maxmana: f32,
     pub whirl: i32,
+    pub swing_max: i32,
+    pub equip: [Option<Item>; 4],
+    pub bag: Vec<Item>,
+    pub gear: GearStats,
 }
 
 pub struct Proj {
@@ -256,6 +266,9 @@ pub struct Game {
     pub lamps: Vec<(f32, f32, [f32; 3])>,
     pub sounds: Vec<Snd>,
     pub toast: Option<(String, i32)>,
+    pub ground: Vec<GroundItem>,
+    pub inv_open: bool,
+    pub inv_hover: Option<(u8, usize)>,
 }
 
 fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
@@ -300,6 +313,9 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         hit_cd: 0,
         chill: 0,
         summoned: false,
+        elite: false,
+        bleed_dot: 0,
+        bleed_amt: 0.0,
     }
 }
 
@@ -310,6 +326,7 @@ impl Game {
     /// test modes: straight into the Hollow Pines, no save file
     pub fn new(seed_: u64) -> Game {
         let mut g = Game::blank(seed_);
+        g.apply_gear();
         g.travel(AreaId::Pines);
         g
     }
@@ -350,6 +367,10 @@ impl Game {
             maxhp: 100.0,
             maxmana: 60.0,
             whirl: 0,
+            swing_max: 16,
+            equip: [Some(starter_weapon()), None, Some(starter_armor()), None],
+            bag: vec![],
+            gear: GearStats::default(),
         };
         let enemies = vec![];
         Game {
@@ -399,6 +420,9 @@ impl Game {
             lamps: vec![],
             sounds: vec![],
             toast: None,
+            ground: vec![],
+            inv_open: false,
+            inv_hover: None,
         }
     }
 
@@ -519,6 +543,23 @@ impl Game {
             }
             self.hold_block = true;
         }
+        if inp.inv && !self.prev.inv && !self.player.dead && !self.wp_open {
+            self.inv_open = !self.inv_open;
+            self.tree = false;
+            self.hold_block = true;
+            let (x, y) = (self.player.x, self.player.y);
+            self.snd(Sfx::Click, x, y, 0.6);
+        }
+        if self.inv_open {
+            if inp.close && !self.prev.close {
+                self.inv_open = false;
+                self.hold_block = true;
+            } else {
+                self.update_inventory(inp);
+            }
+            self.prev = inp.clone();
+            return;
+        }
         if self.wp_open {
             if inp.close && !self.prev.close {
                 self.wp_open = false;
@@ -579,6 +620,7 @@ impl Game {
         self.update_spells();
         self.update_whirl();
         self.update_area(&inp2);
+        self.update_ground();
         self.prev = inp.clone();
     }
 
@@ -612,7 +654,7 @@ impl Game {
         if p.dead {
             return;
         }
-        p.mana = (p.mana + 0.16 * (1.0 + 0.2 * p.sk.r(Sk::Wisdom) as f32)).min(p.maxmana);
+        p.mana = (p.mana + 0.16 * (1.0 + 0.2 * p.sk.r(Sk::Wisdom) as f32) + p.gear.regen / 60.0).min(p.maxmana);
         let indoor = self.world.aux[(p.y as usize).min(H - 1) * W + (p.x as usize).min(W - 1)] & AUX_INDOOR != 0;
         if indoor && !p.indoor {
             self.banner = Some(("THE SUNKEN CRYPT".into(), "THE DEAD DO NOT REST HERE".into(), 220));
@@ -636,7 +678,7 @@ impl Game {
         }
         let u = self.under(self.player.x, self.player.y);
         let p = &mut self.player;
-        let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32);
+        let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32) * (1.0 + p.gear.speed / 100.0);
         if p.whirl > 0 {
             speed *= 0.75;
         }
@@ -709,10 +751,13 @@ impl Game {
             }
             self.float(x, y - 50.0, "+45".into(), [255, 110, 120], false);
         }
+        let sf = self.swing_frames();
+        let wk = self.wkind();
         let p = &mut self.player;
-        // sword
+        // weapon
         if inp.lmb && p.swing == 0 && p.dodge == 0 && p.whirl == 0 {
-            p.swing = 16;
+            p.swing = sf;
+            p.swing_max = sf;
             self.sounds.push(Snd { k: Sfx::Swing, x: p.x, y: p.y, v: 0.8 });
             p.swung = false;
             p.swing_a = aim;
@@ -721,10 +766,11 @@ impl Game {
         }
         if p.swing > 0 {
             p.swing -= 1;
-            if p.swing == 11 && !p.swung {
+            if p.swing <= p.swing_max * 2 / 3 && !p.swung {
                 p.swung = true;
                 let (sa, side) = (p.swing_a, p.swing_side);
-                self.slashes.push(Slash { x: self.player.x, y: self.player.y - 22.0, a0: sa - 1.3 * side, a1: sa + 1.3 * side, t: 10 });
+                let arc = wstats(wk).arc.min(1.3);
+                self.slashes.push(Slash { x: self.player.x, y: self.player.y - 22.0, a0: sa - arc * side, a1: sa + arc * side, t: 10 });
                 self.sword_hit(sa, inp);
             }
         }
@@ -761,14 +807,20 @@ impl Game {
         b.root.1 = -b.leg_len + 1.5 - (ph * 2.0).sin().abs() * 1.2 * walk;
         b.parts[T_TORSO].ang = 0.08 * walk;
         if p.swing > 0 {
-            let t = 1.0 - p.swing as f32 / 16.0;
+            let t = 1.0 - p.swing as f32 / p.swing_max.max(1) as f32;
             let e = 1.0 - (1.0 - t).powi(3);
             // local aim: arm angle measured from straight down, in the facing frame
             let fa = if p.face < 0.0 { std::f32::consts::PI - p.swing_a } else { p.swing_a };
             let target = fa - std::f32::consts::FRAC_PI_2;
             let side = p.swing_side;
-            b.parts[T_ARMF].ang = target - 1.6 * side + 3.2 * side * e;
-            b.parts[T_TORSO].ang = 0.15 * (e - 0.5) * side;
+            if wk == WKind::Spear {
+                // a straight thrust
+                b.parts[T_ARMF].ang = target;
+                b.parts[T_TORSO].ang = 0.12 * (1.0 - (e - 0.5).abs() * 2.0);
+            } else {
+                b.parts[T_ARMF].ang = target - 1.6 * side + 3.2 * side * e;
+                b.parts[T_TORSO].ang = 0.15 * (e - 0.5) * side;
+            }
         } else if p.cast_t > 0 {
             b.parts[T_ARMB].ang = -1.9;
             b.parts[T_ARMF].ang = -ph.sin() * 0.35 * walk - 0.3;
@@ -822,6 +874,13 @@ impl Game {
                 }
             }
         }
+        self.weapon_hit(aim, inp);
+    }
+
+    #[allow(dead_code)]
+    fn old_sword_hit(&mut self, aim: f32, inp: &Input) {
+        let (px, py) = (self.player.x, self.player.y);
+        let (mwx, mwy) = self.mouse_world(inp);
         let edge = self.rank(Sk::Edge);
         let ex_r = self.rank(Sk::Executioner);
         let crit_ch = 0.15 + 0.08 * ex_r as f32;
@@ -1164,6 +1223,7 @@ impl Game {
                             if hit_p && self.player.inv == 0 {
                                 self.sounds.push(Snd { k: Sfx::Hurt, x: self.player.x, y: self.player.y, v: 1.0 });
                                 let d = 10.0 * (1.0 + 0.1 * (self.alvl - 1) as f32) * rr(0.85, 1.15);
+                                let d = d * self.armor_mult();
                                 self.player.hp -= d;
                                 self.player.hurt = 1.0;
                                 self.player.inv = 10;
@@ -1244,6 +1304,10 @@ impl Game {
 
     pub fn shatter(&mut self, i: usize) {
         self.sounds.push(Snd { k: Sfx::Shatter, x: self.enemies[i].x, y: self.enemies[i].y, v: 1.0 });
+        if self.has_legend(Legend::WintersGrudge) {
+            let (x, y) = (self.enemies[i].x, self.enemies[i].y);
+            self.novas.push(Nova { x, y, r: 4.0, t: 0 });
+        }
         let e = &mut self.enemies[i];
         e.alive = false;
         e.hp = 0.0;
@@ -1285,8 +1349,10 @@ impl Game {
         let fortune = self.rank(Sk::Fortune) as f32;
         let gold = (gold as f32 * (1.0 + 0.25 * fortune)) as i32;
         self.pickups.push(Pickup { k: 0, x, y, z: 10.0, vz: 1.5, amt: gold, t: 0 });
-        let xp = self.xp_for(k);
+        let elite = self.enemies[i].elite;
+        let xp = self.xp_for(k) * if elite { 3 } else { 1 };
         self.gain_xp(xp);
+        self.drop_loot(x, y, k, elite);
         if k == Kind::King {
             self.king_slain(x, y);
         }
@@ -1384,6 +1450,9 @@ impl Game {
                 e.hp -= ds.iter().map(|d| d.part.count() as f32).sum::<f32>() * 0.05;
                 let dir = ((ex - px).signum(), (ey - py).signum() * 0.3);
                 self.spawn_gibs(ex, ey, m, ds, dir, 1.6, false);
+                if big_piece && self.has_legend(Legend::Gravecleaver) {
+                    self.explode(ex + rr(-6.0, 6.0), ey + 1.0, 14.0, 8.0);
+                }
                 let txt = "SEVERED".to_string();
                 if big_piece {
                     self.float(ex, ey - 70.0, txt, [255, 120, 100], false);
@@ -1412,6 +1481,11 @@ impl Game {
             }
             let e = &mut self.enemies[i];
             // bleeding stumps
+            if e.bleed_dot > 0 {
+                e.bleed_dot -= 1;
+                e.hp -= e.bleed_amt;
+                e.bleed = e.bleed.max(4);
+            }
             if e.bleed > 0 {
                 e.bleed -= 1;
                 if !k.bony() && rnd() < 0.25 {
@@ -1529,7 +1603,8 @@ impl Game {
                             if ok && self.player.inv == 0 && !self.player.dead {
                                 self.sounds.push(Snd { k: Sfx::Hurt, x: self.player.x, y: self.player.y, v: 1.0 });
                                 self.sounds.push(Snd { k: Sfx::HitFlesh, x: self.player.x, y: self.player.y, v: 0.8 });
-                                self.player.hp -= dmg * rr(0.85, 1.15);
+                                let am = self.armor_mult();
+                                self.player.hp -= dmg * rr(0.85, 1.15) * am;
                                 self.player.hurt = 1.0;
                                 self.player.inv = 14;
                                 self.shake = self.shake.max(4.0);
