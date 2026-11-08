@@ -52,12 +52,15 @@ one-minute blessing: Power, Haste, Warding or Mending.
     cargo run --release -- --sfx-dump sfx     # writes every synthesised sound effect to WAV
     cargo run --release -- --loot loot        # every weapon type on a lineup, loot, the gear screen
     cargo run --release -- --maps maps        # overview picture of every area's layout
+    cargo run --release -- --navtest          # do hidden enemies find their way to you? (with and without pathfinding)
 
 ## Code map
 
 - `world.rs`   the material grid: liquids, fire, acid, peat and swamp gas
 - `areagen.rs` the area generators (towns, forests, fen, castle, dungeons)
 - `props.rs`   chests and shrines
+- `barrels.rs` powder kegs, oil and acid barrels, blasts
+- `nav.rs`     enemy pathfinding (a flow field from the player)
 - `body.rs`    layered pixel bodies, cutting, burning, acid, splitting into pieces
 - `game.rs`    player, enemies and AI, spells, projectiles, gibs, particles
 - `render.rs`  CPU painting of albedo / emission / light info with depth sorting

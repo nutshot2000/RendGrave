@@ -1,6 +1,7 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod nav;
 mod barrels;
 mod mapdump;
 mod props;
@@ -698,6 +699,10 @@ impl App {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--navtest") {
+        nav_test();
+        return;
+    }
     if let Some(i) = args.iter().position(|a| a == "--maps") {
         mapdump::dump(&args.get(i + 1).cloned().unwrap_or_else(|| "maps".into()));
         return;
@@ -768,6 +773,43 @@ fn main() {
         audio: if testing { None } else { audio::Audio::new() },
     };
     el.run_app(&mut app).expect("run");
+}
+
+/// --navtest: in every dungeon floor, wake every enemy within reach and stand still for 20
+/// seconds; count how many get to you with and without pathfinding
+fn nav_test() {
+    use areagen::AreaId;
+    for area in [AreaId::Crypt(1), AreaId::Crypt(2), AreaId::Crypt(3), AreaId::Cellars(1), AreaId::Cellars(2), AreaId::Graveyard, AreaId::Ravenhold, AreaId::Pines] {
+        let mut out = vec![];
+        for off in [true, false] {
+            nav::OFF.store(off, std::sync::atomic::Ordering::Relaxed);
+            let mut g = game::Game::new(7);
+            g.saving = false;
+            g.travel(area);
+            let (px, py) = (g.player.x, g.player.y);
+            let mut woke = 0;
+            for e in g.enemies.iter_mut() {
+                let d = ((e.x - px).powi(2) + (e.y - py).powi(2)).sqrt();
+                if d > 150.0 && d < 560.0 && !e.k.ranged() && !e.k.boss() && !g.world.los(e.x, e.y - 1.0, px, py - 1.0) {
+                    e.aggro = true;
+                    woke += 1;
+                } else {
+                    e.alive = false;
+                }
+            }
+            let inp = game::Input::default();
+            let t0 = Instant::now();
+            for _ in 0..1800 {
+                g.player.hp = g.player.maxhp;
+                g.player.inv = 5;
+                g.update(&inp);
+            }
+            let ms = t0.elapsed().as_secs_f64() * 1000.0 / 1800.0;
+            let near = g.enemies.iter().filter(|e| e.alive && ((e.x - g.player.x).powi(2) + (e.y - g.player.y).powi(2)).sqrt() < 60.0).count();
+            out.push(format!("{}: {}/{} reached you ({:.2} ms/frame)", if off { "straight line" } else { "pathfinding" }, near, woke, ms));
+        }
+        println!("{:<10} {}", area.key(), out.join("   "));
+    }
 }
 
 /// test helper: stand a little to the west of the first reachable enemy

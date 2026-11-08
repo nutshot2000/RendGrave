@@ -71,6 +71,7 @@ impl Game {
         let seed_ = if to.is_dungeon() { self.seed ^ self.frame.wrapping_mul(0x9E37_79B9) ^ next() } else { self.seed };
         let (world, sp) = generate(to, seed_);
         self.world = world;
+        self.nav_dirty = true;
         self.area = to;
         self.alvl = to.level();
         let (king_dead, chief_dead) = (self.king_dead, self.chief_dead);

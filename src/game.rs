@@ -267,6 +267,9 @@ pub struct Game {
     pub chests: Vec<crate::props::Chest>,
     pub shrines: Vec<crate::props::Shrine>,
     pub barrels: Vec<crate::barrels::Barrel>,
+    /// flow field towards the player, for enemy pathfinding
+    pub nav: crate::nav::Nav,
+    pub nav_dirty: bool,
     /// shrine blessing: (kind, frames left)
     pub buff: Option<(u8, i32)>,
     pub fade: i32,
@@ -434,6 +437,8 @@ impl Game {
             chests: vec![],
             shrines: vec![],
             barrels: vec![],
+            nav: crate::nav::Nav::new(),
+            nav_dirty: true,
             buff: None,
             fade: 0,
             exit_lock: 0,
@@ -1443,6 +1448,10 @@ impl Game {
     fn update_enemies(&mut self) {
         let bm = self.burn_mult();
         let (px, py) = (self.player.x, self.player.y);
+        if self.frame % 8 == 0 || self.nav_dirty {
+            self.nav.build(&self.world, px, py);
+            self.nav_dirty = false;
+        }
         let pdead = self.player.dead;
         let mut flames = vec![];
         let mut drips = vec![];
@@ -1451,7 +1460,9 @@ impl Game {
                 continue;
             }
             let (ex, ey) = (self.enemies[i].x, self.enemies[i].y);
-            let far = (ex - px).abs() > 420.0 || (ey - py).abs() > 300.0;
+            // off-screen enemies sleep, unless they are hunting you (then they follow the flow field)
+            let hunting = self.enemies[i].aggro && (ex - px).abs() < 580.0 && (ey - py).abs() < 580.0;
+            let far = ((ex - px).abs() > 420.0 || (ey - py).abs() > 300.0) && !hunting;
             if far && !self.enemies[i].body.fx {
                 continue;
             }
@@ -1614,21 +1625,27 @@ impl Game {
                 match e.st {
                     St::Idle | St::Chase => {
                         e.st = St::Chase;
+                        let l = dist.max(1.0);
+                        let sees = self.world.los(e.x, e.y - 1.0, px, py - 1.0);
+                        // the way to the player: straight at them when close and in sight,
+                        // otherwise along the flow field round whatever is in the way
+                        let toward = if sees && dist < 90.0 {
+                            (dx / l, dy / l)
+                        } else {
+                            self.nav.dir(e.x, e.y).unwrap_or((dx / l, dy / l))
+                        };
                         if e.k.ranged() {
-                            let l = dist.max(1.0);
-                            let sees = self.world.los(e.x, e.y - 1.0, px, py - 1.0);
                             if dist < 70.0 {
                                 want = (-dx / l * spd, -dy / l * spd);
                             } else if dist > 125.0 || !sees {
-                                want = (dx / l * spd, dy / l * spd);
+                                want = (toward.0 * spd, toward.1 * spd);
                             }
                             if dist < e.reach && sees && armed && e.hit_cd == 0 && dist > 40.0 {
                                 e.st = St::Wind;
                                 e.t = e.windup;
                             }
                         } else if dist > e.reach * 0.8 {
-                            let l = dist.max(1.0);
-                            want = (dx / l * spd, dy / l * spd);
+                            want = (toward.0 * spd, toward.1 * spd);
                         }
                         let e = &mut self.enemies[i];
                         if e.k.bandit() && e.k != Kind::Chief && e.hp < e.maxhp * 0.25 && dist < 140.0 {
