@@ -1,0 +1,46 @@
+RENDGRAVE - Early Access (Act I)
+================================
+
+A pixel-simulated action RPG. Every enemy is built from layered pixels - armour over
+cloth over flesh over bone - so blades take limbs off, acid melts them, fire chars them
+and frost shatters them. The world burns, floods and explodes too.
+
+HOW TO PLAY
+-----------
+Unzip the folder anywhere and run Rendgrave.exe. Keep the "assets" folder next to it
+(it holds the music).
+
+Needs Windows 10 or 11 and a graphics card that supports DirectX 12 or Vulkan.
+
+CONTROLS
+--------
+WASD                Move
+Left mouse          Attack (aim at the legs to take them off)
+Right mouse         Cast the selected spell
+1-9 / mouse wheel   Choose a spell
+Space               Dodge roll
+F                   Drink a potion
+E                   Interact: exits, stairs, waypoints, chests, shrines, the merchant
+I                   Gear: click to equip, right click to sell
+K or Tab            Skill tree (A / D or click to change school)
+Esc                 Pause menu (settings, quit)
+M / N               Music / sound on and off
+- / +               Volume
+F11                 Fullscreen
+R                   After dying: wake in Ashford
+
+YOUR SAVE
+---------
+The game saves by itself when you change area, open chests, change gear and quit.
+The save is rendgrave_save.txt next to the game. Settings are in rendgrave_settings.txt.
+
+WHAT'S IN ACT I
+---------------
+Ashford, the Hollow Pines, the Sunken Crypt, the Old Graveyard, the Blackwater Fen,
+Ravenhold and its cellars. Two bosses: the Hollow King and the Bandit Chief.
+54 skills in six schools, loot with affixes and legendaries, powder kegs, oil slicks,
+swamp gas, and a merchant in town.
+
+Act II - The Frozen North - is coming in an update.
+
+Thank you for playing!

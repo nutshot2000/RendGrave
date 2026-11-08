@@ -176,7 +176,7 @@ impl Game {
         self.shake = self.shake.max(12.0);
         self.hitstop = self.hitstop.max(5);
         self.flash = self.flash.max(0.18);
-        self.light(x, y, 220.0, 2.4, [1.0, 0.55, 0.2], 30);
+        self.light(x, y, 200.0, 1.3, [1.0, 0.55, 0.2], 26);
         for _ in 0..40 {
             let a = rnd() * std::f32::consts::TAU;
             let sp = rr(1.5, 5.0);

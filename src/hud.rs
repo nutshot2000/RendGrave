@@ -1165,7 +1165,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         u.text(fw / 2 - w / 2, fh - 59, pr, [255, 230, 150], 1, false);
     }
     // controls hint for the first seconds
-    if t < 900 {
+    if t < 900 && !g.press {
         let a = if t > 780 { ((900 - t) as f32 / 120.0 * 255.0) as u8 } else { 255 };
         let lines = ["WASD MOVE   LMB SWORD   RMB CAST", "1-9 SPELLS   SPACE DODGE   F POTION   K SKILLS", "AIM AT LEGS TO TAKE THEM OFF   E INTERACT   I GEAR"];
         for (k, l) in lines.iter().enumerate() {
@@ -1176,7 +1176,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         }
     }
     // banner
-    if let Some((a, b, tt)) = &g.banner {
+    if let Some((a, b, tt)) = g.banner.as_ref().filter(|_| !g.press) {
         let al = (*tt).min(40) as f32 / 40.0;
         let y = fh / 3;
         let col = if a == "YOU DIED" { [220, 40, 40] } else { [240, 210, 140] };
@@ -1209,7 +1209,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     if g.ending == -1 {
         draw_ending(g, &mut u, fw, fh);
     }
-    if let Some((msg, t)) = &g.toast {
+    if let Some((msg, t)) = g.toast.as_ref().filter(|_| !g.press) {
         let a = ((*t).min(20) as f32 / 20.0 * 255.0) as u8;
         let w = Ui::text_w(msg, 1);
         u.rect(fw / 2 - w / 2 - 5, 74, w + 10, 13, [10, 6, 10], a.min(210));

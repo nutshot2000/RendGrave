@@ -656,7 +656,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
         }
         let jitter = if e.twitch > 0 { rr(-1.0, 1.0) } else { 0.0 };
         let tint = Tint {
-            flash: if e.flash > 0 { 0.75 } else { 0.0 },
+            flash: if e.flash > 0 { 0.4 } else { 0.0 },
             frozen: e.frozen > 0,
             wet: e.wet > 0,
             shock: e.twitch > 0 && (t / 2) % 2 == 0,
@@ -1369,8 +1369,9 @@ fn draw_part(c: &mut Ctx, p: &Part, xf: &Xf, mirror: bool, x: f32, y: f32, depth
                 e = [200, 110, 30];
             }
             if tint.flash > 0.0 {
-                col = mixc(col, [255, 255, 255], tint.flash * 0.8);
-                e = scl([255, 255, 255], tint.flash * 0.1);
+                // a brief pale flash on a hit; strong lights must not blow it out to white
+                col = mixc(col, [255, 240, 225], tint.flash * 0.7);
+                e = [e[0].max((tint.flash * 30.0) as u8), e[1].max((tint.flash * 26.0) as u8), e[2].max((tint.flash * 22.0) as u8)];
             }
             let dy = (oy - sy as f32).max(0.0) + z0;
             c.put(sx, sy, depth, col, e, dy);

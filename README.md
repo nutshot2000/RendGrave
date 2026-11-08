@@ -4,22 +4,28 @@ A pixel-simulated action RPG in Rust (wgpu). Every character is built from layer
 (armour or cloth over flesh over bone), so swords cut limbs off, acid melts them away,
 fire chars and burns, lightning scorches and arcs through puddles, and frost shatters.
 
+## Release
+
+    python tools/package.py   # builds dist/Rendgrave-EA-<version>-windows.zip and dist/press/ for itch.io
+
+The store page text is in docs/itch_page.md, the readme that ships with the game in docs/README_PLAYERS.txt.
+
 ## Run
 
-    cargo run --release          # continues your save
+    cargo run --release          # title screen: continue or start a new game
     cargo run --release -- --new # fresh character
 
 ## The world
 
 | Area | Level | What's there |
 |---|---|---|
-| Ashford | 1 | The town: waypoint, campfire, houses |
-| The Hollow Pines | 2 | Big forest, a river with a bridge, an abandoned logging camp, the crypt mausoleum |
-| Sunken Crypt 1-3 | 3-5 | Dungeon floors; the Hollow King waits at the bottom |
-| The Old Graveyard | 5 | Ruined chapel, a dozen tombs, the plague pit |
-| The Blackwater Fen | 7 | Bog pools and boardwalks, peat that smoulders, swamp gas that explodes, bloaters |
-| Ravenhold | 9 | A walled bandit castle: tents, barracks, the broken keep |
-| Ravenhold Cellars 1-2 | 10-11 | Storerooms full of bandits; the Bandit Chief guards his hoard |
+| Ashford | 1 | The town: waypoint, campfire, houses, the merchant |
+| The Hollow Pines | 3 | Big forest, a river with a bridge, an abandoned logging camp, the crypt mausoleum |
+| Sunken Crypt 1-3 | 5-7 | Dungeon floors; the Hollow King waits at the bottom |
+| The Old Graveyard | 8 | Ruined chapel, a dozen tombs, the plague pit |
+| The Blackwater Fen | 10 | Bog pools and boardwalks, peat that smoulders, swamp gas that explodes, bloaters |
+| Ravenhold | 12 | A walled bandit castle: tents, barracks, the broken keep |
+| Ravenhold Cellars 1-2 | 13-14 | Storerooms full of bandits; the Bandit Chief guards his hoard |
 
 Chests (E) spill gold, potions and gear; iron-bound ones are richer. Shrines (E) give a
 one-minute blessing: Power, Haste, Warding or Mending.
@@ -52,6 +58,8 @@ one-minute blessing: Power, Haste, Warding or Mending.
     cargo run --release -- --sfx-dump sfx     # writes every synthesised sound effect to WAV
     cargo run --release -- --loot loot        # every weapon type on a lineup, loot, the gear screen
     cargo run --release -- --maps maps        # overview picture of every area's layout
+    cargo run --release -- --menus menus      # title screen, pause menu, end-of-act card
+    add --press to any picture mode           # hides hints and banners, for store screenshots
     cargo run --release -- --navtest          # do hidden enemies find their way to you? (with and without pathfinding)
 
 ## Code map

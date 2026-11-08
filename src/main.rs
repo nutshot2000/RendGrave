@@ -1,4 +1,6 @@
 // Rendgrave: a pixel-simulated action RPG.
+// Release builds open no console window.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
 mod menu;
@@ -834,8 +836,10 @@ impl App {
         self.fps_n += 1;
         if self.fps_t.elapsed().as_secs_f64() > 2.0 {
             let fps = self.fps_n as f64 / self.fps_t.elapsed().as_secs_f64();
-            if let Some(g) = &self.gfx {
-                g.window.set_title(&format!("Rendgrave  -  {:.0} fps", fps));
+            if cfg!(debug_assertions) {
+                if let Some(g) = &self.gfx {
+                    g.window.set_title(&format!("Rendgrave  -  {:.0} fps", fps));
+                }
             }
             if let Some(sh) = &mut self.show {
                 sh.log.push(format!("fps {:.1} at frame {}", fps, self.game.frame));
@@ -918,6 +922,8 @@ fn main() {
     let tour = args.iter().any(|a| a == "--tour");
     let loot = args.iter().any(|a| a == "--loot");
     let menus = args.iter().any(|a| a == "--menus");
+    // --press: no control hints, banners or toasts, for store screenshots
+    let press = args.iter().any(|a| a == "--press");
     let fresh = args.iter().any(|a| a == "--new");
     let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot" || a == "--menus").map(|i| {
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "shots".into());
@@ -943,6 +949,7 @@ fn main() {
         sel_pending: None,
         audio: if testing { None } else { audio::Audio::new() },
     };
+    app.game.press = press;
     el.run_app(&mut app).expect("run");
 }
 

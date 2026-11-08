@@ -282,6 +282,8 @@ pub struct Game {
     /// (music on, sound on, volume), kept up to date by main.rs for the menus
     pub audio_state: (bool, bool, f32),
     pub act1_done: bool,
+    /// screenshots for the store page: hide hints, banners and toasts
+    pub press: bool,
     /// counts down to the end-of-act card; -1 while the card is showing
     pub ending: i32,
     /// frames played
@@ -472,6 +474,7 @@ impl Game {
             req: None,
             audio_state: (true, true, 0.7),
             act1_done: false,
+            press: false,
             ending: 0,
             played: 0,
             chests: vec![],
