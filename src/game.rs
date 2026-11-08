@@ -1248,17 +1248,38 @@ impl Game {
                 let trunk = m != TREE || self.world.aux[(y.max(0.0) as usize).min(H - 1) * W + (x.max(0.0) as usize).min(W - 1)] & AUX_TRUNK != 0;
                 let wall = is_wall(m) && trunk && (z as i32) < wall_h(m) + 2;
                 let ground = z <= 0.0 && kind != 2;
+                // a shot crossing an enemy's row hits anything of it at or below its height,
+                // so crawlers, the legless and the fallen can be shot too
                 let mut hit_e = None;
-                for (i, e) in self.enemies.iter().enumerate() {
+                let mut hit_z = z;
+                'e: for (i, e) in self.enemies.iter().enumerate() {
                     if !e.alive || (e.y - y).abs() > 7.0 || (e.x - x).abs() > 16.0 {
                         continue;
                     }
-                    if e.body.near_pixel(x - e.x, -z, 1) {
-                        hit_e = Some(i);
-                        break;
+                    let mut hz = z;
+                    while hz >= 1.0 {
+                        if e.body.near_pixel(x - e.x, -hz, 1) {
+                            hit_e = Some(i);
+                            hit_z = hz;
+                            break 'e;
+                        }
+                        hz -= 3.0;
                     }
                 }
                 let hit_e = if kind >= 2 { None } else { hit_e };
+                // barrels stand low too
+                let hit_b = if kind == 2 { None } else { self.barrels.iter().position(|b| b.alive && (b.x - x).abs() < 6.0 && (b.y - y).abs() < 4.5 && z < 40.0) };
+                if hit_e.is_some() || hit_b.is_some() {
+                    let hz = if hit_e.is_some() { hit_z } else { 8.0 };
+                    self.projs[k].z = hz;
+                }
+                let z = self.projs[k].z;
+                if let Some(b) = hit_b {
+                    if kind != 0 {
+                        self.strike_barrel(b);
+                    }
+                }
+                let wall = wall || hit_b.is_some();
                 let pl = &self.player;
                 let hit_p = (kind == 3 || kind == 4) && !pl.dead && (pl.y - y).abs() < 6.0 && (pl.x - x).abs() < 5.0 && z < 48.0;
                 if wall || ground || hit_e.is_some() || hit_p || self.projs[k].life <= 0 {

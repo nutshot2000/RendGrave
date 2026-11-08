@@ -64,16 +64,24 @@ impl Game {
             if d > reach + 4.0 || (da > arc.min(1.6) && d > 10.0) {
                 continue;
             }
-            let (x, y, bk) = (b.x, b.y, b.k);
-            self.snd(Sfx::Wood, x, y, 0.8);
-            if bk == 0 {
-                if self.barrels[i].fuse < 0 {
-                    self.barrels[i].fuse = 70;
-                    self.float(x, y - 30.0, "FUSE LIT - RUN".into(), [255, 170, 60], true);
-                }
-            } else {
-                self.break_barrel(i, false);
+            self.strike_barrel(i);
+        }
+    }
+
+    /// something hit a barrel: a keg's fuse catches, oil and acid barrels split
+    pub fn strike_barrel(&mut self, i: usize) {
+        let (x, y, bk) = (self.barrels[i].x, self.barrels[i].y, self.barrels[i].k);
+        if !self.barrels[i].alive {
+            return;
+        }
+        self.snd(Sfx::Wood, x, y, 0.8);
+        if bk == 0 {
+            if self.barrels[i].fuse < 0 {
+                self.barrels[i].fuse = 70;
+                self.float(x, y - 30.0, "FUSE LIT - RUN".into(), [255, 170, 60], true);
             }
+        } else {
+            self.break_barrel(i, false);
         }
     }
 
