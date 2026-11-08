@@ -78,6 +78,9 @@ pub fn dump(dir: &str) {
         for c in &sp.chests {
             dot(c.0, c.1, 3, [255, 220, 40]);
         }
+        for b in &sp.barrels {
+            dot(b.0, b.1, 2, if b.2 == 0 { [255, 120, 0] } else if b.2 == 1 { [150, 100, 60] } else { [120, 255, 60] });
+        }
         for s in &sp.shrines {
             dot(s.0, s.1, 4, [40, 240, 255]);
         }

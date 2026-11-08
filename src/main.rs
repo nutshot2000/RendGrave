@@ -1,6 +1,7 @@
 // Rendgrave: a pixel-simulated action RPG.
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod barrels;
 mod mapdump;
 mod props;
 mod gear;
@@ -242,7 +243,8 @@ impl App {
                 return Some(name.to_string());
             }
         }
-        let end = 1 + stops.len() as i32 * 70;
+        let kb = 1 + stops.len() as i32 * 70;
+        let end = kb + 130;
         if f == end {
             g.travel(AreaId::Pines);
             if let Some((wx, wy)) = g.waypoint {
@@ -252,7 +254,47 @@ impl App {
         }
         if f == end + 50 {
             g.wp_open = true;
-            return Some("t7_waypoints".into());
+            return Some("t14_waypoints".into());
+        }
+        // a powder keg in the cellars with a crowd of bandits round it
+        if f == kb {
+            g.travel(AreaId::Cellars(1));
+            if let Some(b) = g.barrels.iter().position(|b| b.k == 0) {
+                let (bx, by) = (g.barrels[b].x, g.barrels[b].y);
+                let mut n = 0;
+                for e in g.enemies.iter_mut() {
+                    if n < 7 && !e.k.boss() {
+                        let a = n as f32 / 7.0 * std::f32::consts::TAU;
+                        e.x = bx + a.cos() * 26.0;
+                        e.y = by + 12.0 + a.sin() * 12.0;
+                        e.stun = 100000;
+                        n += 1;
+                    } else {
+                        e.stun = 100000;
+                    }
+                }
+                // a slick of oil nearby, and an oil barrel next to the keg
+                g.player.x = bx - 110.0;
+                g.player.y = by + 20.0;
+                g.cam = (bx - g.view.0 / 2.0, by - 26.0 - g.view.1 / 2.0);
+            }
+        }
+        if f == kb + 30 {
+            return Some("t10_keg_before".into());
+        }
+        if f == kb + 31 {
+            if let Some(b) = g.barrels.iter_mut().find(|b| b.k == 0 && b.alive) {
+                b.fuse = 2;
+            }
+        }
+        if f == kb + 36 {
+            return Some("t11_keg_blast".into());
+        }
+        if f == kb + 60 {
+            return Some("t12_keg_after".into());
+        }
+        if f == kb + 120 {
+            return Some("t13_keg_aftermath".into());
         }
         None
     }
@@ -640,7 +682,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.tour {
-                shot.as_deref() == Some("t7_waypoints")
+                shot.as_deref() == Some("t14_waypoints")
             } else if sh.spells {
                 shot.as_deref() == Some("s10_tree")
             } else {

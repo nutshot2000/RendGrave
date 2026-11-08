@@ -464,6 +464,51 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             }
         }
     }
+    // ---- barrels: powder kegs (painted cross), oil (dark, steel hoops), acid (green, glowing seam)
+    for b in g.barrels.iter().filter(|b| b.alive) {
+        let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);
+        let (wood, hoop) = match b.k {
+            0 => ([118u8, 74, 42], [40u8, 34, 30]),
+            1 => ([62, 54, 50], [130, 130, 138]),
+            _ => ([84, 110, 70], [120, 124, 120]),
+        };
+        let lit = b.fuse > 0 && (b.fuse / 4) % 2 == 0;
+        for k in 0..15i32 {
+            let bulge = 1.0 - ((k as f32 - 7.0) / 7.5).powi(2);
+            let half = (3.5 + bulge * 1.8) as i32;
+            for dx in -half..=half {
+                let shade = 0.75 + (dx + half) as f32 / (2 * half) as f32 * 0.45;
+                let hooped = k == 2 || k == 12 || (b.k != 0 && k == 7);
+                let mut col = if hooped { hoop } else if dx.rem_euclid(3) == 0 { scl(wood, 0.8) } else { wood };
+                col = scl(col, shade);
+                let mut em = [0u8; 3];
+                if b.k == 0 && !hooped && (5..=9).contains(&k) && (dx == k - 7 || dx == 7 - k) {
+                    col = [200, 40, 30];
+                }
+                if b.k == 2 && dx == half - 1 && k > 3 && k < 11 {
+                    col = [150, 230, 90];
+                    em = [20, 60, 10];
+                }
+                if b.k == 1 && dx == 1 - half && k > 3 && k < 11 {
+                    col = [150, 150, 160];
+                }
+                if lit {
+                    em = [70, 26, 0];
+                }
+                c.put(sx + dx, sy - k, b.y + 0.5, col, em, k as f32);
+            }
+        }
+        for dx in -4..=4 {
+            c.put(sx + dx, sy - 15, b.y + 0.5, scl(wood, 1.15), [0; 3], 15.0);
+        }
+        if b.k == 0 {
+            c.put(sx + 2, sy - 16, b.y + 0.5, [70, 60, 46], [0; 3], 16.0);
+            c.put(sx + 3, sy - 17, b.y + 0.5, [70, 60, 46], [0; 3], 17.0);
+            if b.fuse > 0 {
+                c.glow(sx + 3, sy - 18, [255, 200, 80]);
+            }
+        }
+    }
     // ---- waypoint: a rune circle that glows brighter once found
     if let Some((wx, wy)) = g.waypoint {
         let found = g.discovered.contains(&g.area);

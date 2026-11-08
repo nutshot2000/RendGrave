@@ -76,6 +76,7 @@ impl Game {
         let (king_dead, chief_dead) = (self.king_dead, self.chief_dead);
         self.enemies = sp.enemies.iter().filter(|e| !(e.0 == Kind::King && king_dead) && !(e.0 == Kind::Chief && chief_dead)).map(|&(k, x, y)| self.scaled_enemy(k, x, y)).collect();
         self.chests = sp.chests.iter().map(|&(x, y, tier)| crate::props::Chest { x, y, tier, open: false, t: 0 }).collect();
+        self.barrels = sp.barrels.iter().map(|&(x, y, k)| crate::barrels::Barrel::new(x, y, k, &self.world)).collect();
         self.shrines = sp.shrines.iter().map(|&(x, y, k)| crate::props::Shrine { x, y, k, used: false }).collect();
         self.projs.clear();
         self.ptcs.clear();

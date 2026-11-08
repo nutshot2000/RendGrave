@@ -68,6 +68,8 @@ pub struct Enemy {
     pub chill: i32,
     pub summoned: bool,
     pub elite: bool,
+    /// on its back after slipping in oil
+    pub slip: i32,
     pub bleed_dot: i32,
     pub bleed_amt: f32,
 }
@@ -105,6 +107,9 @@ pub struct Player {
     pub maxmana: f32,
     pub whirl: i32,
     pub swing_max: i32,
+    /// sliding helplessly on spilt oil
+    pub slip: i32,
+    pub slide: (f32, f32),
     pub equip: [Option<Item>; 4],
     pub bag: Vec<Item>,
     pub gear: GearStats,
@@ -261,6 +266,7 @@ pub struct Game {
     pub chief_dead: bool,
     pub chests: Vec<crate::props::Chest>,
     pub shrines: Vec<crate::props::Shrine>,
+    pub barrels: Vec<crate::barrels::Barrel>,
     /// shrine blessing: (kind, frames left)
     pub buff: Option<(u8, i32)>,
     pub fade: i32,
@@ -323,6 +329,7 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         chill: 0,
         summoned: false,
         elite: false,
+        slip: 0,
         bleed_dot: 0,
         bleed_amt: 0.0,
     }
@@ -377,6 +384,8 @@ impl Game {
             maxmana: 60.0,
             whirl: 0,
             swing_max: 16,
+            slip: 0,
+            slide: (0.0, 0.0),
             equip: [Some(starter_weapon()), None, Some(starter_armor()), None],
             bag: vec![],
             gear: GearStats::default(),
@@ -424,6 +433,7 @@ impl Game {
             chief_dead: false,
             chests: vec![],
             shrines: vec![],
+            barrels: vec![],
             buff: None,
             fade: 0,
             exit_lock: 0,
@@ -499,7 +509,7 @@ impl Game {
         (self.cam.0.floor() + inp.mouse.0, self.cam.1.floor() + inp.mouse.1)
     }
 
-    fn spawn_gibs(&mut self, ex: f32, ey: f32, mirror: bool, ds: Vec<Detached>, push: (f32, f32), power: f32, frozen: bool) {
+    pub(crate) fn spawn_gibs(&mut self, ex: f32, ey: f32, mirror: bool, ds: Vec<Detached>, push: (f32, f32), power: f32, frozen: bool) {
         let mx = if mirror { -1.0 } else { 1.0 };
         for d in ds {
             let z = (-d.xf.oy).max(1.0);
@@ -643,6 +653,7 @@ impl Game {
         self.update_area(&inp2);
         self.update_ground();
         self.tick_buffs();
+        self.update_barrels();
         self.prev = inp.clone();
     }
 
@@ -706,6 +717,14 @@ impl Game {
             speed *= 0.7;
             p.wet = 240;
         }
+        if u[3] {
+            speed *= 0.78;
+            if l > 0.0 && p.dodge == 0 && p.slip == 0 && rnd() < 0.005 {
+                p.slip = 34;
+                p.slide = (dx * 2.6, dy * 2.6);
+                self.sounds.push(Snd { k: Sfx::Dodge, x: p.x, y: p.y, v: 0.9 });
+            }
+        }
         if p.swing > 0 {
             speed *= 0.55;
         }
@@ -718,6 +737,12 @@ impl Game {
             p.dv = (ddx * 3.1, ddy * 3.1);
         }
         let (mut vx, mut vy) = (dx * speed, dy * speed);
+        if p.slip > 0 {
+            p.slip -= 1;
+            let t = p.slip as f32 / 34.0;
+            vx = p.slide.0 * t;
+            vy = p.slide.1 * t;
+        }
         if p.dodge > 0 {
             p.dodge -= 1;
             vx = p.dv.0 * (0.5 + p.dodge as f32 / 32.0);
@@ -1376,7 +1401,7 @@ impl Game {
         }
     }
 
-    fn on_kill(&mut self, i: usize) {
+    pub(crate) fn on_kill(&mut self, i: usize) {
         let e = &self.enemies[i];
         let (x, y, k) = (e.x, e.y, e.k);
         self.player.kills += 1;
@@ -1570,8 +1595,19 @@ impl Game {
             }
             let e = &mut self.enemies[i];
             let mut want = (0.0f32, 0.0f32);
-            let crawling = legs == 0;
-            let spd = e.speed * if legs == 2 { 1.0 } else if legs == 1 { 0.55 } else { 0.35 } * if e.burning > 25 && !e.k.bony() { 1.5 } else { 1.0 };
+            if e.slip > 0 {
+                e.slip -= 1;
+            } else if u[3] && e.aggro && !e.k.big() && e.frozen == 0 && legs == 2 && rnd() < 0.012 {
+                // feet go out from under it
+                e.slip = 75;
+                e.stun = e.stun.max(75);
+                e.vx += e.face * 2.5;
+                let (sx3, sy3) = (e.x, e.y);
+                self.sounds.push(Snd { k: Sfx::Dodge, x: sx3, y: sy3, v: 0.7 });
+            }
+            let e = &mut self.enemies[i];
+            let crawling = legs == 0 || e.slip > 0;
+            let spd = e.speed * if u[3] { 0.7 } else { 1.0 } * if legs == 2 { 1.0 } else if legs == 1 { 0.55 } else { 0.35 } * if e.burning > 25 && !e.k.bony() { 1.5 } else { 1.0 };
             if e.stun > 0 {
                 e.stun -= 1;
             } else if e.aggro && !pdead {

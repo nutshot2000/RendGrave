@@ -42,6 +42,7 @@ impl Game {
         let g = self.player.gear;
         let (px, py) = (self.player.x, self.player.y);
         let (mwx, mwy) = self.mouse_world(inp);
+        self.hit_barrels(px, py, aim, ws.reach, ws.arc);
         let edge = self.rank(Sk::Edge);
         let ex_r = self.rank(Sk::Executioner);
         let crit_ch = 0.15 + 0.08 * ex_r as f32 + g.crit / 100.0;
