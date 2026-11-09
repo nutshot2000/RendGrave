@@ -75,7 +75,7 @@ impl Game {
         for &(_, i) in &targets {
             let e = &self.enemies[i];
             let (rel_mx, rel_my) = (mwx - e.x, mwy - e.y);
-            let h = if rel_mx.abs() < 14.0 && rel_my < 2.0 && rel_my > -66.0 {
+            let h = if !inp.auto && rel_mx.abs() < 14.0 && rel_my < 2.0 && rel_my > -66.0 {
                 rel_my
             } else {
                 -[8.0, 14.0, 24.0, 30.0, 38.0][ri(5)] * if e.k == Kind::King { 1.5 } else if e.k == Kind::Brute { 1.15 } else { 1.0 }

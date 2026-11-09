@@ -6,7 +6,7 @@
 
 **Classification:** Game · Action RPG · Early Access (In development)
 **Platforms:** Windows
-**Tags:** action-rpg, pixel-art, hack-and-slash, gore, dark-fantasy, physics, procedural-generation, singleplayer, early-access
+**Tags:** action-rpg, controller-support, pixel-art, hack-and-slash, gore, dark-fantasy, physics, procedural-generation, singleplayer, early-access
 
 **Suggested price:** $4.99 during Early Access (minimum), rising as acts are added. Price is your call.
 
@@ -42,7 +42,7 @@ This is **Act I** of four: a complete chapter with an ending. Acts II to IV (the
 - Act I takes a few hours; playtesting is still firming up that estimate. Expect to finish around level 18.
 - The game saves automatically. Dungeons are rebuilt each time you enter them, so if you quit inside one you continue at its entrance.
 - Saves will carry over to future updates.
-- Keyboard and mouse only for now; controller support and key rebinding are planned.
+- Play with keyboard and mouse or a gamepad (Xbox-style layout, auto-aim, switches over the moment you pick it up). Key rebinding is planned.
 - It's a solo project in active development: expect rough edges, and please report them.
 
 **Next up:** Act II, the Frozen North - a new town, frozen lakes that crack underfoot, ice caves, and a new boss.
@@ -51,6 +51,8 @@ Feedback shapes what comes next - please leave a comment!
 
 ### Controls
 WASD move · Left mouse attack · Right mouse cast · Space dodge · F potion · E interact · I gear · K skills · Esc menu (with a full controls page)
+
+**Gamepad:** left stick move · right stick aim (or auto-aim) · A attack / interact · X Y B spells · RB dodge · LB potion · RT oil flask · D-pad skills and gear · Start pause
 
 ### System requirements
 Windows 10/11 · a graphics card with DirectX 12 or Vulkan support · 200 MB disk space.

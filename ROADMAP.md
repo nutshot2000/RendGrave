@@ -13,13 +13,14 @@ changes the world and the bodies in it. Four acts, level cap 50.
 - Champions with powers, grave robbers, secret rooms, urns and crates, kill streaks
 - Story NPC, objectives, guide marker, minimap with fog, waypoints, boss portals
 - Menus, controls page, volume, screen shake, fullscreen; safe versioned saves
+- Gamepad support: console-style layout, auto-aim, a pointer in menus, button names on screen
 - Enemies do not respawn: areas are fixed, dungeons are rebuilt on each visit
 
 ## Next - before or alongside Act II
 - Playtest Act I by hand: boss fairness on one life, how long the act really takes
 - Short first-time tips (skill points, potions, gear)
 - Lower graphics settings (fewer lights and shadows) for weaker PCs
-- Controller support and key rebinding
+- Key rebinding; hand-test the gamepad on Xbox and PlayStation pads
 - One damage-and-death path for every attack; screen state as one enum
 
 ## Act II - The Frozen North

@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod pad;
 mod quiet;
 mod agency;
 mod uniques;
@@ -73,6 +74,7 @@ struct App {
     fps_n: u32,
     sel_pending: Option<usize>,
     audio: Option<audio::Audio>,
+    pad: pad::Pad,
 }
 
 impl App {
@@ -556,6 +558,19 @@ impl App {
     /// secret walls, urns, champion types, the grave robber and kill streaks
     fn step_extras(&mut self) -> Option<String> {
         use body::Kind;
+        if self.game.paused {
+            // the pause screen stops the clock: count steps here instead
+            let sh = self.show.as_mut().unwrap();
+            sh.sub += 1;
+            if sh.sub == 20 {
+                return Some("x15_pad_controls".into());
+            }
+            if sh.sub > 20 {
+                self.game.paused = false;
+                self.game.controls = false;
+            }
+            return None;
+        }
         let g = &mut self.game;
         let f = g.frame as i32;
         g.player.hp = g.player.maxhp;
@@ -748,6 +763,16 @@ impl App {
                 g.player.y = 430.0;
                 cam(g);
             }
+            740 => {
+                // the same town, played on a controller: the controls page
+                pad::show_names(true);
+                g.paused = true;
+                g.controls = true;
+            }
+            770 => {
+                g.toast = Some(("TIP: PRESS I TO SEE YOUR GEAR - CLICK AN ITEM TO EQUIP IT".into(), 300));
+                g.banner = Some(("LEVEL 4".into(), "SKILL POINT GAINED  -  PRESS K".into(), 300));
+            }
             395 => {
                 if let Some(b) = g.enemies.iter().position(|e| e.k.boss() && e.alive) {
                     let m = g.enemies[b].maxhp;
@@ -768,7 +793,7 @@ impl App {
             }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge"), (595, "x11_camp"), (630, "x12_overlook"), (665, "x13_pen"), (720, "x14_ashford_free")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge"), (595, "x11_camp"), (630, "x12_overlook"), (665, "x13_pen"), (720, "x14_ashford_free"), (790, "x16_pad_prompts")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
@@ -900,6 +925,9 @@ impl ApplicationHandler for App {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let down = event.state == ElementState::Pressed;
+                if down {
+                    self.pad.release();
+                }
                 if let PhysicalKey::Code(k) = event.physical_key {
                     let i = &mut self.input;
                     match k {
@@ -960,6 +988,9 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let down = state == ElementState::Pressed;
+                if down {
+                    self.pad.release();
+                }
                 match button {
                     MouseButton::Left => self.input.lmb = down,
                     MouseButton::Right => self.input.rmb = down,
@@ -977,6 +1008,12 @@ impl ApplicationHandler for App {
                 self.sel_pending = Some(next.rem_euclid(n) as usize);
             }
             WindowEvent::CursorMoved { position, .. } => {
+                if self.pad.active {
+                    let a = *self.pad.anchor.get_or_insert((position.x, position.y));
+                    if (position.x - a.0).abs() + (position.y - a.1).abs() > 12.0 {
+                        self.pad.release();
+                    }
+                }
                 self.mouse_px = (position.x, position.y);
             }
             WindowEvent::RedrawRequested => self.redraw(el),
@@ -1005,6 +1042,7 @@ impl App {
             self.game.update(&self.input.clone());
         } else {
             self.input.mouse = (((self.mouse_px.0 - offx as f64) / sc as f64) as f32, ((self.mouse_px.1 - offy as f64) / sc as f64) as f32);
+            self.pad.poll();
             let now = Instant::now();
             self.acc += now.duration_since(self.last).as_secs_f64();
             self.last = now;
@@ -1012,12 +1050,17 @@ impl App {
             while self.acc >= 1.0 / 60.0 && n < 4 {
                 let mut inp = self.input.clone();
                 inp.sel = self.sel_pending.take();
+                self.pad.apply(&self.game, &mut inp);
                 self.game.update(&inp);
                 self.acc -= 1.0 / 60.0;
                 n += 1;
             }
             if n == 4 {
                 self.acc = 0.0;
+            }
+            if self.pad.active {
+                // the cursor (or aiming reticle) follows the pad
+                self.input.mouse = self.pad.cursor;
             }
         }
         // menu requests the game can't carry out itself
@@ -1120,7 +1163,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.extras {
-                shot.as_deref() == Some("x14_ashford_free")
+                shot.as_deref() == Some("x16_pad_prompts")
             } else if sh.menus {
                 shot.as_deref() == Some("m5_gift")
             } else if sh.tour {
@@ -1224,6 +1267,7 @@ fn main() {
         fps_n: 0,
         sel_pending: None,
         audio: if testing { None } else { audio::Audio::new() },
+        pad: if testing { pad::Pad::off() } else { pad::Pad::new() },
     };
     app.game.press = press;
     el.run_app(&mut app).expect("run");

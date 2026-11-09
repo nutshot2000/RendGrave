@@ -68,9 +68,10 @@ impl<'a> Ui<'a> {
         }
     }
     pub fn text_w(s: &str, sc: i32) -> i32 {
-        s.chars().count() as i32 * 4 * sc - sc
+        crate::pad::tr(s).chars().count() as i32 * 4 * sc - sc
     }
     pub fn text(&mut self, x: i32, y: i32, s: &str, c: [u8; 3], sc: i32, shadow: bool) {
+        let s = crate::pad::tr(s);
         let mut cx = x;
         for ch in s.chars() {
             let g = glyph(ch).as_bytes();
@@ -1112,16 +1113,16 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
             u.px(qx + dx, qy + dy, if dy < 2 { [160, 140, 120] } else { [220, 40, 60] }, 255);
         }
     }
-    u.text(qx + 5, qy + 2, &format!("{} F", p.potions), [255, 200, 200], 1, true);
+    u.text(qx + 5, qy + 2, &format!("{} {}", p.potions, if crate::pad::active() { "LB" } else { "F" }), [255, 200, 200], 1, true);
     if g.pick == 2 {
         // oil flasks
-        let fx = qx + 26;
+        let fx = qx + 30;
         for dy in 0..6 {
             for dx in -1i32..=1 {
                 u.px(fx + dx, qy + 2 + dy, if dy == 0 { [150, 110, 70] } else if dx == 1 { [100, 120, 130] } else { [50, 56, 64] }, 255);
             }
         }
-        u.text(fx + 4, qy + 2, &format!("{} Q", g.flasks), [200, 210, 220], 1, true);
+        u.text(fx + 4, qy + 2, &format!("{} {}", g.flasks, if crate::pad::active() { "RT" } else { "Q" }), [200, 210, 220], 1, true);
     }
     // spell bar: every learned spell
     let full = p.sk.bar();
@@ -1247,7 +1248,11 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     // controls hint for the first seconds
     if t < 900 && !g.press {
         let a = if t > 780 { ((900 - t) as f32 / 120.0 * 255.0) as u8 } else { 255 };
-        let lines = ["WASD MOVE   LMB ATTACK   RMB CAST", "1-9 SPELLS   SPACE DODGE   F POTION   K SKILLS", "AIM AT LEGS TO TAKE THEM OFF   E INTERACT   I GEAR"];
+        let lines = if crate::pad::active() {
+            ["LEFT STICK MOVE   A ATTACK   X Y B CAST", "RB DODGE   LB POTION   D-PAD UP SKILLS", "RIGHT STICK AIMS - POINT AT LEGS TO TAKE THEM OFF"]
+        } else {
+            ["WASD MOVE   LMB ATTACK   RMB CAST", "1-9 SPELLS   SPACE DODGE   F POTION   K SKILLS", "AIM AT LEGS TO TAKE THEM OFF   E INTERACT   I GEAR"]
+        };
         for (k, l) in lines.iter().enumerate() {
             let w = Ui::text_w(l, 1);
             let y = 26 + k as i32 * 8;
@@ -1470,7 +1475,26 @@ fn draw_title(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
 }
 /// the full list of keys, from the title or the pause menu
 fn draw_controls(u: &mut Ui, fw: i32, fh: i32) {
-    let rows: [(&str, &str); 17] = [
+    const PAD_ROWS: [(&str, &str); 17] = [
+        ("LEFT STICK", "MOVE"),
+        ("RIGHT STICK", "AIM - OR LET GO TO AUTO-AIM"),
+        ("A", "ATTACK, OR INTERACT WHEN IN REACH"),
+        ("X / Y / B", "CAST SPELL 1 / 2 / 3"),
+        ("LT", "CAST THE SELECTED SPELL"),
+        ("D-PAD LEFT RIGHT", "CHOOSE A SPELL"),
+        ("RB", "DODGE ROLL"),
+        ("LB", "DRINK A POTION"),
+        ("RT", "THROW AN OIL FLASK (IF YOU HAVE THEM)"),
+        ("D-PAD UP", "SKILL TREE"),
+        ("D-PAD DOWN / BACK", "GEAR AND INVENTORY"),
+        ("START", "PAUSE"),
+        ("IN MENUS", "STICK MOVES THE POINTER, A PICKS"),
+        ("", "X SELLS, B GOES BACK"),
+        ("A", "WAKE IN ASHFORD AFTER DEATH"),
+        ("AIM LOW", "TAKE OFF LEGS, HIT CRAWLERS AND BARRELS"),
+        ("CRACKED WALLS", "BREAK THEM - SOMETHING IS BEHIND"),
+    ];
+    let key_rows: [(&str, &str); 17] = [
         ("WASD / ARROWS", "MOVE"),
         ("LEFT MOUSE", "ATTACK WITH YOUR WEAPON"),
         ("RIGHT MOUSE", "CAST THE SELECTED SPELL"),
@@ -1489,6 +1513,7 @@ fn draw_controls(u: &mut Ui, fw: i32, fh: i32) {
         ("AIM LOW", "TAKE OFF LEGS, HIT CRAWLERS AND BARRELS"),
         ("CRACKED WALLS", "BREAK THEM - SOMETHING IS BEHIND"),
     ];
+    let rows = if crate::pad::active() { PAD_ROWS } else { key_rows };
     let (w, h) = (300, rows.len() as i32 * 10 + 40);
     let (x, y) = (fw / 2 - w / 2, (fh - h) / 2);
     u.rect(x - 2, y - 2, w + 4, h + 4, [70, 50, 60], 255);

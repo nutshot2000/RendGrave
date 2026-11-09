@@ -30,6 +30,24 @@ M / N               Music / sound on and off
 F11                 Fullscreen
 R                   After dying: wake in Ashford
 
+GAMEPAD (Xbox names; PlayStation and others work the same way)
+Just pick it up and press a button - the game switches over, and back again
+the moment you touch the mouse or keyboard.
+Left stick          Move
+Right stick         Aim. Let go and you auto-aim at the nearest enemy in front of you.
+                    Push it gently toward legs or the Hollow King's knees to aim low.
+A                   Attack - or interact, when something is in reach
+X / Y / B           Cast spell 1 / 2 / 3
+LT                  Cast the selected spell
+D-pad left / right  Choose a spell
+RB                  Dodge roll
+LB                  Drink a potion
+RT                  Throw an oil flask
+D-pad up            Skill tree
+D-pad down / Back   Gear
+Start               Pause menu
+In menus            The left stick (or d-pad) moves a pointer: A clicks, X right-clicks, B goes back
+
 YOUR SAVE
 ---------
 The game saves by itself when you change area, open chests, change gear and quit.

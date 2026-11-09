@@ -29,6 +29,10 @@ pub struct Input {
     pub inv: bool,
     /// Q: throw an oil flask
     pub throw: bool,
+    /// a gamepad's left stick (screen space, down is +y); zero when unused
+    pub stick: (f32, f32),
+    /// the gamepad is auto-aiming: the cursor is on an enemy but not at a chosen height
+    pub auto: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -706,6 +710,10 @@ impl Game {
         }
         r
     }
+    /// a screen that wants a cursor rather than a fight (the gamepad moves a pointer in these)
+    pub fn menu_mode(&self) -> bool {
+        self.title || self.paused || self.tree || self.inv_open || self.shop_open || self.wp_open || self.controls || self.choice.is_some() || self.talk.is_some() || self.ending == -1
+    }
     pub fn mouse_world(&self, inp: &Input) -> (f32, f32) {
         (self.cam.0.floor() + inp.mouse.0, self.cam.1.floor() + inp.mouse.1)
     }
@@ -992,6 +1000,9 @@ impl Game {
         // movement
         let mut dx = (inp.right as i32 - inp.left as i32) as f32;
         let mut dy = (inp.down as i32 - inp.up as i32) as f32;
+        if inp.stick != (0.0, 0.0) {
+            (dx, dy) = inp.stick;
+        }
         let l = (dx * dx + dy * dy).sqrt();
         if l > 0.0 {
             dx /= l;

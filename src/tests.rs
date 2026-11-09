@@ -404,3 +404,94 @@ fn freeing_tomas_brings_him_home() {
     assert!(g.npcs.iter().any(|n| n.k == crate::quiet::TOMAS), "and is by the well in Ashford");
     assert!(g.npcs.len() >= 8, "more people about after both bosses");
 }
+
+/// one step of the game driven by a pretend controller
+fn pad_step(g: &mut Game, pad: &mut crate::pad::Pad, held: &str, ls: (f32, f32), rs: (f32, f32)) -> Input {
+    pad.fake(held, ls, rs);
+    let mut inp = Input::default();
+    pad.apply(g, &mut inp);
+    let aim = g.mouse_world(&inp);
+    g.update(&inp);
+    // the tests read the aim where it pointed when it was made
+    inp.mouse = (aim.0 - g.cam.0.floor(), aim.1 - g.cam.1.floor());
+    inp
+}
+
+#[test]
+fn gamepad_auto_aims_and_attacks() {
+    let (mut g, i) = arena(Kind::Zombie);
+    g.view = (480.0, 270.0);
+    for _ in 0..5 {
+        g.update(&Input::default());
+    }
+    let mut pad = crate::pad::Pad::off();
+    // facing the zombie with the right stick at rest: the cursor sits on it
+    let inp = pad_step(&mut g, &mut pad, "", (0.9, 0.0), (0.0, 0.0));
+    let (mx, my) = g.mouse_world(&inp);
+    let e = &g.enemies[i];
+    assert!((mx - e.x).abs() < 4.0 && (my - (e.y - 22.0)).abs() < 4.0, "auto-aim missed: {:?} vs {:?}", (mx, my), (e.x, e.y));
+    assert!(inp.auto && inp.stick.0 > 0.8);
+    // A swings the weapon
+    let inp = pad_step(&mut g, &mut pad, "a", (0.0, 0.0), (0.0, 0.0));
+    assert!(inp.lmb && !inp.interact);
+    // the right stick aims by hand, straight down
+    let inp = pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 1.0));
+    let (mx, my) = g.mouse_world(&inp);
+    assert!(!inp.auto && (mx - g.player.x).abs() < 1.0 && my > g.player.y);
+}
+
+#[test]
+fn gamepad_casts_dodges_and_uses() {
+    let (mut g, _) = arena(Kind::Zombie);
+    g.view = (480.0, 270.0);
+    set_rank(&mut g, Sk::Lightning, 1);
+    set_rank(&mut g, Sk::Fireball, 1);
+    let mut pad = crate::pad::Pad::off();
+    let inp = pad_step(&mut g, &mut pad, "y", (0.0, 0.0), (0.0, 0.0));
+    assert_eq!(inp.sel, Some(1));
+    assert!(inp.rmb);
+    let inp = pad_step(&mut g, &mut pad, "rb lb rt", (0.0, 0.0), (0.0, 0.0));
+    assert!(inp.dodge && inp.potion && inp.throw);
+    // with something to use in reach, A uses it instead of swinging
+    pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 0.0));
+    g.prompt = Some("E  OPEN CHEST".into());
+    let mut inp = Input::default();
+    pad.fake("a", (0.0, 0.0), (0.0, 0.0));
+    pad.apply(&g, &mut inp);
+    assert!(inp.interact && !inp.lmb);
+}
+
+#[test]
+fn gamepad_a_that_opens_a_talk_does_not_skip_it() {
+    let mut g = Game::new(5);
+    g.saving = false;
+    g.view = (480.0, 270.0);
+    let mut pad = crate::pad::Pad::off();
+    pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 0.0));
+    g.talk = Some((vec!["ONE", "TWO", "THREE"], 0));
+    // A still held from opening it: nothing turns
+    for _ in 0..3 {
+        pad_step(&mut g, &mut pad, "a", (0.0, 0.0), (0.0, 0.0));
+    }
+    assert_eq!(g.talk.as_ref().unwrap().1, 0);
+    // let go and press again: the next page
+    pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 0.0));
+    pad_step(&mut g, &mut pad, "a", (0.0, 0.0), (0.0, 0.0));
+    assert_eq!(g.talk.as_ref().unwrap().1, 1);
+    // in a menu the stick moves the pointer
+    let before = pad.cursor;
+    pad_step(&mut g, &mut pad, "", (1.0, 0.0), (0.0, 0.0));
+    assert!(pad.cursor.0 > before.0 + 3.0);
+}
+
+#[test]
+fn gamepad_button_names_replace_keys() {
+    let mut pad = crate::pad::Pad::off();
+    pad.fake("", (0.0, 0.0), (0.0, 0.0));
+    assert_eq!(crate::pad::tr("E  OPEN CHEST"), "A  OPEN CHEST");
+    assert_eq!(crate::pad::tr("CLICK TO EQUIP OR TAKE OFF   RIGHT CLICK TO SELL"), "A TO EQUIP OR TAKE OFF   X TO SELL");
+    assert_eq!(crate::pad::tr("PRESS R TO WAKE IN ASHFORD"), "PRESS A TO WAKE IN ASHFORD");
+    assert_eq!(crate::pad::tr("DESCEND THE CRYPT AND SLAY THE HOLLOW KING"), "DESCEND THE CRYPT AND SLAY THE HOLLOW KING");
+    pad.release();
+    assert_eq!(crate::pad::tr("E  OPEN CHEST"), "E  OPEN CHEST");
+}
