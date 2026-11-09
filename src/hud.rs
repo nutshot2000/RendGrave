@@ -1466,6 +1466,12 @@ fn draw_menu(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         let col = if hover { [255, 236, 200] } else if matches!(m, crate::menu::MI::Continue | crate::menu::MI::Resume) { [240, 214, 150] } else { [200, 190, 190] };
         u.text_c(x + w / 2, y + 4, &txt, col, 1);
     }
+    // the second press of NEW GAME wipes the save: say plainly what is lost
+    if g.title && g.confirm_new {
+        let (_, y, _, _) = menu_row(0, fw, fh, true);
+        let who = if g.save_lvl > 0 { format!("YOUR LEVEL {} HERO", g.save_lvl) } else { "YOUR SAVED HERO".into() };
+        u.text_c(fw / 2, y - 12, &format!("THIS ERASES {} FOR GOOD  -  CHOOSE CONTINUE TO KEEP THEM", who), [255, 110, 90], 1);
+    }
 }
 fn draw_title(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     let t = g.frame;

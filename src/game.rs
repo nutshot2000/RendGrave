@@ -327,6 +327,8 @@ pub struct Game {
     pub has_save: bool,
     pub menu_hover: Option<usize>,
     pub confirm_new: bool,
+    /// the saved hero's level, shown on the title screen (0 if unknown)
+    pub save_lvl: u32,
     /// something for main.rs to do (quit, fullscreen, audio, new game)
     pub req: Option<crate::menu::Req>,
     /// (music on, sound on, volume), kept up to date by main.rs for the menus
@@ -580,6 +582,7 @@ impl Game {
             has_save: false,
             menu_hover: None,
             confirm_new: false,
+            save_lvl: 0,
             req: None,
             audio_state: (true, true, 0.7),
             act1_done: false,

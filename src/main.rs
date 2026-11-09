@@ -509,6 +509,16 @@ impl App {
         let k = sh.sub;
         match k {
             1 => self.game = title_game(),
+            70 => {
+                // NEW GAME pressed once over a saved level 15 hero
+                let g = &mut self.game;
+                g.has_save = true;
+                g.save_lvl = 15;
+                g.menu_hover = Some(1);
+                g.confirm_new = true;
+            }
+            75 => return Some("m1b_new_game_confirm".into()),
+            76 => self.game = title_game(),
             80 => return Some("m1_title".into()),
             81 => {
                 let mut g = game::Game::new(7);
@@ -1391,6 +1401,7 @@ fn title_game() -> game::Game {
     g.fade = 60;
     g.title = true;
     g.has_save = savefile::exists(areas::SAVE_FILE);
+    g.save_lvl = savefile::read(areas::SAVE_FILE).and_then(|t| t.lines().find_map(|l| l.strip_prefix("level ").and_then(|v| v.trim().parse().ok()))).unwrap_or(0);
     g.sounds.clear();
     g
 }

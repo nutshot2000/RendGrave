@@ -611,3 +611,28 @@ fn every_dungeon_floor_can_be_crossed() {
     bad.truncate(15);
     assert!(n == 0, "{} blocked layouts:\n{}", n, bad.join("\n"));
 }
+
+/// NEW GAME over a save asks first, and moving off it takes the question back, so a
+/// stray press later can't wipe the hero
+#[test]
+fn new_game_asks_before_erasing_and_forgets_when_you_move_away() {
+    let mut g = Game::new(7);
+    g.saving = false;
+    g.title = true;
+    g.has_save = true;
+    g.menu_hover = Some(1);
+    let press = Input { interact: true, ..Default::default() };
+    g.prev = Input::default();
+    g.update_menu(&press);
+    assert!(g.confirm_new && g.req.is_none(), "first press only asks");
+    g.prev = press.clone();
+    let down = Input { down: true, ..Default::default() };
+    g.update_menu(&down);
+    assert!(!g.confirm_new, "moving off NEW GAME takes the question back");
+    g.prev = down;
+    let up = Input { up: true, ..Default::default() };
+    g.update_menu(&up);
+    g.prev = up;
+    g.update_menu(&press);
+    assert!(g.confirm_new && g.req.is_none(), "after coming back it asks again");
+}

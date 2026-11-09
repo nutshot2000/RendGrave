@@ -48,7 +48,7 @@ impl Game {
     pub fn menu_text(&self, m: MI) -> String {
         let (music, sfx, vol) = self.audio_state;
         match m {
-            MI::Continue => "CONTINUE".into(),
+            MI::Continue => if self.save_lvl > 0 { format!("CONTINUE  -  LEVEL {}", self.save_lvl) } else { "CONTINUE".into() },
             MI::NewGame => {
                 if self.confirm_new {
                     "START OVER? CLICK AGAIN".into()
@@ -91,6 +91,10 @@ impl Game {
         }
         if inp.down && !self.prev.down {
             self.menu_hover = Some(self.menu_hover.map(|k| (k + 1) % n).unwrap_or(0));
+        }
+        // moving off NEW GAME takes back the "start over?" question
+        if self.confirm_new && self.menu_hover.and_then(|k| items.get(k)) != Some(&MI::NewGame) {
+            self.confirm_new = false;
         }
         let click = inp.lmb && !self.prev.lmb && hov.is_some();
         let key = (inp.interact && !self.prev.interact) || (inp.dodge && !self.prev.dodge);
