@@ -154,11 +154,10 @@ pub fn shake_scale(opt: u8) -> f32 {
     [1.0, 0.4, 0.0][opt.min(2) as usize]
 }
 pub fn load_shake() -> u8 {
-    std::fs::read_to_string("rendgrave_options.txt")
-        .ok()
+    crate::savefile::read("rendgrave_options.txt")
         .and_then(|t| t.lines().find_map(|l| l.strip_prefix("shake ").and_then(|v| v.trim().parse().ok())))
         .unwrap_or(0)
 }
 fn save_shake(v: u8) {
-    let _ = std::fs::write("rendgrave_options.txt", format!("shake {}\n", v));
+    crate::savefile::write_quiet("rendgrave_options.txt", &format!("shake {}\n", v));
 }

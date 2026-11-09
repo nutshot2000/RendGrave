@@ -1,39 +1,29 @@
 # Rendgrave roadmap
 
-The goal: a full action RPG where every spell and weapon physically changes the world and
-the bodies in it. Built in stages; each stage leaves the game playable.
+The goal: a full action RPG, sold on itch.io, where every spell and weapon physically
+changes the world and the bodies in it. Four acts, level cap 50.
 
-## Stage 1 - Progression (in progress)
-- XP from kills, levels, a skill point per level, full heal on level up
-- Skill tree with six schools: Storm, Flame, Venom, Frost, Blade, Body
-- Each school: a starting skill, passive upgrades and two big spells to unlock
-- New spells: Ball Lightning, Thunderstorm, Wall of Fire, Meteor, Acid Rain, Acid Flood,
-  Ice Spikes, Blizzard, Whirlwind
-- Enemies respawn in waves and scale with your level
+## Done - Act I (Early Access 0.1)
+- Pixel-layered bodies: cutting, burning, acid, freezing, shattering, explosions
+- Simulated world: fire, water, oil, acid, ice, peat, swamp gas, powder kegs
+- Six schools, 54 skills (ultimates from level 30, so mostly for later acts)
+- Five weapon types, affixes, rarities, five legendaries, merchant, potions
+- Ashford, Hollow Pines, Old Graveyard, Blackwater Fen, Ravenhold; Sunken Crypt (3 floors)
+  and Ravenhold Cellars (2 floors); the Hollow King and the Bandit Chief
+- Champions with powers, grave robbers, secret rooms, urns and crates, kill streaks
+- Story NPC, objectives, guide marker, minimap with fog, waypoints, boss portals
+- Menus, controls page, volume, screen shake, fullscreen; safe versioned saves
+- Enemies do not respawn: areas are fixed, dungeons are rebuilt on each visit
 
-## Stage 2 - Loot and gear
-- Weapons and armour with random stats and affixes ("of Burning", "Thundering", "Corroding")
-- Weapon types that cut differently: swords slice, axes chop, hammers crush and shatter
-- Inventory and equipment screen, paper-doll shows the gear on your pixel body
-- Rarities, gold shop, salvaging
+## Next - before or alongside Act II
+- Playtest Act I by hand: boss fairness on one life, how long the act really takes
+- Short first-time tips (skill points, potions, gear)
+- Lower graphics settings (fewer lights and shadows) for weaker PCs
+- Controller support and key rebinding
+- One damage-and-death path for every attack; screen state as one enum
 
-## Stage 3 - Enemies and bosses
-- Ranged enemies (bone archers, acid spitters), casters, swarmers
-- Skeletons that reassemble unless their bones are scattered or burned
-- Elemental resistances and weaknesses per enemy type
-- Boss fights per area with phases
+## Act II - The Frozen North
+New town, frozen lakes that crack, ice caves, a new boss; area levels about 18-30.
 
-## Stage 4 - The world
-- Town hub with merchants and quests
-- Streaming chunked world: forest, swamp (peat that smoulders, gas), ice caves, volcano
-- Dungeons generated per run, persistent overworld
-- Saving and loading
-
-## Stage 5 - Audio and feel
-- Synthesised and sampled sound effects, spatial audio, adaptive music
-- Hit pause, screen shake and camera tuning, controller support
-
-## Stage 6 - Release
-- Menus, settings, key rebinding, gore slider
-- Performance: multithreaded simulation, lower-end GPU settings
-- Steam page, demo, playtesting
+## Acts III-IV
+The Burning Lands, then the source of the dead. Level cap 50.

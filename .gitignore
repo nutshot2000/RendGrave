@@ -13,3 +13,6 @@ menus/
 press/
 dist/
 extras/
+rendgrave_save.txt.bak
+rendgrave_save.txt.tmp
+rendgrave_save.damaged.txt

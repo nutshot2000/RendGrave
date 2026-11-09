@@ -244,12 +244,17 @@ pub fn starter_armor() -> Item {
 
 /// roll a random item for an area level; `luck` shifts rarity upward
 pub fn roll(ilvl: i32, luck: f32) -> Item {
-    let r = rnd() - luck;
-    let rarity = if r < 0.006 + ilvl as f32 * 0.0008 {
+    // luck multiplies the odds of each tier rather than shifting the roll, so a lucky
+    // source is a few times likelier to give a legendary, not dozens of times
+    let leg = (0.006 + ilvl as f32 * 0.0008) * (1.0 + luck * 7.0);
+    let rare = (0.07 + ilvl as f32 * 0.004) * (1.0 + luck * 4.0);
+    let magic = (0.40 + luck).min(0.9);
+    let r = rnd();
+    let rarity = if r < leg {
         Rarity::Legendary
-    } else if r < 0.07 + ilvl as f32 * 0.004 {
+    } else if r < leg + rare {
         Rarity::Rare
-    } else if r < 0.40 {
+    } else if r < magic.max(leg + rare + 0.05) {
         Rarity::Magic
     } else {
         Rarity::Common
@@ -330,7 +335,10 @@ impl Item {
     /// a rough measure of how good an item is, for "is this an upgrade?"
     pub fn score(&self) -> f32 {
         let mut s = match self.slot {
-            Slot::Weapon => self.base as f32,
+            Slot::Weapon => {
+                let w = wstats(self.wk);
+                self.base as f32 * w.dmg_mult * 16.0 / w.frames as f32
+            }
             Slot::Ring => 0.0,
             _ => self.base as f32 * 1.6,
         };

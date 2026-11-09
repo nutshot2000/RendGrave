@@ -336,6 +336,12 @@ pub struct Game {
     pub lamps: Vec<(f32, f32, [f32; 3])>,
     pub sounds: Vec<Snd>,
     pub toast: Option<(String, i32)>,
+    /// a rare item waiting for a second right-click to sell
+    pub sell_confirm: Option<usize>,
+    /// first-time tips already shown (bits)
+    pub tips: u8,
+    /// a save that failed, to tell the player about
+    pub save_fail: std::cell::RefCell<Option<String>>,
     pub ground: Vec<GroundItem>,
     pub inv_open: bool,
     pub shop_open: bool,
@@ -543,6 +549,9 @@ impl Game {
             lamps: vec![],
             sounds: vec![],
             toast: None,
+            save_fail: std::cell::RefCell::new(None),
+            sell_confirm: None,
+            tips: 0,
             ground: vec![],
             inv_open: false,
             shop_open: false,
@@ -835,6 +844,10 @@ impl Game {
             }
         }
         self.update_player(&inp2);
+        self.first_tips();
+        if let Some(m) = self.save_fail.borrow_mut().take() {
+            self.toast = Some((m, 400));
+        }
         self.update_talents();
         self.update_enemies();
         self.update_projs();
@@ -928,11 +941,13 @@ impl Game {
         }
         if inp.dodge && !self.prev.dodge && p.dodge_cd == 0 {
             let (ddx, ddy) = if l > 0.0 { (dx, dy) } else { (aim.cos(), aim.sin() * 0.6) };
+            let sw = p.sk.r(Sk::Swiftness);
             p.dodge = 16;
-            p.dodge_cd = 38;
+            p.dodge_cd = 38 - 5 * sw;
             self.sounds.push(Snd { k: Sfx::Dodge, x: p.x, y: p.y, v: 0.8 });
             p.inv = 18;
-            p.dv = (ddx * 3.1, ddy * 3.1);
+            let dv = 3.1 * (1.0 + 0.06 * sw as f32);
+            p.dv = (ddx * dv, ddy * dv);
         }
         let (mut vx, mut vy) = (dx * speed, dy * speed);
         if p.slip > 0 {
@@ -1407,7 +1422,8 @@ impl Game {
                 continue;
             }
             let f = 1.0 - d / (r * 2.2);
-            let dmg = (36.0 * f + 6.0) * sp;
+            let dmg = (36.0 * f + 6.0) * sp * self.status_mult(i);
+            let e = &mut self.enemies[i];
             e.hp -= dmg;
             e.aggro = true;
             e.flash = 5;
@@ -1573,7 +1589,7 @@ impl Game {
     fn acid_hit(&mut self, x: f32, y: f32, z: f32, e: Option<usize>) {
         self.sounds.push(Snd { k: Sfx::Acid, x: x, y: y, v: 0.7 });
         if let Some(i) = e {
-            let ad = 6.0 * self.spell_power();
+            let ad = 6.0 * self.spell_power() * self.status_mult(i);
             let en = &mut self.enemies[i];
             en.aggro = true;
             en.hp -= ad;
@@ -1597,9 +1613,10 @@ impl Game {
         self.light(x, y, 50.0, 0.8, [0.5, 1.0, 0.3], 14);
     }
 
-    pub fn shatter(&mut self, i: usize) {
-        if self.boss_shatter(i) {
-            return;
+    /// returns whether the blow was used up by the shatter
+    pub fn shatter(&mut self, i: usize) -> bool {
+        if let Some(cracked) = self.boss_shatter(i) {
+            return cracked;
         }
         self.sounds.push(Snd { k: Sfx::Shatter, x: self.enemies[i].x, y: self.enemies[i].y, v: 1.0 });
         if self.has_legend(Legend::WintersGrudge) {
@@ -1632,6 +1649,7 @@ impl Game {
         self.hitstop = 5;
         self.float(ex, ey - 60.0, "SHATTERED".into(), [180, 220, 255], true);
         self.on_kill(i);
+        true
     }
 
     /// a bloater bursts: acid everywhere and a cloud of swamp gas
@@ -2340,6 +2358,10 @@ impl Game {
         }
     }
 
+    #[cfg(test)]
+    pub fn update_misc_for_test(&mut self) {
+        self.update_misc();
+    }
     fn update_misc(&mut self) {
         if let Some(t) = &mut self.toast {
             t.1 -= 1;
@@ -2467,6 +2489,11 @@ impl Game {
                 self.player.gold += p.amt;
                 self.sounds.push(Snd { k: Sfx::Coin, x: px, y: py, v: 0.8 });
                 self.float(px, py - 56.0, format!("+{} GOLD", p.amt), [255, 214, 90], false);
+            } else if p.k == 1 && self.player.potions >= crate::shop::MAX_POTIONS {
+                let g = 15 + self.alvl * 3;
+                self.player.gold += g;
+                self.sounds.push(Snd { k: Sfx::Coin, x: px, y: py, v: 0.6 });
+                self.float(px, py - 56.0, format!("POTIONS FULL  +{} GOLD", g), [255, 214, 90], false);
             } else if p.k == 1 {
                 self.player.potions += 1;
                 self.sounds.push(Snd { k: Sfx::Coin, x: px, y: py, v: 0.6 });

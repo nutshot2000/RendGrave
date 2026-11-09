@@ -146,26 +146,36 @@ impl Game {
         self.snd(Sfx::Fuse, x, y, 0.8);
     }
 
-    /// bosses don't shatter: the ice cracks off them for a chunk of damage instead
-    pub fn boss_shatter(&mut self, i: usize) -> bool {
-        if !self.enemies[i].k.boss() {
-            return false;
+    /// Bosses and champions don't shatter outright: the ice cracks off them for a chunk of
+    /// damage instead. Returns false when nothing cracked, so the blow lands as normal.
+    pub fn boss_shatter(&mut self, i: usize) -> Option<bool> {
+        let e = &self.enemies[i];
+        let boss = e.k.boss();
+        // a champion with plenty of health left takes a heavy crack, not instant death
+        let champ = !boss && e.elite && e.hp > e.maxhp * 0.3;
+        if !boss && !champ {
+            return None;
         }
-        let e = &mut self.enemies[i];
-        e.frozen = 0;
-        // only the first crack of each freeze hurts; then it's immune until it thaws
-        let fresh = e.thaw == 0 || e.thaw > 180;
-        e.thaw = 180;
+        // only the first crack of each freeze hurts; then a boss is immune until it thaws
+        let fresh = !boss || e.thaw == 0 || e.thaw > 180;
         if !fresh {
-            return true;
+            let e = &mut self.enemies[i];
+            e.frozen = 0;
+            return Some(false);
         }
-        let dmg = e.maxhp * 0.02;
+        let dmg = if boss { e.maxhp * 0.02 } else { e.maxhp * 0.3 };
         let (x, y) = (e.x, e.y);
         self.snd(Sfx::Shatter, x, y, 0.9);
         for _ in 0..30 {
             self.ptc(x, y, rr(10.0, 60.0), rr(-2.0, 2.0), rr(-1.0, 1.0), rr(0.0, 2.0), 60, PtK::Ice, [200, 230, 255]);
         }
+        // still frozen while it's hurt, so Deep Freeze counts
         self.hurt(i, dmg, [180, 220, 255], true);
-        true
+        let e = &mut self.enemies[i];
+        e.frozen = 0;
+        if boss {
+            e.thaw = 180;
+        }
+        Some(true)
     }
 }

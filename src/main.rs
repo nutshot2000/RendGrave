@@ -3,6 +3,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod savefile;
+#[cfg(test)]
+mod tests;
 mod champions;
 mod bosstest;
 mod bosses;
@@ -1210,7 +1213,7 @@ fn title_game() -> game::Game {
     g.banner = None;
     g.fade = 60;
     g.title = true;
-    g.has_save = std::path::Path::new(areas::SAVE_FILE).exists();
+    g.has_save = savefile::exists(areas::SAVE_FILE);
     g.sounds.clear();
     g
 }

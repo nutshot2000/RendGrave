@@ -21,7 +21,7 @@ Right mouse         Cast the selected spell
 Space               Dodge roll
 F                   Drink a potion
 E                   Interact: exits, stairs, waypoints, chests, shrines, the merchant
-I                   Gear: click to equip, right click to sell
+I                   Gear: click to equip, right click to sell (rare items: right click twice)
 K or Tab            Skill tree (A / D or click to change school)
 Esc                 Pause menu (controls, sound, screen shake, fullscreen, quit)
 M / N               Music / sound on and off
@@ -32,7 +32,13 @@ R                   After dying: wake in Ashford
 YOUR SAVE
 ---------
 The game saves by itself when you change area, open chests, change gear and quit.
-The save is rendgrave_save.txt next to the game. Settings are in rendgrave_settings.txt and rendgrave_options.txt.
+The save is rendgrave_save.txt next to Rendgrave.exe, with the previous save kept as
+rendgrave_save.txt.bak. If a save is ever damaged, the game loads the backup instead.
+Settings are in rendgrave_settings.txt and rendgrave_options.txt.
+
+Dungeons are rebuilt every time you enter them. If you quit inside one, you continue
+at its entrance. When a dungeon's boss dies, a portal opens to take you to any waypoint.
+If you die you wake in Ashford and lose a tenth of your gold. Your gear is safe.
 
 WHERE TO GO
 -----------

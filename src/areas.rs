@@ -9,21 +9,54 @@ use crate::audio::Sfx;
 
 pub const SAVE_FILE: &str = "rendgrave_save.txt";
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Load {
+    None,
+    Ok,
+    /// saved while dead
+    Dead,
+    /// the save and its backup are both damaged
+    Damaged,
+}
+
 impl Game {
     /// a fresh game: new seed, start in Ashford (or continue from the save file)
     pub fn start(load: bool) -> Game {
         let seed_ = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
         let mut g = Game::blank(seed_);
         g.saving = true;
-        if load && g.load() {
-            let to = g.area.surface();
+        let loaded = if load { g.load() } else { Load::None };
+        if loaded == Load::Dead {
+            // you quit while dead: the same price as waking normally
+            g.player.gold = g.player.gold * 9 / 10;
+            g.area = AreaId::Ashford;
+            g.travel(AreaId::Ashford);
+            g.banner = Some(("YOU WAKE IN ASHFORD".into(), "THE DEAD TOOK A TENTH OF YOUR GOLD".into(), 220));
+        } else if loaded == Load::Ok {
+            // dungeons are rebuilt each visit: you continue at their entrance
+            let was = g.area;
+            let to = was.surface();
             g.area = AreaId::Ashford;
             g.travel(to);
             g.banner = Some(("WELCOME BACK".into(), to.name(), 200));
+            if was.is_dungeon() {
+                g.toast = Some(("DUNGEONS CHANGE EACH VISIT - YOU WAIT AT THE ENTRANCE".into(), 300));
+            }
+            // quit during the last talk with Maren: the act still ends
+            if g.has(crate::story::TOLD_CHIEF) && !g.act1_done {
+                g.check_act_end();
+            }
         } else {
+            if loaded == Load::Damaged {
+                // keep the damaged file for a look, and don't write over it
+                let _ = std::fs::copy(crate::savefile::path(SAVE_FILE), crate::savefile::path("rendgrave_save.damaged.txt"));
+            }
             g.apply_gear();
             g.travel(AreaId::Ashford);
             g.banner = Some(("RENDGRAVE".into(), "ASHFORD - THE LAST SAFE HEARTH".into(), 260));
+            if loaded == Load::Damaged {
+                g.toast = Some(("YOUR SAVE WAS DAMAGED - A COPY IS IN RENDGRAVE_SAVE.DAMAGED.TXT".into(), 600));
+            }
         }
         g
     }
@@ -329,9 +362,8 @@ impl Game {
             self.player.sk.points += 1;
         }
         self.banner = Some(("THE BANDIT CHIEF FALLS".into(), if first { "A BONUS SKILL POINT - RAVENHOLD IS FREE".into() } else { "RAVENHOLD IS FREE".into() }, 400));
-        for k in 0..8 {
-            self.pickups.push(Pickup { k: 0, x: x + rr(-16.0, 16.0), y: y + rr(-8.0, 8.0), z: 14.0, vz: rr(1.5, 3.0), amt: 60 + ri(50) as i32, t: k * 5 });
-        }
+        let gold: i32 = (0..8).map(|_| 60 + ri(50) as i32).sum();
+        self.boss_gold(x, y, gold);
         self.flash = 0.2;
         self.open_portal();
         self.save();
@@ -341,17 +373,28 @@ impl Game {
         self.king_dead = true;
         self.player.sk.points += 1;
         self.banner = Some(("THE HOLLOW KING FALLS".into(), "A BONUS SKILL POINT - THE CRYPT FALLS SILENT".into(), 400));
-        for k in 0..6 {
-            self.pickups.push(Pickup { k: 0, x: x + rr(-14.0, 14.0), y: y + rr(-8.0, 8.0), z: 14.0, vz: rr(1.5, 3.0), amt: 50 + ri(40) as i32, t: k * 6 });
-        }
+        let gold: i32 = (0..6).map(|_| 50 + ri(40) as i32).sum();
+        self.boss_gold(x, y, gold);
         let missing: Vec<usize> = (0..N).filter(|&i| needs_tome(i) && !self.player.sk.tomes[i]).collect();
         if !missing.is_empty() {
             let i = missing[ri(missing.len())];
-            self.pickups.push(Pickup { k: 2, x, y: y + 6.0, z: 16.0, vz: 3.0, amt: i as i32, t: 0 });
+            self.player.sk.tomes[i] = true;
+            self.toast = Some((format!("THE KING'S TOME: {} - LEARN IT AT LEVEL 30", NODES[i].name), 400));
         }
         self.flash = 0.25;
         self.open_portal();
         self.save();
+    }
+
+    /// a boss's gold goes straight into your purse (it can't be lost by quitting), with a
+    /// shower of coins for show
+    fn boss_gold(&mut self, x: f32, y: f32, gold: i32) {
+        self.player.gold += gold;
+        self.float(x, y - 80.0, format!("+{} GOLD", gold), [255, 214, 90], true);
+        self.snd(Sfx::Coin, x, y, 1.0);
+        for _ in 0..50 {
+            self.ptc(x + rr(-14.0, 14.0), y, rr(10.0, 40.0), rr(-1.5, 1.5), rr(-0.8, 0.8), rr(1.0, 3.0), 70, PtK::Spark, [255, 210, 80]);
+        }
     }
 
     /// the boss is dead: a way home opens where it stood
@@ -373,24 +416,31 @@ impl Game {
         }
         let p = &self.player;
         let join = |v: Vec<String>| v.join(",");
-        let lines = [
+        let mut lines = vec![
+            "version 2".to_string(),
             format!("seed {}", self.seed),
             format!("area {}", self.area.key()),
             format!("level {}", p.sk.level),
             format!("xp {}", p.sk.xp),
             format!("points {}", p.sk.points),
-            format!("ranks {}", join(p.sk.rank.iter().map(|r| r.to_string()).collect())),
-            format!("tomes {}", join(p.sk.tomes.iter().map(|t| (*t as u8).to_string()).collect())),
             format!("gold {}", p.gold),
             format!("potions {}", p.potions),
+            format!("kills {}", p.kills),
+            format!("dead {}", p.dead as u8),
             format!("waypoints {}", join(self.discovered.iter().map(|a| a.key()).collect())),
             format!("king {}", self.king_dead as u8),
             format!("chief {}", self.chief_dead as u8),
             format!("act1 {}", self.act1_done as u8),
             format!("story {}", self.story),
             format!("played {}", self.played),
+            format!("tips {}", self.tips),
         ];
-        let mut lines: Vec<String> = lines.to_vec();
+        // skills by name, so adding or reordering skills never scrambles a save
+        for (i, n) in NODES.iter().enumerate() {
+            if p.sk.rank[i] > 0 || p.sk.tomes[i] {
+                lines.push(format!("skill {:?} {} {}", n.sk, p.sk.rank[i], p.sk.tomes[i] as u8));
+            }
+        }
         // explored minimap, packed into hex, for the outdoor areas
         for (k, v) in &self.seen {
             if AreaId::from_key(k).map(|a| a.is_dungeon()).unwrap_or(true) {
@@ -403,6 +453,8 @@ impl Game {
             }
             lines.push(format!("seen_{} {}", k, hex));
         }
+        // "equipped" always comes first, so an empty slot loads as empty
+        lines.push("equipped".into());
         for (k, it) in self.player.equip.iter().enumerate() {
             if let Some(it) = it {
                 lines.push(format!("equip{} {}", k, it.encode()));
@@ -411,11 +463,38 @@ impl Game {
         for it in &self.player.bag {
             lines.push(format!("bag {}", it.encode()));
         }
-        let _ = std::fs::write(SAVE_FILE, lines.join("\n"));
+        // a save without this last line was cut short and is never trusted
+        lines.push("end".into());
+        if let Err(e) = crate::savefile::write_safe(SAVE_FILE, &(lines.join("\n") + "\n")) {
+            *self.save_fail.borrow_mut() = Some(format!("COULD NOT SAVE: {}", e).to_uppercase());
+        }
     }
-    fn load(&mut self) -> bool {
-        let Ok(txt) = std::fs::read_to_string(SAVE_FILE) else { return false };
-        let mut gear_loaded = false;
+
+    /// is this a whole save? new saves end with "end"; older ones must have the key lines
+    pub fn save_ok(txt: &str) -> bool {
+        let has = |k: &str| txt.lines().any(|l| l.split(' ').next() == Some(k));
+        if has("version") {
+            txt.lines().rev().find(|l| !l.trim().is_empty()).map(|l| l.trim() == "end").unwrap_or(false)
+        } else {
+            ["seed", "level", "xp", "gold", "ranks", "played"].iter().all(|k| has(k))
+        }
+    }
+
+    /// load the save, or its backup if the save is damaged
+    pub fn load(&mut self) -> Load {
+        let main = crate::savefile::read(SAVE_FILE);
+        let txt = match &main {
+            Some(t) if Self::save_ok(t) => t.clone(),
+            None => return Load::None,
+            Some(_) => match crate::savefile::read(&format!("{}.bak", SAVE_FILE)) {
+                Some(b) if Self::save_ok(&b) => {
+                    self.toast = Some(("YOUR SAVE WAS DAMAGED - LOADED THE BACKUP".into(), 400));
+                    b
+                }
+                _ => return Load::Damaged,
+            },
+        };
+        let mut was_dead = false;
         for line in txt.lines() {
             let mut it = line.splitn(2, ' ');
             let (k, v) = (it.next().unwrap_or(""), it.next().unwrap_or("").trim());
@@ -426,6 +505,7 @@ impl Game {
                 "level" => self.player.sk.level = v.parse().unwrap_or(1),
                 "xp" => self.player.sk.xp = v.parse().unwrap_or(0),
                 "points" => self.player.sk.points = v.parse().unwrap_or(0),
+                // the old format: ranks by position
                 "ranks" => {
                     for (i, r) in nums(v).iter().enumerate().take(N) {
                         self.player.sk.rank[i] = *r as u8;
@@ -436,8 +516,19 @@ impl Game {
                         self.player.sk.tomes[i] = *t != 0;
                     }
                 }
+                // the new format: by name
+                "skill" => {
+                    let mut f = v.split(' ');
+                    let (name, r, t) = (f.next().unwrap_or(""), f.next().and_then(|x| x.parse::<u8>().ok()).unwrap_or(0), f.next() == Some("1"));
+                    if let Some(i) = NODES.iter().position(|n| format!("{:?}", n.sk) == name) {
+                        self.player.sk.rank[i] = r.min(NODES[i].max);
+                        self.player.sk.tomes[i] = t;
+                    }
+                }
                 "gold" => self.player.gold = v.parse().unwrap_or(0),
-                "potions" => self.player.potions = v.parse().unwrap_or(3),
+                "potions" => self.player.potions = v.parse::<i32>().unwrap_or(3).clamp(0, crate::shop::MAX_POTIONS),
+                "kills" => self.player.kills = v.parse().unwrap_or(0),
+                "dead" => was_dead = v == "1",
                 "waypoints" => self.discovered = v.split(',').filter_map(AreaId::from_key).collect(),
                 "king" => self.king_dead = v == "1",
                 "chief" => self.chief_dead = v == "1",
@@ -455,17 +546,17 @@ impl Game {
                     self.seen.insert(k[5..].to_string(), out);
                 }
                 "played" => self.played = v.parse().unwrap_or(0),
+                "tips" => self.tips = v.parse().unwrap_or(0),
+                "equipped" => self.player.equip = [None, None, None, None],
                 "equip0" | "equip1" | "equip2" | "equip3" => {
-                    if !gear_loaded {
-                        self.player.equip = [None, None, None, None];
-                        gear_loaded = true;
-                    }
                     let s: usize = k[5..].parse().unwrap_or(0);
                     self.player.equip[s] = crate::items::Item::decode(v);
                 }
                 "bag" => {
                     if let Some(it) = crate::items::Item::decode(v) {
-                        self.player.bag.push(it);
+                        if self.player.bag.len() < crate::gear::BAG_SIZE {
+                            self.player.bag.push(it);
+                        }
                     }
                 }
                 _ => {}
@@ -475,6 +566,10 @@ impl Game {
         self.apply_gear();
         self.player.hp = self.player.maxhp;
         self.player.mana = self.player.maxmana;
-        true
+        if was_dead {
+            Load::Dead
+        } else {
+            Load::Ok
+        }
     }
 }

@@ -248,10 +248,10 @@ impl Audio {
         self.save_settings();
     }
     fn save_settings(&self) {
-        let _ = std::fs::write("rendgrave_settings.txt", format!("volume {}\nmusic {}\nsfx {}\n", self.volume, self.music_on as u8, self.sfx_on as u8));
+        crate::savefile::write_quiet("rendgrave_settings.txt", &format!("volume {}\nmusic {}\nsfx {}\n", self.volume, self.music_on as u8, self.sfx_on as u8));
     }
     fn load_settings(&mut self) {
-        let Ok(t) = std::fs::read_to_string("rendgrave_settings.txt") else { return };
+        let Some(t) = crate::savefile::read("rendgrave_settings.txt") else { return };
         for l in t.lines() {
             let mut it = l.split_whitespace();
             match (it.next(), it.next()) {

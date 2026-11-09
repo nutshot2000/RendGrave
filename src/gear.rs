@@ -135,8 +135,7 @@ impl Game {
 
     /// a hammer blow: smashes a hole, shatters bone and ice, throws them back
     fn crush_enemy(&mut self, i: usize, h: f32, dmg: f32, crit: bool) {
-        if self.enemies[i].frozen > 0 {
-            self.shatter(i);
+        if self.enemies[i].frozen > 0 && self.shatter(i) {
             return;
         }
         let e = &mut self.enemies[i];
@@ -169,7 +168,7 @@ impl Game {
     }
 
     /// affixes and legendary powers that trigger on every hit
-    fn on_hit(&mut self, i: usize, dmg: f32, h: f32) {
+    pub(crate) fn on_hit(&mut self, i: usize, dmg: f32, h: f32) {
         let g = self.player.gear;
         let (ex, ey) = (self.enemies[i].x, self.enemies[i].y);
         if g.burning || self.has_legend(Legend::Pyre) {
@@ -236,15 +235,37 @@ impl Game {
     /// and become a little gold instead, so what you do find is worth a look
     pub fn drop_loot(&mut self, x: f32, y: f32, k: Kind, elite: bool) {
         let (chance, rolls, luck) = loot_odds(k, elite);
+        let mut to_bag = 0;
         for r in 0..rolls {
             if rnd() < chance {
-                let item = roll(self.alvl, luck);
+                let mut item = roll(self.alvl, luck);
+                if k.boss() {
+                    // a boss always gives at least one rare, and its hoard goes straight
+                    // into your bag so it can't be lost by dying or quitting
+                    for _ in 0..40 {
+                        if r > 0 || item.rarity >= Rarity::Rare {
+                            break;
+                        }
+                        item = roll(self.alvl, luck);
+                    }
+                    if self.player.bag.len() < BAG_SIZE {
+                        if item.rarity == Rarity::Legendary {
+                            self.banner = Some((item.name.clone(), "LEGENDARY - IN YOUR BAG".into(), 300));
+                        }
+                        self.player.bag.push(item);
+                        to_bag += 1;
+                        continue;
+                    }
+                }
                 if item.rarity == Rarity::Common && self.player.sk.level >= 4 {
                     self.pickups.push(crate::game::Pickup { k: 0, x: x + rr(-6.0, 6.0), y: y + rr(-3.0, 3.0), z: 10.0, vz: 1.8, amt: item.value() * 2, t: 0 });
                     continue;
                 }
                 self.ground.push(GroundItem { item, x: x + rr(-8.0, 8.0), y: y + rr(-4.0, 4.0), z: 12.0, vz: rr(1.8, 3.2), t: -(r as i32) * 8 });
             }
+        }
+        if to_bag > 0 {
+            self.float(x, y - 96.0, format!("{} ITEM{} ADDED TO YOUR BAG", to_bag, if to_bag > 1 { "S" } else { "" }), [120, 220, 255], true);
         }
     }
 
@@ -302,12 +323,20 @@ impl Game {
     // ------------------------------------------------------------ inventory
     pub fn update_inventory(&mut self, inp: &Input) {
         self.inv_hover = crate::hud::inv_at(inp.mouse, self.view);
+        if self.inv_hover.map(|h| h.0) != Some(1) || self.inv_hover.map(|h| h.1) != self.sell_confirm {
+            self.sell_confirm = None;
+        }
         let click = inp.lmb && !self.prev.lmb;
         let rclick = inp.rmb && !self.prev.rmb;
         match self.inv_hover {
             Some((0, s)) if click => self.unequip(s),
             Some((1, i)) if click && i < self.player.bag.len() => self.equip_from_bag(i),
+            Some((1, i)) if rclick && i < self.player.bag.len() && self.player.bag[i].rarity >= Rarity::Rare && self.sell_confirm != Some(i) => {
+                self.sell_confirm = Some(i);
+                self.toast = Some((format!("RIGHT-CLICK AGAIN TO SELL {}", self.player.bag[i].name), 150));
+            }
             Some((1, i)) if rclick && i < self.player.bag.len() => {
+                self.sell_confirm = None;
                 let it = self.player.bag.remove(i);
                 let v = it.value();
                 self.player.gold += v;

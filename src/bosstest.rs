@@ -86,6 +86,7 @@ pub fn run() {
             g.enemies[0].aggro = true;
             let caster = build != "sword" && build != "frost";
             let (mut taken, mut deaths, mut potions) = (0.0f32, 0, 0);
+            let mut first_death: Option<f32> = None;
             let mut t = 0;
             let maxhp = g.enemies[0].maxhp;
             while t < 60 * 180 {
@@ -157,6 +158,10 @@ pub fn run() {
                     taken += hp0 - g.player.hp;
                 }
                 if g.player.dead {
+                    if deaths == 0 {
+                        // the honest result: how far one life got
+                        first_death = g.enemies.iter().find(|e| e.k.boss()).map(|e| e.hp.max(0.0) / e.maxhp * 100.0);
+                    }
                     deaths += 1;
                     g.player.dead = false;
                     g.player.hp = g.player.maxhp;
@@ -166,14 +171,19 @@ pub fn run() {
             let left = g.enemies.iter().find(|e| e.k.boss()).map(|e| e.hp.max(0.0)).unwrap_or(0.0);
             let done = g.enemies.iter().all(|e| !(e.alive && e.k.boss()));
             println!(
-                "  {:<6} {}  boss hp {:>5.0}  player hp {:>4.0}  taken {:>5.0}  deaths {}  potions {}",
+                "  {:<6} {}  boss hp {:>5.0}  player hp {:>4.0}  taken {:>5.0}  deaths {}  potions {}  one life: {}",
                 build,
                 if done { format!("killed in {:>5.1}s", t as f32 / 60.0) } else { format!("NOT killed, {:>3.0}% left", left / maxhp * 100.0) },
                 maxhp,
                 g.player.maxhp,
                 taken,
                 deaths,
-                potions
+                potions,
+                match first_death {
+                    None if done => "WON".to_string(),
+                    None => "survived".to_string(),
+                    Some(l) => format!("died, boss at {:.0}%", l),
+                }
             );
         }
     }

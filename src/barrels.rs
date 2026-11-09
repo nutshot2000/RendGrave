@@ -233,7 +233,7 @@ impl Game {
             let l = d.max(1.0);
             let dir = (dx / l, dy / l);
             let boss = k.boss();
-            let dmg = (150.0 * f + 25.0) * if boss { 0.6 } else { 1.0 };
+            let dmg = (150.0 * f + 25.0) * if boss { 0.6 } else { 1.0 } * self.status_mult(i);
             let e = &mut self.enemies[i];
             e.hp -= dmg;
             e.aggro = true;

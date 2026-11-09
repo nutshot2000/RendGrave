@@ -6,7 +6,7 @@
 
 **Classification:** Game · Action RPG · Early Access (In development)
 **Platforms:** Windows
-**Tags:** action-rpg, pixel-art, roguelite, hack-and-slash, gore, dark-fantasy, physics, procedural-generation, singleplayer, early-access
+**Tags:** action-rpg, pixel-art, hack-and-slash, gore, dark-fantasy, physics, procedural-generation, singleplayer, early-access
 
 **Suggested price:** $4.99 during Early Access (minimum), rising as acts are added. Price is your call.
 
@@ -16,42 +16,55 @@
 
 **Every enemy is made of pixels - and every pixel counts.**
 
-In Rendgrave the dead are built in layers: armour over cloth, cloth over flesh, flesh over bone. Your sword doesn't take off hit points, it takes off *arms*. Aim low and a zombie loses its legs and crawls after you. Acid eats flesh to the bone. Fire chars cloth and spreads across grass and spilt oil. Frost locks a skeleton solid - one more blow and it shatters.
+In Rendgrave the dead are built in layers: armour over cloth, cloth over flesh, flesh over bone. Your sword doesn't just take off hit points, it takes off *arms*. Aim low and a zombie loses its legs and crawls after you. Acid eats flesh to the bone. Fire chars cloth and spreads across grass and spilt oil. Frost locks a skeleton solid - one more blow and it shatters.
 
 The world is simulated too. Light a powder keg and run. Shoot an oil barrel and watch the slick spread - then set it alight. Swamp gas pools in the hollows of the Blackwater Fen, waiting for a spark. Bandits slip in the oil you spilled. Lightning runs through water and blood.
 
-### Features
+### What's in Act I
 - **Pixel-simulated combat:** cut, burn, melt, freeze, shatter and blow enemies apart, limb by limb
 - **A reactive world:** fire, water, oil, acid, ice, peat, swamp gas and powder kegs that chain-explode
-- **54 skills in six schools** - Storm, Flame, Venom, Frost, Blade and Body - each splitting into two paths and an ultimate
-- **Loot that matters:** five weapon types that fight differently, magic and rare affixes, legendaries with unique powers, champions that glow
-- **A big, handmade-feeling world:** a burning-lit town, haunted pines, a sunken crypt, an old graveyard, a black fen, a bandit castle and its cellars
-- **Two bosses with signature moves:** the Hollow King's ground slam and the Bandit Chief's thrown powder kegs
-- **Secrets and surprises:** cracked walls hiding treasure rooms, grave robbers to chase down, champions with burning, freezing, vampiric, swift and volatile powers, kill streaks, and urns and crates to smash
+- **Five weapon types that fight differently:** swords slice, axes chop, hammers crush, spears pierce, daggers bleed
+- **Six schools of magic and steel** - Storm, Flame, Venom, Frost, Blade and Body. In Act I you'll take a build up to about level 18: your first spells, their upgrades, and one branch of each school. The full trees (54 skills, with ultimates from level 30) open up as later acts arrive.
+- **Loot that matters:** magic and rare affixes, five legendaries with unique powers, and champions with their own powers - burning, frozen, vampiric, swift and volatile
+- **Seven areas and two bosses:** a lantern-lit town, haunted pines, a sunken crypt, an old graveyard, a black fen, a bandit castle and its cellars. The Hollow King slams the ground; the Bandit Chief throws lit powder kegs. When a boss falls, a portal opens to take you home.
+- **Secrets:** cracked walls hiding treasure rooms, grave robbers to chase down, urns and crates to smash, kill streaks
 - **A story to follow:** Elder Maren sets you on your way, an objective tracker and guide marker show where to go, and the map fills in as you explore
 - **Original chiptune soundtrack** and synthesised sound
 
 ### Early Access
-This is **Act I** of four. It's a complete chapter - roughly 3 to 4 hours to see both bosses, more to hunt every legendary. Acts II to IV (the Frozen North, the Burning Lands and the source of the dead) will arrive as free updates for everyone who buys now. The price will go up as they do.
+This is **Act I** of four: a complete chapter with an ending. Acts II to IV (the Frozen North, the Burning Lands and the source of the dead) will arrive as free updates for everyone who buys now, and the price will go up as they do.
+
+**What to expect right now:**
+- Act I takes a few hours; playtesting is still firming up that estimate. Expect to finish around level 18.
+- The game saves automatically. Dungeons are rebuilt each time you enter them, so if you quit inside one you continue at its entrance.
+- Saves will carry over to future updates.
+- Keyboard and mouse only for now; controller support and key rebinding are planned.
+- It's a solo project in active development: expect rough edges, and please report them.
+
+**Next up:** Act II, the Frozen North - a new town, frozen lakes that crack underfoot, ice caves, and a new boss.
 
 Feedback shapes what comes next - please leave a comment!
 
 ### Controls
-WASD move · Left mouse attack · Right mouse cast · Space dodge · E interact · I gear · K skills · Esc menu
+WASD move · Left mouse attack · Right mouse cast · Space dodge · F potion · E interact · I gear · K skills · Esc menu (with a full controls page)
 
 ### System requirements
-Windows 10/11 · a GPU with DirectX 12 or Vulkan · 200 MB disk space
+Windows 10/11 · a graphics card with DirectX 12 or Vulkan support · 200 MB disk space.
+Tested on: *(fill in your own PC - CPU, graphics card and the frame rate you see in a big fight)*
 
 ---
 
 ## Screenshots to upload (in dist/press after packaging)
+Lead with what an Act I character really does:
 1. 01_keg_blast - bandits blown apart by a powder keg
-2. 02_meteor - Meteor and Ice Spikes on a crowd
+2. 05_chief - the Bandit Chief's hall
 3. 03_fen - the Blackwater Fen and its hut
 4. 04_ravenhold - the bandit castle
-5. 05_chief - the Bandit Chief's hall
+5. 07_merchant - the merchant
 6. 06_skills - the skill tree
-7. 07_merchant - the merchant
-8. 08_storm - Thunderstorm
+7. 02_meteor - caption it: "Late-game spells: Meteor and Ice Spikes (level 30+)"
+8. 08_storm - caption it: "Late-game spells: Thunderstorm (level 30+)"
+
+**Best thing to add:** a 20-30 second gameplay clip of an ordinary fight with the HUD visible - a zombie losing its legs, oil catching fire, a keg going off. That will sell the game better than any screenshot.
 
 **Cover image:** 630x500 - crop 01_keg_blast or the title screen (menus/m1_title.png) and add the logo.

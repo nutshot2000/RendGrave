@@ -37,16 +37,23 @@ impl Game {
     }
 
     /// shared damage bookkeeping for an enemy
-    pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
-        let mut dmg = dmg * self.power_mult();
-        let (sear, deep, chill, war) = (self.rank(Sk::Searing), self.rank(Sk::DeepFreeze), self.rank(Sk::Chill), self.rank(Sk::Warlord));
-        let e = &mut self.enemies[i];
+    /// Searing and Deep Freeze: every source of damage goes through this
+    pub fn status_mult(&self, i: usize) -> f32 {
+        let e = &self.enemies[i];
+        let mut m = 1.0;
         if e.burning > 0 {
-            dmg *= 1.0 + 0.15 * sear as f32;
+            m *= 1.0 + 0.15 * self.rank(Sk::Searing) as f32;
         }
         if e.frozen > 0 {
-            dmg *= 1.0 + 0.2 * deep as f32;
+            m *= 1.0 + 0.2 * self.rank(Sk::DeepFreeze) as f32;
         }
+        m
+    }
+
+    pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
+        let dmg = dmg * self.power_mult() * self.status_mult(i);
+        let (chill, war) = (self.rank(Sk::Chill), self.rank(Sk::Warlord));
+        let e = &mut self.enemies[i];
         if chill > 0 {
             e.slow = e.slow.max(60 * chill);
         }
@@ -67,8 +74,7 @@ impl Game {
 
     /// A blade stroke through an enemy at height `h` (negative = above the feet), coming from `src_x`.
     pub fn cut_enemy(&mut self, i: usize, h: f32, power: f32, dmg: f32, src_x: f32, crit: bool) {
-        if self.enemies[i].frozen > 0 {
-            self.shatter(i);
+        if self.enemies[i].frozen > 0 && self.shatter(i) {
             return;
         }
         // a boss's hide is thick: blades scar it but rarely take anything off
@@ -524,6 +530,10 @@ impl Game {
             let a0 = rnd() * std::f32::consts::TAU;
             self.slashes.push(Slash { x: px, y: py - 22.0, a0, a1: a0 + std::f32::consts::TAU, t: 9 });
             let edge = self.rank(Sk::Edge);
+            let g = self.player.gear;
+            let ws = crate::items::wstats(self.wkind());
+            // each spin is three-quarters of a normal swing with your weapon
+            let dmg = g.weapon_dmg * ws.dmg_mult * (1.0 + g.dmg_pct / 100.0) * (1.0 + 0.1 * edge as f32) * 0.75;
             for i in 0..self.enemies.len() {
                 let e = &self.enemies[i];
                 if !e.alive {
@@ -534,9 +544,12 @@ impl Game {
                     continue;
                 }
                 let h = -[10.0, 18.0, 26.0, 34.0][ri(4)];
-                let crit = rnd() < 0.08 * self.rank(Sk::Executioner) as f32 + 0.1;
-                let pw = 20.0 + edge as f32 * 8.0 + if crit { 20.0 } else { 0.0 };
-                self.cut_enemy(i, h, pw, 9.0 * (1.0 + 0.1 * edge as f32), px, crit);
+                let crit = rnd() < 0.15 + 0.08 * self.rank(Sk::Executioner) as f32 + g.crit / 100.0;
+                let pw = 20.0 + edge as f32 * 8.0 + g.keen + if crit { 20.0 } else { 0.0 };
+                self.cut_enemy(i, h, pw, dmg * if crit { 1.5 } else { 1.0 }, px, crit);
+                if self.enemies[i].alive {
+                    self.on_hit(i, dmg, h);
+                }
             }
             self.shake = self.shake.max(2.0);
         }

@@ -17,6 +17,10 @@ You start as a nobody with a sword. By the end you call down meteors on armies.
 Four acts. Each act: a hub town, 3-4 outdoor areas, 2-3 dungeons, an act boss.
 Areas have a fixed **area level**; enemies scale with the area, not with you.
 
+> **Plan revised (see ROADMAP.md):** Act I now also holds the Blackwater Fen and Ravenhold;
+> Act II is the Frozen North, Act III the Burning Lands, Act IV the source of the dead.
+> The table below is the original plan.
+
 | Act | Areas | Area levels | Theme |
 |---|---|---|---|
 | I - The Hollow Pines | Ashford (town), Hollow Pines, Old Graveyard, Mirefen Edge; dungeons: Sunken Crypt, Bandit Cellars | 1-12 | Undead rising in a dark forest |
