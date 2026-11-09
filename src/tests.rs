@@ -543,3 +543,71 @@ fn gamepad_buttons_take_the_spells_you_give_them() {
     let _ = std::fs::remove_file(crate::savefile::path(crate::areas::SAVE_FILE));
     let _ = std::fs::remove_file(crate::savefile::path("rendgrave_save.txt.bak"));
 }
+
+/// every dungeon layout lets the player walk from where they arrive to every stairway and
+/// to the boss (a blocked layout would make Act I impossible to finish)
+#[test]
+fn every_dungeon_floor_can_be_crossed() {
+    use crate::areagen::generate;
+    let mut bad = vec![];
+    let (mut exits, mut bosses) = (0, 0);
+    for area in [AreaId::Crypt(1), AreaId::Crypt(2), AreaId::Crypt(3), AreaId::Cellars(1), AreaId::Cellars(2)] {
+        let from = match area {
+            AreaId::Crypt(1) => AreaId::Graveyard,
+            AreaId::Cellars(1) => AreaId::Ravenhold,
+            AreaId::Crypt(f) => AreaId::Crypt(f - 1),
+            AreaId::Cellars(f) => AreaId::Cellars(f - 1),
+            _ => unreachable!(),
+        };
+        for s in 0..150u64 {
+            let (w, sp) = generate(area, s.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 12345);
+            let (aw, ah) = (w.aw as i32, w.ah as i32);
+            let ok = |x: i32, y: i32| [(0, 0), (3, 0), (-3, 0), (0, 1), (0, -1)].iter().all(|&(dx, dy)| !w.solid(x + dx, y + dy));
+            let (sx, sy) = sp.arrival(from);
+            let mut seen = vec![false; (aw * ah) as usize];
+            let mut q = std::collections::VecDeque::new();
+            // start from the nearest open spot to the arrival point
+            let start = (0..12).flat_map(|r| (-r..=r).flat_map(move |dx| (-r..=r).map(move |dy| (dx, dy)))).map(|(dx, dy)| (sx as i32 + dx, sy as i32 + dy)).find(|&(x, y)| ok(x, y));
+            let Some((x0, y0)) = start else {
+                bad.push(format!("{:?} seed {}: no room to stand at the arrival", area, s));
+                continue;
+            };
+            seen[(y0 * aw + x0) as usize] = true;
+            q.push_back((x0, y0));
+            while let Some((x, y)) = q.pop_front() {
+                for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                    if nx < 4 || ny < 4 || nx >= aw - 4 || ny >= ah - 4 {
+                        continue;
+                    }
+                    let k = (ny * aw + nx) as usize;
+                    if !seen[k] && ok(nx, ny) {
+                        seen[k] = true;
+                        q.push_back((nx, ny));
+                    }
+                }
+            }
+            let near = |x: f32, y: f32, r: i32| (-r..=r).any(|dy| (-r..=r).any(|dx| {
+                let (px, py) = (x as i32 + dx, y as i32 + dy);
+                px >= 0 && py >= 0 && px < aw && py < ah && seen[(py * aw + px) as usize]
+            }));
+            for e in &sp.exits {
+                exits += 1;
+                let hit = (e.y0..=e.y1).any(|y| (e.x0..=e.x1).any(|x| x >= 0 && y >= 0 && x < aw && y < ah && seen[(y * aw + x) as usize]));
+                if !hit && !near(((e.x0 + e.x1) / 2) as f32, ((e.y0 + e.y1) / 2) as f32, 10) {
+                    bad.push(format!("{:?} seed {}: can't reach the way to {:?}", area, s, e.to));
+                }
+            }
+            for &(k, x, y) in &sp.enemies {
+                bosses += k.boss() as i32;
+                if k.boss() && !near(x, y, 14) {
+                    bad.push(format!("{:?} seed {}: can't reach the {:?}", area, s, k));
+                }
+            }
+        }
+    }
+    // 5 floors x 150 layouts: at least one stairway each, and a boss on the two last floors
+    assert!(exits >= 750 && bosses == 300, "checked {} stairways and {} bosses", exits, bosses);
+    let n = bad.len();
+    bad.truncate(15);
+    assert!(n == 0, "{} blocked layouts:\n{}", n, bad.join("\n"));
+}
