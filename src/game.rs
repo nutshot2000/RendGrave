@@ -33,6 +33,8 @@ pub struct Input {
     pub stick: (f32, f32),
     /// the gamepad is auto-aiming: the cursor is on an enemy but not at a chosen height
     pub auto: bool,
+    /// X, Y or B pressed over a spell in the skill tree: put it on that button
+    pub bind: Option<usize>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -299,6 +301,8 @@ pub struct Game {
     pub spawn_t: i32,
     pub tree: bool,
     pub tree_hover: Option<usize>,
+    /// the spells on the gamepad's X, Y and B (unset: the first spells on the bar)
+    pub binds: [Option<Sk>; 3],
     /// which school the skill tree screen shows
     pub tree_tab: usize,
     pub paused: bool,
@@ -556,6 +560,7 @@ impl Game {
             spawn_t: 1500,
             tree: false,
             tree_hover: None,
+            binds: [None; 3],
             tree_tab: 0,
             paused: false,
             hold_block: false,
@@ -709,6 +714,24 @@ impl Game {
             }
         }
         r
+    }
+    /// the learned spell under the pointer in the skill tree, if any
+    pub fn bindable(&self) -> Option<Sk> {
+        let i = self.tree_hover.filter(|_| self.tree)?;
+        let n = NODES.get(i)?;
+        (n.active && self.player.sk.rank[i] > 0).then_some(n.sk)
+    }
+    /// which spell-bar slot the gamepad's X (0), Y (1) or B (2) casts
+    pub fn pad_slot(&self, k: usize) -> Option<usize> {
+        let bar = self.player.sk.bar();
+        if let Some(i) = self.binds[k].and_then(|s| bar.iter().position(|&b| b == s)) {
+            return Some(i);
+        }
+        // unset buttons take the first spells on the bar that no other button has
+        let taken: Vec<Sk> = self.binds.iter().flatten().copied().filter(|s| bar.contains(s)).collect();
+        let free: Vec<usize> = (0..bar.len()).filter(|&i| !taken.contains(&bar[i])).collect();
+        let nth = (0..k).filter(|&j| self.binds[j].map_or(true, |s| !bar.contains(&s))).count();
+        free.get(nth).copied()
     }
     /// a screen that wants a cursor rather than a fight (the gamepad moves a pointer in these)
     pub fn menu_mode(&self) -> bool {
@@ -870,6 +893,17 @@ impl Game {
                 }
             }
             self.tree_hover = crate::hud::node_at(inp.mouse, self.view, self.tree_tab);
+            if let (Some(b), Some(s)) = (inp.bind, self.bindable()) {
+                for k in self.binds.iter_mut() {
+                    if *k == Some(s) {
+                        *k = None;
+                    }
+                }
+                self.binds[b] = Some(s);
+                let (x, y) = (self.player.x, self.player.y);
+                self.snd(Sfx::Chime, x, y, 0.5);
+                self.toast = Some((format!("{} ON {}", node(s).name, ["X", "Y", "B"][b]), 120));
+            }
             if inp.lmb && !self.prev.lmb {
                 if let Some(i) = self.tree_hover {
                     if self.player.sk.learn(i) {

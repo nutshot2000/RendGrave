@@ -489,6 +489,7 @@ impl Game {
             format!("pick {}", self.pick),
             format!("lore {}", self.lore_done),
             format!("flasks {}", self.flasks),
+            format!("binds {}", self.binds.iter().map(|b| b.map_or("-".to_string(), |s| format!("{:?}", s))).collect::<Vec<_>>().join(",")),
         ];
         // skills by name, so adding or reordering skills never scrambles a save
         for (i, n) in NODES.iter().enumerate() {
@@ -603,6 +604,11 @@ impl Game {
                 "played" => self.played = v.parse().unwrap_or(0),
                 "tips" => self.tips = v.parse().unwrap_or(0),
                 "pick" => self.pick = v.parse().unwrap_or(0),
+                "binds" => {
+                    for (k, name) in v.split(',').take(3).enumerate() {
+                        self.binds[k] = NODES.iter().find(|n| format!("{:?}", n.sk) == name).map(|n| n.sk);
+                    }
+                }
                 "lore" => self.lore_done = v.parse().unwrap_or(0),
                 "flasks" => self.flasks = v.parse().unwrap_or(0),
                 "equipped" => self.player.equip = [None, None, None, None],

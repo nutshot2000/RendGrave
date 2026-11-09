@@ -273,8 +273,18 @@ impl Pad {
             inp.left |= b.left;
             inp.right |= b.right;
             inp.lmb |= b.a;
-            inp.rmb |= b.x;
-            inp.close |= b.b || b.start;
+            // in the skill tree, X / Y / B over a learned spell puts it on that button
+            if g.bindable().is_some() {
+                for (k, (now, was)) in [(b.x, pb.x), (b.y, pb.y), (b.b, pb.b)].into_iter().enumerate() {
+                    if now && !was {
+                        inp.bind = Some(k);
+                    }
+                }
+                inp.close |= b.start;
+            } else {
+                inp.rmb |= b.x;
+                inp.close |= b.b || b.start;
+            }
             inp.inv |= b.back;
             if g.title || g.paused || g.talk.is_some() || g.player.dead {
                 inp.interact |= b.a;
@@ -308,8 +318,8 @@ impl Pad {
         // spells: X, Y, B cast slots 1-3; LT casts whichever is selected
         let n = g.player.sk.bar().len();
         for (k, held) in [b.x, b.y, b.b].into_iter().enumerate() {
-            if held && k < n {
-                inp.sel = Some(k);
+            if let Some(slot) = g.pad_slot(k).filter(|_| held) {
+                inp.sel = Some(slot);
                 inp.rmb = true;
             }
         }

@@ -1011,6 +1011,10 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         let extra = if n.active { format!("MANA {}   COOLDOWN {:.1}S", n.mana as i32, n.cd as f32 / 60.0) } else { String::new() };
         u.text(18, ty + th - 10, &status, if sk.can_learn(i).is_ok() { [255, 214, 90] } else { [170, 120, 120] }, 1, true);
         u.text(fw - Ui::text_w(&extra, 1) - 18, ty + th - 10, &extra, [150, 180, 255], 1, true);
+        if crate::pad::active() && n.active && sk.rank[i] > 0 {
+            let on = (0..3).find(|&b| g.binds[b] == Some(n.sk)).map(|b| format!("  (ON {} NOW)", ["X", "Y", "B"][b])).unwrap_or_default();
+            u.text_c(fw / 2, ty + th - 10, &format!("PRESS X, Y OR B TO PUT IT ON THAT BUTTON{}", on), [120, 200, 255], 1);
+        }
     } else {
         u.text(18, ty + 8, "HOVER A SKILL TO SEE WHAT IT DOES. EARN POINTS BY LEVELLING UP.", [200, 190, 190], 1, false);
         u.text(18, ty + 18, "EACH SCHOOL SPLITS INTO TWO PATHS. EITHER PATH LEADS TO ITS ULTIMATE.", [160, 150, 160], 1, false);
@@ -1163,7 +1167,13 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         if p.mana < nd.mana {
             u.rect(x, by, sw, sw, [20, 30, 90], 120);
         }
-        if k < 9 {
+        if crate::pad::active() {
+            // which button casts it
+            if let Some(b) = (0..3).find(|&b| g.pad_slot(b) == Some(k)) {
+                let c = [[120, 200, 255], [255, 220, 90], [255, 110, 100]][b];
+                u.text(x + 1, by + 1, ["X", "Y", "B"][b], c, 1, true);
+            }
+        } else if k < 9 {
             u.text(x + 1, by + 1, &format!("{}", k + 1), [230, 220, 200], 1, true);
         }
     }
@@ -1480,7 +1490,7 @@ fn draw_controls(u: &mut Ui, fw: i32, fh: i32) {
         ("LEFT STICK", "MOVE"),
         ("RIGHT STICK", "AIM - OR LET GO TO AUTO-AIM"),
         ("A", "ATTACK, OR INTERACT WHEN IN REACH"),
-        ("X / Y / B", "CAST SPELL 1 / 2 / 3"),
+        ("X / Y / B", "CAST A SPELL - SET WHICH IN THE SKILL TREE"),
         ("LT", "CAST THE SELECTED SPELL"),
         ("D-PAD LEFT RIGHT", "CHOOSE A SPELL"),
         ("RB", "DODGE ROLL"),

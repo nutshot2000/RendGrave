@@ -504,3 +504,42 @@ fn gamepad_button_names_replace_keys() {
     pad.release();
     assert_eq!(crate::pad::tr("E  OPEN CHEST"), "E  OPEN CHEST");
 }
+
+#[test]
+fn gamepad_buttons_take_the_spells_you_give_them() {
+    let (mut g, _) = arena(Kind::Zombie);
+    g.view = (480.0, 270.0);
+    set_rank(&mut g, Sk::Lightning, 1);
+    set_rank(&mut g, Sk::Fireball, 1);
+    set_rank(&mut g, Sk::Searing, 1);
+    let bar = g.player.sk.bar();
+    let fire = bar.iter().position(|&s| s == Sk::Fireball).unwrap();
+    // nothing set: X, Y, B are the first spells on the bar
+    assert_eq!((g.pad_slot(0), g.pad_slot(1)), (Some(0), Some(1)));
+    // in the skill tree, Y over Fireball puts it on Y
+    let mut pad = crate::pad::Pad::off();
+    g.tree = true;
+    g.tree_hover = Some(NODES.iter().position(|n| n.sk == Sk::Fireball).unwrap());
+    pad.fake("", (0.0, 0.0), (0.0, 0.0));
+    let mut inp = Input::default();
+    pad.apply(&g, &mut inp);
+    pad.fake("y", (0.0, 0.0), (0.0, 0.0));
+    let mut inp2 = Input::default();
+    pad.apply(&g, &mut inp2);
+    assert_eq!(inp2.bind, Some(1));
+    assert!(!inp2.close && !inp2.rmb);
+    // B over a learned spell binds instead of closing the tree
+    g.binds[1] = Some(Sk::Fireball);
+    assert_eq!(g.pad_slot(1), Some(fire));
+    // the other buttons skip it
+    assert_ne!(g.pad_slot(0), Some(fire));
+    assert_ne!(g.pad_slot(2), Some(fire));
+    // and it lasts through a save
+    g.saving = true;
+    g.save();
+    let mut h = Game::blank(9);
+    h.load();
+    assert_eq!(h.binds[1], Some(Sk::Fireball));
+    let _ = std::fs::remove_file(crate::savefile::path(crate::areas::SAVE_FILE));
+    let _ = std::fs::remove_file(crate::savefile::path("rendgrave_save.txt.bak"));
+}

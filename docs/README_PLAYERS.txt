@@ -37,7 +37,8 @@ Left stick          Move
 Right stick         Aim. Let go and you auto-aim at the nearest enemy in front of you.
                     Push it gently toward legs or the Hollow King's knees to aim low.
 A                   Attack - or interact, when something is in reach
-X / Y / B           Cast spell 1 / 2 / 3
+X / Y / B           Cast a spell. To choose which: open the skill tree, point at a
+                    spell you know and press X, Y or B to put it on that button.
 LT                  Cast the selected spell
 D-pad left / right  Choose a spell
 RB                  Dodge roll
