@@ -426,16 +426,24 @@ fn gamepad_auto_aims_and_attacks() {
     }
     let mut pad = crate::pad::Pad::off();
     // facing the zombie with the right stick at rest: the cursor sits on it
-    let inp = pad_step(&mut g, &mut pad, "", (0.9, 0.0), (0.0, 0.0));
+    let mut inp = Input::default();
+    for _ in 0..20 {
+        inp = pad_step(&mut g, &mut pad, "", (0.9, 0.0), (0.0, 0.0));
+    }
     let (mx, my) = g.mouse_world(&inp);
     let e = &g.enemies[i];
     assert!((mx - e.x).abs() < 4.0 && (my - (e.y - 22.0)).abs() < 4.0, "auto-aim missed: {:?} vs {:?}", (mx, my), (e.x, e.y));
     assert!(inp.auto && inp.stick.0 > 0.8);
     // A swings the weapon
-    let inp = pad_step(&mut g, &mut pad, "a", (0.0, 0.0), (0.0, 0.0));
+    inp = pad_step(&mut g, &mut pad, "a", (0.0, 0.0), (0.0, 0.0));
     assert!(inp.lmb && !inp.interact);
+    for _ in 0..30 {
+        pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 0.0));
+    }
     // the right stick aims by hand, straight down
-    let inp = pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 1.0));
+    for _ in 0..20 {
+        inp = pad_step(&mut g, &mut pad, "", (0.0, 0.0), (0.0, 1.0));
+    }
     let (mx, my) = g.mouse_world(&inp);
     assert!(!inp.auto && (mx - g.player.x).abs() < 1.0 && my > g.player.y);
 }

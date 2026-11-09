@@ -105,6 +105,11 @@ pub struct Pad {
     mask: Btns,
     /// where the mouse was when the pad took over; moving it well away hands control back
     pub anchor: Option<(f64, f64)>,
+    /// the right stick, smoothed; where the reticle sits relative to the hero (world units);
+    /// and how long free aim lingers after you let go of the stick
+    rs_s: (f32, f32),
+    aim_off: (f32, f32),
+    hold: i32,
 }
 
 impl Btns {
@@ -178,6 +183,9 @@ impl Pad {
             was_menu: false,
             mask: Btns::default(),
             anchor: None,
+            rs_s: (0.0, 0.0),
+            aim_off: (60.0, 0.0),
+            hold: 0,
         }
     }
 
@@ -316,18 +324,30 @@ impl Pad {
         inp.tree |= b.up;
         inp.inv |= b.down || b.back;
         inp.close |= b.start;
-        // aiming
+        // aiming: the stick is smoothed, and the reticle glides to where it should be
         let p = &g.player;
         let (cx, cy) = (g.cam.0.floor(), g.cam.1.floor());
-        let (sx, sy) = (p.x - cx, p.y - 24.0 - cy);
-        let rm = mag(self.rs);
-        if rm > 0.15 {
-            // free aim: a light push aims close, a full push aims far
-            let r = 18.0 + 120.0 * rm;
-            let (ux, uy) = (self.rs.0 / rm, self.rs.1 / rm);
-            self.cursor = (sx + ux * r, sy + uy * r);
-            if rm > 0.5 {
-                self.facing = (ux, uy);
+        let (px, py) = (p.x, p.y - 24.0);
+        self.rs_s.0 += (self.rs.0 - self.rs_s.0) * 0.35;
+        self.rs_s.1 += (self.rs.1 - self.rs_s.1) * 0.35;
+        let rm = mag(self.rs_s);
+        let free = mag(self.rs) > 0.15;
+        let target = if free || self.hold > 0 {
+            if free {
+                // a light push aims close, a full push aims far
+                self.hold = 20;
+            } else {
+                self.hold -= 1;
+            }
+            if rm > 0.05 {
+                let r = 18.0 + 120.0 * rm.min(1.0);
+                let (ux, uy) = (self.rs_s.0 / rm, self.rs_s.1 / rm);
+                if rm > 0.5 {
+                    self.facing = (ux, uy);
+                }
+                (ux * r, uy * r)
+            } else {
+                self.aim_off
             }
         } else {
             // auto-aim: the nearest enemy roughly where you're facing
@@ -347,15 +367,19 @@ impl Pad {
                 let score = d * (2.0 - cos);
                 if best.is_none_or(|b| score < b.0) {
                     let h = if e.k.big() { 40.0 } else { 22.0 };
-                    best = Some((score, e.x - cx, e.y - h - cy));
+                    best = Some((score, e.x - px, e.y - h - py));
                 }
             }
-            self.cursor = match best {
-                Some((_, x, y)) => (x, y),
-                None => (sx + fx * 60.0, sy + fy * 60.0),
-            };
             inp.auto = true;
-        }
+            match best {
+                Some((_, x, y)) => (x, y),
+                None => (fx * 60.0, fy * 60.0),
+            }
+        };
+        let k = if free { 0.4 } else { 0.25 };
+        self.aim_off.0 += (target.0 - self.aim_off.0) * k;
+        self.aim_off.1 += (target.1 - self.aim_off.1) * k;
+        self.cursor = (px + self.aim_off.0 - cx, py + self.aim_off.1 - cy);
         inp.mouse = self.cursor;
     }
 }
