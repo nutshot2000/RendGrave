@@ -20,7 +20,10 @@ ver = re.search(r'^version\s*=\s*"([^"]+)"', open('Cargo.toml', encoding='utf8')
 name = f'Rendgrave-EA-{ver}-windows'
 
 print('building release...')
-subprocess.run(['cargo', 'build', '--release'], check=True)
+# always build into target/release, whatever CARGO_TARGET_DIR the shell has set,
+# so the exe that gets packaged is the one just built
+env = {k: v for k, v in os.environ.items() if k != 'CARGO_TARGET_DIR'}
+subprocess.run(['cargo', 'build', '--release'], check=True, env=env)
 
 out = os.path.join('dist', name)
 shutil.rmtree(out, ignore_errors=True)
