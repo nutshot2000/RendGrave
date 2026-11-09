@@ -67,6 +67,12 @@ pub struct Enemy {
     pub hit_cd: i32,
     pub chill: i32,
     pub summoned: bool,
+    /// bosses: a short freeze, then a spell of frost immunity
+    pub thaw: i32,
+    /// bosses: frames until the next special move, slam wind-up, enraged
+    pub skill_t: i32,
+    pub slam: i32,
+    pub enraged: bool,
     pub elite: bool,
     /// on its back after slipping in oil
     pub slip: i32,
@@ -328,11 +334,11 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         Kind::Brute => (260.0, 0.5, 22.0, 24.0, 38),
         Kind::Crawler => (45.0, 1.0, 12.0, 7.0, 18),
         Kind::Archer => (35.0, 0.8, 150.0, 10.0, 34),
-        Kind::King => (1500.0, 0.55, 30.0, 30.0, 40),
+        Kind::King => (2400.0, 0.55, 30.0, 30.0, 40),
         Kind::Bloater => (150.0, 0.34, 14.0, 12.0, 30),
         Kind::Bandit => (95.0, 0.9, 16.0, 13.0, 18),
         Kind::Crossbow => (60.0, 0.8, 175.0, 14.0, 42),
-        Kind::Chief => (2400.0, 0.62, 28.0, 34.0, 34),
+        Kind::Chief => (3800.0, 0.62, 28.0, 34.0, 34),
         Kind::Player => (100.0, 1.0, 10.0, 0.0, 10),
     };
     let mut body = humanoid(k);
@@ -367,6 +373,10 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         hit_cd: 0,
         chill: 0,
         summoned: false,
+        thaw: 0,
+        skill_t: 180,
+        slam: 0,
+        enraged: false,
         elite: false,
         slip: 0,
         slow: 0,
@@ -1338,6 +1348,7 @@ impl Game {
             self.ptc(x, y, z, a.cos() * rr(1.0, 4.0), a.sin() * rr(1.0, 3.0), rr(1.0, 4.0), 60, PtK::Ember, [255, 190, 90]);
         }
         // hurt everything nearby
+        let sp = self.spell_power();
         let mut shat = vec![];
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
@@ -1353,13 +1364,14 @@ impl Game {
                 continue;
             }
             let f = 1.0 - d / (r * 2.2);
-            let dmg = 36.0 * f + 6.0;
+            let dmg = (36.0 * f + 6.0) * sp;
             e.hp -= dmg;
             e.aggro = true;
             e.flash = 5;
             e.hpbar = 180;
             e.stun = e.stun.max(16);
             let (rx, ry) = (x - e.x, -z);
+            let tough = e.k.boss();
             e.body.each_in(rx, ry, r * 1.3, |p, dd, _| {
                 if dd < r * 1.3 {
                     if matches!(p.m, PM_FLESH | PM_CLOTH | PM_HAIR | PM_WOOD) {
@@ -1367,7 +1379,7 @@ impl Game {
                     }
                     p.chr = p.chr.saturating_add(((1.0 - dd / (r * 1.3)) * 120.0) as u8);
                 }
-                if dd < r * 0.55 && rnd() < 0.5 {
+                if dd < r * 0.55 && rnd() < 0.5 && !tough {
                     Body::hurt_px(p, 200);
                 }
             });
@@ -1393,7 +1405,7 @@ impl Game {
                 let p = &mut self.projs[k];
                 p.x += p.vx / steps as f32;
                 p.y += p.vy / steps as f32;
-                if p.k == 1 {
+                if p.k == 1 || p.k == 5 {
                     p.vz -= 0.09 / steps as f32;
                 }
                 p.z += p.vz / steps as f32;
@@ -1440,6 +1452,11 @@ impl Game {
                     match kind {
                         0 => {
                             let r = 13.0 + 2.0 * self.rank(Sk::Kindling) as f32;
+                            if let Some(i) = hit_e {
+                                // a direct hit hurts on top of the blast
+                                let d = 16.0 * (1.0 + 0.15 * self.rank(Sk::Kindling) as f32) * self.spell_power();
+                                self.hurt(i, d, [255, 170, 80], false);
+                            }
                             self.explode(x, y, z.max(2.0), r);
                             if self.rank(Sk::Splinter) > 0 {
                                 let n1 = self.lights.len();
@@ -1451,6 +1468,7 @@ impl Game {
                             }
                         }
                         1 => self.acid_hit(x, y, z, hit_e),
+                        5 => self.drop_keg(x - self.projs[k].vx * 2.0, y - self.projs[k].vy * 2.0),
                         3 | 4 => {
                             self.sounds.push(Snd { k: Sfx::ArrowHit, x: x, y: y, v: 0.7 });
                             if hit_p && self.player.inv == 0 {
@@ -1512,9 +1530,10 @@ impl Game {
     fn acid_hit(&mut self, x: f32, y: f32, z: f32, e: Option<usize>) {
         self.sounds.push(Snd { k: Sfx::Acid, x: x, y: y, v: 0.7 });
         if let Some(i) = e {
+            let ad = 6.0 * self.spell_power();
             let en = &mut self.enemies[i];
             en.aggro = true;
-            en.hp -= 6.0;
+            en.hp -= ad;
             en.hpbar = 180;
             en.flash = 3;
             let (rx, ry) = (x - en.x, -z);
@@ -1522,7 +1541,7 @@ impl Game {
                 p.acid = p.acid.max(rr(150.0, 240.0) as u8);
             });
             let (ex, ey) = (en.x, en.y);
-            self.float(ex, ey - 60.0, "6".into(), [170, 240, 90], false);
+            self.float(ex, ey - 60.0, format!("{}", ad as i32), [170, 240, 90], false);
             for _ in 0..8 {
                 self.ptc(x, y, z, rr(-1.0, 1.0), rr(-0.6, 0.6), rr(0.0, 1.0), 200, PtK::Acid, [130, 220, 60]);
             }
@@ -1536,6 +1555,9 @@ impl Game {
     }
 
     pub fn shatter(&mut self, i: usize) {
+        if self.boss_shatter(i) {
+            return;
+        }
         self.sounds.push(Snd { k: Sfx::Shatter, x: self.enemies[i].x, y: self.enemies[i].y, v: 1.0 });
         if self.has_legend(Legend::WintersGrudge) {
             let (x, y) = (self.enemies[i].x, self.enemies[i].y);
@@ -1691,8 +1713,29 @@ impl Game {
             // pixel effects: fire and acid eat at the body
             let mut fl = vec![];
             let mut dr = vec![];
-            let burning = e.body.update_fx(&mut fl, &mut dr, false);
+            let boss = e.k.boss();
+            if boss {
+                // bosses break free fast and can't be frozen again for a few seconds
+                if e.thaw > 0 {
+                    e.thaw -= 1;
+                    if e.thaw <= 180 {
+                        e.frozen = 0;
+                    }
+                } else if e.frozen > 0 {
+                    e.frozen = e.frozen.min(20);
+                    e.thaw = 200;
+                }
+            }
+            let burning = e.body.update_fx(&mut fl, &mut dr, boss);
             e.burning = burning;
+            if boss {
+                // a boss's body doesn't melt away: acid and fire wear its health down instead
+                let acid = e.body.count_acid();
+                e.hp -= acid.min(140) as f32 * 0.003;
+                if acid > 0 {
+                    e.body.tint_all(|p| p.acid = p.acid.saturating_sub(2));
+                }
+            }
             if burning > 0 {
                 e.hp -= (burning.min(60)) as f32 * 0.004 * bm;
                 if e.k.shambler() && burning > 30 {
@@ -1733,8 +1776,8 @@ impl Game {
             let legs = e.body.whole(T_LEGF) as i32 + e.body.whole(T_LEGB) as i32;
             let head = e.body.parts[T_HEAD].on && e.body.frac(T_HEAD) > 0.3;
             let torso = e.body.frac(T_TORSO);
-            let armed = e.body.whole(T_ARMF);
-            if e.hp <= 0.0 || !head || torso < 0.45 {
+            let armed = e.body.whole(T_ARMF) || e.k.boss();
+            if e.hp <= 0.0 || (!e.k.boss() && (!head || torso < 0.45)) {
                 e.alive = false;
                 let ds = e.body.detach_everything();
                 let dir = ((ex - px).signum(), 0.0);
@@ -1766,6 +1809,7 @@ impl Game {
                 }
             }
             self.boss_logic(i);
+            self.boss_moves(i);
             let e = &mut self.enemies[i];
             // AI
             if e.frozen > 0 {
@@ -2430,5 +2474,12 @@ impl Game {
     }
     pub fn seen_at(&self, x: usize, y: usize) -> bool {
         self.seen.get(&self.area.key()).map(|v| v[y * MM.0 + x]).unwrap_or(false)
+    }
+}
+
+impl Game {
+    /// spells grow with you: +7% damage per character level
+    pub fn spell_power(&self) -> f32 {
+        1.0 + 0.07 * (self.player.sk.level - 1) as f32
     }
 }

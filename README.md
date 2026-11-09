@@ -61,6 +61,7 @@ one-minute blessing: Power, Haste, Warding or Mending.
     cargo run --release -- --menus menus      # title screen, pause menu, end-of-act card
     add --press to any picture mode           # hides hints and banners, for store screenshots
     cargo run --release -- --navtest          # do hidden enemies find their way to you? (with and without pathfinding)
+    cargo run --release -- --bosstest         # a bot fights both bosses with five builds: time to kill, damage taken
 
 ## Code map
 

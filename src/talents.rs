@@ -173,7 +173,7 @@ impl Game {
         if t % 10 != 0 {
             return;
         }
-        let dmg = 4.0 * (1.0 + 0.4 * self.rank(Sk::Caustic) as f32) * (1.0 + 0.08 * (self.alvl - 1) as f32);
+        let dmg = 4.0 * (1.0 + 0.4 * self.rank(Sk::Caustic) as f32) * self.spell_power();
         for i in 0..self.enemies.len() {
             let e = &self.enemies[i];
             if !e.alive || e.k.bony() && rnd() < 0.5 || ((e.x - x).powi(2) + ((e.y - y) / 0.6).powi(2)).sqrt() > r {

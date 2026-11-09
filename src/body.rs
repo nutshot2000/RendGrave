@@ -543,6 +543,10 @@ impl Body {
         self.detach_all(i, &mut out);
         out
     }
+    /// pixels currently being eaten by acid
+    pub fn count_acid(&self) -> i32 {
+        self.parts.iter().filter(|p| p.on).map(|p| p.px.iter().filter(|q| q.m != 0 && q.acid > 0).count() as i32).sum()
+    }
     pub fn detach_everything(&mut self) -> Vec<Detached> {
         let mut out = vec![];
         for i in 0..self.parts.len() {

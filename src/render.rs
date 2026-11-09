@@ -296,6 +296,30 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     for e in &g.enemies {
         if e.alive {
             shadow(&mut c, e.x, e.y, if e.k == Kind::King { 15.0 } else if e.k.big() { 11.0 } else if e.k == Kind::Bloater { 10.0 } else { 7.0 });
+            if e.slam > 0 {
+                // the slam is coming: a red ring on the ground, filling in
+                let f = 1.0 - e.slam as f32 / crate::bosses::SLAM_T as f32;
+                let r = crate::bosses::SLAM_R;
+                let pulse = 0.5 + ((t as f32) * 0.5).sin() * 0.2;
+                // the danger zone, tinted red, filling in from the middle as the slam comes
+                let (ri, rj) = (r as i32, (r * 0.7) as i32);
+                for dy in -rj..=rj {
+                    for dx in -ri..=ri {
+                        let d = ((dx * dx) as f32 / (r * r) + (dy * dy) as f32 / (r * r * 0.49)).sqrt();
+                        if d >= 1.0 {
+                            continue;
+                        }
+                        let (gx, gy) = (e.x as i32 + dx - cx, e.y as i32 + dy - cy);
+                        let inside = d < f;
+                        let edge = d > 0.93 || (d > f - 0.05 && inside);
+                        let a = if edge { 0.75 * pulse + 0.2 } else if inside { 0.32 } else { 0.12 };
+                        c.blend(gx, gy, -1e8, if inside { [255, 70, 40] } else { [200, 30, 20] }, a);
+                        if edge && (dx + dy) % 2 == 0 {
+                            c.glow(gx, gy, [140, 20, 0]);
+                        }
+                    }
+                }
+            }
         }
     }
     // ---- walls and trees (drawn upright, depth = their ground row)
@@ -739,6 +763,17 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     // ---- projectiles
     for p in &g.projs {
         let (sx, sy) = (p.x as i32 - cx, (p.y - p.z) as i32 - cy);
+        if p.k == 5 {
+            // a thrown powder keg, fuse spitting sparks
+            for dy in 0..6i32 {
+                for dx in -2i32..=2 {
+                    let col = if dy == 1 || dy == 4 { [40, 34, 30] } else if dx == dy - 3 || dx == 3 - dy { [200, 40, 30] } else { [118, 74, 42] };
+                    c.put(sx + dx, sy - dy, p.y + 0.5, col, [0; 3], p.z + dy as f32);
+                }
+            }
+            c.glow(sx + 1, sy - 7, [255, 200, 80]);
+            continue;
+        }
         if p.k == 3 || p.k == 4 {
             // arrow: shaft along its flight, grey head
             let l = (p.vx * p.vx + p.vy * p.vy).sqrt().max(0.01);

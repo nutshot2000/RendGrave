@@ -3,6 +3,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod bosstest;
+mod bosses;
 mod ambient;
 mod story;
 mod menu;
@@ -249,6 +251,18 @@ impl App {
                     place_near_enemy(g, 80.0);
                 }
                 g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
+            }
+            if f == at + 28 && matches!(a, AreaId::Crypt(3) | AreaId::Cellars(2)) {
+                // show the boss moves: the King winding up a slam, the Chief lobbing a keg
+                if let Some(b) = g.enemies.iter().position(|e| e.k.boss()) {
+                    if g.enemies[b].k == body::Kind::King {
+                        g.enemies[b].slam = 40;
+                        g.enemies[b].stun = 0;
+                    } else {
+                        g.enemies[b].skill_t = 0;
+                        g.enemies[b].stun = 0;
+                    }
+                }
             }
             if f == at + 55 {
                 return Some(name.to_string());
@@ -883,6 +897,10 @@ impl App {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--bosstest") {
+        bosstest::run();
+        return;
+    }
     if args.iter().any(|a| a == "--lowtest") {
         low_test();
         return;

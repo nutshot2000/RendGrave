@@ -71,6 +71,8 @@ impl Game {
             self.shatter(i);
             return;
         }
+        // a boss's hide is thick: blades scar it but rarely take anything off
+        let power = if self.enemies[i].k.boss() { power * 0.35 } else { power };
         let e = &mut self.enemies[i];
         let slope = rr(-0.3, 0.3);
         let from_left = src_x < e.x;
@@ -80,6 +82,10 @@ impl Game {
         let flesh = cut.len() - metal;
         let bone = cut.iter().filter(|c| c.2 == PM_BONE).count();
         let mut d = if flesh > 0 { dmg + flesh as f32 * 0.6 } else { dmg * 0.2 };
+        if e.k.boss() {
+            // a boss's armour blunts a blow but never turns it aside completely
+            d = dmg * if flesh == 0 && metal > 0 { 0.75 } else { 1.0 } + flesh as f32 * 0.3;
+        }
         let (sx, sy) = (e.x, e.y);
         let k = if flesh == 0 && metal > 0 {
             Sfx::HitMetal
@@ -123,7 +129,7 @@ impl Game {
     pub fn zap_enemy(&mut self, i: usize, base: f32) {
         let (zx, zy) = (self.enemies[i].x, self.enemies[i].y);
         self.snd(Sfx::Zap, zx, zy, 0.6);
-        let mult = 1.0 + 0.15 * self.rank(Sk::ChainMastery) as f32;
+        let mult = (1.0 + 0.15 * self.rank(Sk::ChainMastery) as f32) * self.spell_power();
         let (cond, stat) = (self.rank(Sk::Conductor), self.rank(Sk::StaticField));
         let e = &mut self.enemies[i];
         let wet = e.wet > 0 || (cond > 0 && e.bleed > 0);
@@ -154,7 +160,24 @@ impl Game {
         self.hurt(i, dmg, if wet { [150, 210, 255] } else { [210, 225, 255] }, wet);
     }
 
+    /// you aim at an enemy's body on screen, but spells fly along the ground: when the
+    /// cursor is over someone, aim at their feet instead
+    pub fn aim_assist(&self, mx: f32, my: f32) -> (f32, f32) {
+        let mut best: Option<(f32, f32, f32)> = None;
+        for e in self.enemies.iter().filter(|e| e.alive) {
+            let tall = if e.k.big() { 76.0 } else { 62.0 };
+            if (mx - e.x).abs() < if e.k.big() { 16.0 } else { 11.0 } && my < e.y + 4.0 && my > e.y - tall {
+                let d = (mx - e.x).abs() + (my - (e.y - tall * 0.5)).abs() * 0.3;
+                if best.map(|b| d < b.2).unwrap_or(true) {
+                    best = Some((e.x, e.y, d));
+                }
+            }
+        }
+        best.map(|b| (b.0, b.1)).unwrap_or((mx, my))
+    }
+
     pub fn cast(&mut self, s: Sk, mx: f32, my: f32, inp: &Input) {
+        let (mx, my) = self.aim_assist(mx, my);
         if self.cast_talent(s, mx, my) {
             return;
         }
@@ -481,7 +504,7 @@ impl Game {
                 continue;
             }
             let h = -rr(4.0, 11.0);
-            self.cut_enemy(i, h, 26.0, 14.0, sx - 10.0 * (self.enemies[i].x - self.player.x).signum(), false);
+            self.cut_enemy(i, h, 26.0, 14.0 * self.spell_power(), sx - 10.0 * (self.enemies[i].x - self.player.x).signum(), false);
             if self.enemies[i].alive {
                 self.enemies[i].frozen = 50 + br * 20;
             }
