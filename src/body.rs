@@ -111,6 +111,8 @@ pub enum Kind {
     Crossbow,
     /// boss of the Ravenhold bandits
     Chief,
+    /// a thief with a sack of loot who runs from you
+    Robber,
 }
 impl Kind {
     /// big, heavy enemies (bigger reach and footprint, resist knockback)
@@ -644,7 +646,7 @@ fn vary(c: [u8; 3], x: i32, y: i32, s: u32, amt: f32) -> [u8; 3] {
 pub fn humanoid(orig: Kind) -> Body {
     match orig {
         Kind::Bloater => return bloater(),
-        Kind::Bandit | Kind::Crossbow => return bandit(orig),
+        Kind::Bandit | Kind::Crossbow | Kind::Robber => return bandit(orig),
         Kind::Chief => return chief(),
         _ => {}
     }
@@ -1222,6 +1224,23 @@ fn bandit(orig: Kind) -> Body {
         }
     }
     let at = b.parts[T_WEAPON].attach;
+    if orig == Kind::Robber {
+        // no weapon, a dark green hood and cloak
+        b.parts[T_WEAPON].on = false;
+        for (pi, p) in b.parts.iter_mut().enumerate() {
+            if pi == T_WEAPON {
+                continue;
+            }
+            for q in p.px.iter_mut() {
+                if q.m == PM_CLOTH {
+                    q.c = mul([52, 74, 50], 0.7 + (q.c[0] as f32 / 255.0) * 0.6);
+                }
+            }
+        }
+        b.kind = orig;
+        b.compute();
+        return b;
+    }
     b.parts[T_WEAPON] = if orig == Kind::Crossbow {
         let mut bow = humanoid(Kind::Archer).parts[T_WEAPON].clone();
         bow.attach = at;

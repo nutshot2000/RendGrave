@@ -50,6 +50,8 @@ pub const AUX_DEAD: u8 = 4;
 pub const AUX_HOUSE: u8 = 8;
 /// wall cells of a stone tomb or chapel
 pub const AUX_TOMB: u8 = 16;
+/// a cracked wall: a blade or a blast breaks it open
+pub const AUX_CRACK: u8 = 32;
 
 #[inline]
 pub fn is_wall(m: u8) -> bool {

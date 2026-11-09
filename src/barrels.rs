@@ -12,7 +12,7 @@ use crate::world::*;
 pub struct Barrel {
     pub x: f32,
     pub y: f32,
-    /// 0 powder keg, 1 oil, 2 acid
+    /// 0 powder keg, 1 oil, 2 acid, 3 clay urn, 4 crate
     pub k: u8,
     pub alive: bool,
     /// frames until a lit powder keg goes off (-1: not lit)
@@ -80,8 +80,39 @@ impl Game {
                 self.barrels[i].fuse = 70;
                 self.float(x, y - 30.0, "FUSE LIT - RUN".into(), [255, 170, 60], true);
             }
+        } else if bk >= 3 {
+            self.smash(i);
         } else {
             self.break_barrel(i, false);
+        }
+    }
+
+    /// an urn or a crate breaks open: shards or splinters, and now and then something inside
+    pub fn smash(&mut self, i: usize) {
+        let (x, y, k) = (self.barrels[i].x, self.barrels[i].y, self.barrels[i].k);
+        self.clear_barrel(i);
+        let urn = k == 3;
+        self.snd(if urn { Sfx::Crumble } else { Sfx::Wood }, x, y, 1.0);
+        let col = if urn { [150, 96, 66] } else { [120, 84, 52] };
+        for _ in 0..22 {
+            self.ptc(x, y, rr(3.0, 12.0), rr(-2.2, 2.2), rr(-1.2, 1.2), rr(1.0, 3.5), 240, PtK::Debris, col);
+        }
+        if urn {
+            // a puff of old dust
+            for _ in 0..6 {
+                self.ptc(x, y, 6.0, rr(-0.4, 0.4), rr(-0.2, 0.2), 0.3, 60, PtK::Smoke, [110, 100, 90]);
+            }
+        }
+        let lv = self.alvl;
+        let r = crate::rng::rnd();
+        if r < 0.45 {
+            let amt = (3 + ri(6) as i32) * (1 + lv / 2);
+            self.pickups.push(Pickup { k: 0, x, y: y + 4.0, z: 8.0, vz: 2.2, amt, t: 0 });
+        } else if r < 0.51 {
+            self.pickups.push(Pickup { k: 1, x, y: y + 4.0, z: 8.0, vz: 2.2, amt: 1, t: 0 });
+        } else if r < 0.525 {
+            let item = crate::items::roll(lv, 0.05);
+            self.ground.push(crate::gear::GroundItem { item, x, y: y + 6.0, z: 10.0, vz: 2.5, t: 0 });
         }
     }
 
@@ -110,6 +141,11 @@ impl Game {
                     self.light(x, y - 16.0, 30.0, 0.6, [1.0, 0.6, 0.2], 2);
                 } else if b.fuse == 0 {
                     self.keg_boom(i);
+                }
+            } else if b.k >= 3 {
+                // urns only care about being knocked apart; crates also burn
+                if wrecked || (fire && b.k == 4) {
+                    self.smash(i);
                 }
             } else if fire || wrecked {
                 self.break_barrel(i, fire);

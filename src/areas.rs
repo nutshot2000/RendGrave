@@ -42,6 +42,10 @@ impl Game {
             e.maxhp = e.hp;
             e.dmg *= 1.3;
             e.speed *= 1.1;
+            e.aff = 1 + ri(5) as u8;
+            if e.aff == 4 {
+                e.speed *= 1.5;
+            }
         }
         e
     }
@@ -62,6 +66,7 @@ pub fn base_xp(k: Kind) -> f32 {
         match k {
             Kind::King => 600.0,
             Kind::Chief => 900.0,
+            Kind::Robber => 60.0,
             Kind::Brute => 90.0,
             Kind::Bloater => 40.0,
             Kind::Bandit => 34.0,
@@ -87,6 +92,22 @@ impl Game {
         self.alvl = to.level();
         let (king_dead, chief_dead) = (self.king_dead, self.chief_dead);
         self.enemies = sp.enemies.iter().filter(|e| !(e.0 == Kind::King && king_dead) && !(e.0 == Kind::Chief && chief_dead)).map(|&(k, x, y)| self.scaled_enemy(k, x, y)).collect();
+        // now and then a grave robber is out on the prowl
+        if !to.is_dungeon() && to != AreaId::Ashford && rnd() < 0.4 {
+            for _ in 0..200 {
+                let (rx, ry) = (rr(80.0, self.world.aw as f32 - 80.0), rr(80.0, self.world.ah as f32 - 80.0));
+                let (ax, ay) = sp.arrival(from);
+                let d = ((rx - ax).powi(2) + (ry - ay).powi(2)).sqrt();
+                if d > 260.0 && d < 700.0 && self.world.at(rx as i32, ry as i32) == crate::world::E && !self.world.solid(rx as i32 + 3, ry as i32) && !self.world.solid(rx as i32 - 3, ry as i32) {
+                    let mut r = self.scaled_enemy(Kind::Robber, rx, ry);
+                    r.elite = false;
+                    r.aff = 0;
+                    r.skill_t = 25 * 60;
+                    self.enemies.push(r);
+                    break;
+                }
+            }
+        }
         self.chests = sp.chests.iter().map(|&(x, y, tier)| crate::props::Chest { x, y, tier, open: false, t: 0 }).collect();
         self.barrels = sp.barrels.iter().map(|&(x, y, k)| crate::barrels::Barrel::new(x, y, k, &self.world)).collect();
         self.shrines = sp.shrines.iter().map(|&(x, y, k)| crate::props::Shrine { x, y, k, used: false }).collect();
@@ -115,6 +136,7 @@ impl Game {
         self.waypoint = sp.waypoint;
         self.merchant = sp.merchant;
         self.posts = sp.posts.clone();
+        self.cracks = sp.cracks.clone();
         if to.is_dungeon() {
             self.seen.remove(&to.key());
         }

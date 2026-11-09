@@ -74,6 +74,8 @@ pub struct Enemy {
     pub slam: i32,
     pub enraged: bool,
     pub elite: bool,
+    /// champion power, see champions.rs (0 none)
+    pub aff: u8,
     /// on its back after slipping in oil
     pub slip: i32,
     /// slowed by frost or poison
@@ -120,6 +122,8 @@ pub struct Player {
     pub slide: (f32, f32),
     /// Storm Shield, Ice Armour and Last Stand timers
     pub shield: i32,
+    /// chilled by a frozen champion: slower
+    pub frost: i32,
     pub ice: i32,
     pub stand_cd: i32,
     pub equip: [Option<Item>; 4],
@@ -301,6 +305,9 @@ pub struct Game {
     pub ending: i32,
     /// frames played
     pub played: u64,
+    /// kills in quick succession, and frames left to extend the streak
+    pub streak: i32,
+    pub streak_t: i32,
     pub chests: Vec<crate::props::Chest>,
     pub shrines: Vec<crate::props::Shrine>,
     pub barrels: Vec<crate::barrels::Barrel>,
@@ -324,6 +331,7 @@ pub struct Game {
     pub shop_hover: Option<(u8, usize)>,
     pub merchant: Option<(f32, f32)>,
     pub posts: Vec<(f32, f32)>,
+    pub cracks: Vec<(f32, f32)>,
     pub inv_hover: Option<(u8, usize)>,
 }
 
@@ -339,6 +347,7 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         Kind::Bandit => (95.0, 0.9, 16.0, 13.0, 18),
         Kind::Crossbow => (60.0, 0.8, 175.0, 14.0, 42),
         Kind::Chief => (3800.0, 0.62, 28.0, 34.0, 34),
+        Kind::Robber => (150.0, 1.18, 0.0, 0.0, 30),
         Kind::Player => (100.0, 1.0, 10.0, 0.0, 10),
     };
     let mut body = humanoid(k);
@@ -378,6 +387,7 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         slam: 0,
         enraged: false,
         elite: false,
+        aff: 0,
         slip: 0,
         slow: 0,
         bleed_dot: 0,
@@ -437,6 +447,7 @@ impl Game {
             slip: 0,
             slide: (0.0, 0.0),
             shield: 0,
+            frost: 0,
             ice: 0,
             stand_cd: 0,
             equip: [Some(starter_weapon()), None, Some(starter_armor()), None],
@@ -499,6 +510,8 @@ impl Game {
             press: false,
             ending: 0,
             played: 0,
+            streak: 0,
+            streak_t: 0,
             chests: vec![],
             shrines: vec![],
             barrels: vec![],
@@ -520,6 +533,7 @@ impl Game {
             shop_hover: None,
             merchant: None,
             posts: vec![],
+            cracks: vec![],
             inv_hover: None,
         }
     }
@@ -558,8 +572,11 @@ impl Game {
         }
         let mut y = y;
         for _ in 0..4 {
-            if self.floats.iter().any(|f| f.t > 30 && (f.x - x).abs() < 30.0 && (f.y - y).abs() < 7.0) {
-                y -= 9.0;
+            // half-widths of the two texts as drawn (4 px a letter, doubled when big)
+            let hw = |t: &str, b: bool| t.len() as f32 * if b { 4.0 } else { 2.0 };
+            let me = hw(&txt, big);
+            if self.floats.iter().any(|f| f.t > 8 && (f.x - x).abs() < me + hw(&f.txt, f.big) && (f.y - y).abs() < if big || f.big { 13.0 } else { 7.0 }) {
+                y -= if big { 14.0 } else { 9.0 };
             }
         }
         self.floats.push(Float { x, y, t: 60, txt, c, big });
@@ -868,7 +885,7 @@ impl Game {
             dy /= l;
         }
         let u = self.under(self.player.x, self.player.y);
-        let hm = self.haste_mult();
+        let hm = self.haste_mult() * if self.player.frost > 0 { 0.6 } else { 1.0 };
         let p = &mut self.player;
         let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32) * (1.0 + p.gear.speed / 100.0) * hm;
         if p.whirl > 0 {
@@ -1306,6 +1323,13 @@ impl Game {
                 let i = cy as usize * W + cx as usize;
                 let m = self.world.m[i];
                 self.world.scorch[i] = self.world.scorch[i].saturating_add((120.0 * (1.0 - d / r)) as u8);
+                if self.world.aux[i] & AUX_CRACK != 0 && is_wall(m) && d < r + 4.0 {
+                    // a cracked wall gives way to any blast
+                    self.world.set(cx, cy, if rnd() < 0.15 { RUBBLE } else { E });
+                    self.world.aux[i] &= !AUX_CRACK;
+                    self.secret_found(cx as f32, cy as f32);
+                    continue;
+                }
                 match m {
                     BRICK | STONE if d < r * 0.42 && rnd() < 0.8 => {
                         self.world.set(cx, cy, E);
@@ -1630,6 +1654,7 @@ impl Game {
         let elite = self.enemies[i].elite;
         let xp = self.xp_for(k) * if elite { 3 } else { 1 };
         self.gain_xp(xp);
+        self.streak_kill(xp);
         self.drop_loot(x, y, k, elite);
         if k == Kind::King {
             self.king_slain(x, y);
@@ -1639,6 +1664,10 @@ impl Game {
         }
         if k == Kind::Bloater {
             self.bloater_burst(x, y);
+        }
+        self.champion_death(i);
+        if k == Kind::Robber {
+            self.robber_loot(x, y);
         }
         if rnd() < if k == Kind::Brute { 1.0 } else { 0.18 + 0.07 * fortune } {
             self.pickups.push(Pickup { k: 1, x: x + 6.0, y: y + 2.0, z: 10.0, vz: 2.0, amt: 1, t: 0 });
@@ -1655,6 +1684,7 @@ impl Game {
         let bm = self.burn_mult();
         let caustic = 1.0 + 0.4 * self.rank(Sk::Caustic) as f32;
         let mut retal: Vec<usize> = vec![];
+        let mut champ_hits: Vec<usize> = vec![];
         let (px, py) = (self.player.x, self.player.y);
         if self.frame % 8 == 0 || self.nav_dirty {
             self.nav.build(&self.world, px, py);
@@ -1810,6 +1840,8 @@ impl Game {
             }
             self.boss_logic(i);
             self.boss_moves(i);
+            self.champion_tick(i);
+            self.robber_tick(i);
             let e = &mut self.enemies[i];
             // AI
             if e.frozen > 0 {
@@ -1827,7 +1859,7 @@ impl Game {
                 let k = match e.k {
                     Kind::Zombie | Kind::Crawler | Kind::Bloater => Sfx::Groan,
                     Kind::Brute | Kind::Chief => Sfx::Roar,
-                    Kind::Bandit | Kind::Crossbow => Sfx::Shout,
+                    Kind::Bandit | Kind::Crossbow | Kind::Robber => Sfx::Shout,
                     Kind::King => Sfx::KingRoar,
                     _ => Sfx::Rattle,
                 };
@@ -1881,6 +1913,10 @@ impl Game {
                             want = (toward.0 * spd, toward.1 * spd);
                         }
                         let e = &mut self.enemies[i];
+                        if e.k == Kind::Robber {
+                            let l = dist.max(1.0);
+                            want = (-dx / l * spd, -dy / l * spd);
+                        }
                         if e.k.bandit() && e.k != Kind::Chief && e.hp < e.maxhp * 0.25 && dist < 140.0 {
                             let l = dist.max(1.0);
                             want = (-dx / l * spd * 1.15, -dy / l * spd * 1.15);
@@ -1956,6 +1992,7 @@ impl Game {
                                 let am = self.armor_mult();
                                 self.player.hp -= dmg * rr(0.85, 1.15) * am;
                                 retal.push(i);
+                                champ_hits.push(i);
                                 self.player.hurt = 1.0;
                                 self.player.inv = 14;
                                 self.shake = self.shake.max(4.0);
@@ -2075,6 +2112,9 @@ impl Game {
         }
         for i in retal {
             self.retaliate(i);
+        }
+        for i in champ_hits {
+            self.champion_hit(i);
         }
         for (x, y, z) in flames {
             self.ptc(x, y, z, rr(-0.15, 0.15), 0.0, rr(0.3, 0.8), rr(14.0, 26.0) as i32, PtK::Flame, [255, 150, 50]);

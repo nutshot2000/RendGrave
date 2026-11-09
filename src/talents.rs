@@ -104,6 +104,14 @@ impl Game {
         if p.stand_cd > 0 {
             p.stand_cd -= 1;
         }
+        if p.frost > 0 {
+            p.frost -= 1;
+            if p.frost % 6 == 0 {
+                let (x, y) = (p.x, p.y);
+                self.ptc(x + rr(-6.0, 6.0), y, rr(5.0, 45.0), 0.0, 0.0, -0.3, 30, PtK::Ice, [200, 235, 255]);
+            }
+        }
+        let p = &mut self.player;
         if p.dead {
             return;
         }

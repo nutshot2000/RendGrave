@@ -211,10 +211,12 @@ pub struct Spawns {
     pub maren: Option<(f32, f32)>,
     /// lantern posts along the roads and at the exits
     pub posts: Vec<(f32, f32)>,
+    /// cracked walls hiding a secret
+    pub cracks: Vec<(f32, f32)>,
 }
 impl Spawns {
     fn new() -> Spawns {
-        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None, maren: None, posts: vec![] }
+        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None, maren: None, posts: vec![], cracks: vec![] }
     }
     pub fn arrival(&self, from: AreaId) -> (f32, f32) {
         self.entries.iter().find(|e| e.0 == from).map(|e| (e.1, e.2)).unwrap_or(self.start)
@@ -871,6 +873,7 @@ fn graveyard(w: &mut World, s: u32) -> Spawns {
             continue;
         }
         building(w, &mut sp, x, y, 58, 46, 16, BKind::Tomb);
+        barrels(w, &mut sp, x as f32 + 10.0, y as f32 + 12.0, 2 + ri(2), &[(3, 1.0)]);
         sp.enemies.push((Kind::Skeleton, x as f32 + 29.0, y as f32 + 24.0));
         if rnd() < 0.3 {
             sp.chests.push((x as f32 + 29.0, y as f32 + 16.0, 0));
@@ -1118,7 +1121,7 @@ fn ravenhold(w: &mut World, s: u32) -> Spawns {
     for _ in 0..7 {
         let (x, y) = (rr(yx0 as f32, yx1 as f32 - 40.0), rr(r0 as f32 + 100.0, r1 as f32 - 100.0));
         if (y - gate_y).abs() > 30.0 {
-            barrels(w, &mut sp, x, y, 2 + ri(3), &[(0, 0.6), (1, 0.4)]);
+            barrels(w, &mut sp, x, y, 2 + ri(3), &[(0, 0.5), (1, 0.3), (4, 0.2)]);
         }
     }
     // a gallows by the gate, as a warning
@@ -1350,6 +1353,12 @@ fn dungeon(w: &mut World, floor: u8, cellars: bool) -> Spawns {
                     }
                 }
             }
+            // urns in the crypt, crates in the cellars, along a wall
+            if rnd() < 0.6 {
+                let n = 3 + ri(4);
+                let (bx, by) = (r.x as f32 + rr(20.0, (r.w - 20 - n as i32 * 13).max(21) as f32), r.y as f32 + if rnd() < 0.5 { 16.0 } else { r.h as f32 - 10.0 });
+                barrels(w, &mut sp, bx, by, n, if cellars { &[(4, 1.0)] } else { &[(3, 1.0)] });
+            }
             // barrels here and there: powder kegs, oil and acid
             if rnd() < 0.5 {
                 let (bx, by) = (r.x as f32 + rr(30.0, (r.w - 60).max(31) as f32), r.y as f32 + if rnd() < 0.5 { 20.0 } else { r.h as f32 - 12.0 });
@@ -1387,6 +1396,59 @@ fn dungeon(w: &mut World, floor: u8, cellars: bool) -> Spawns {
                 sp.enemies.push((Kind::Brute, cx as f32 + rr(-10.0, 10.0), cy as f32 + rr(-6.0, 6.0)));
             }
         }
+    }
+    // secret alcoves: a treasure room sealed behind a cracked wall above a room or two
+    let mut secrets = 0;
+    for k in 1..n.saturating_sub(1) {
+        if secrets >= 2 {
+            break;
+        }
+        let r = &rooms[k];
+        if r.cave || rnd() < 0.4 {
+            continue;
+        }
+        let cx = r.x + r.w / 2 + rr(-30.0, 30.0) as i32;
+        let (ax0, ax1, ay0, ay1) = (cx - 16, cx + 16, r.y - 44, r.y - 11);
+        if ay0 < 14 || ax0 < 14 || ax1 > aw - 14 {
+            continue;
+        }
+        let sealed = (ay0 - 6..r.y).all(|y| (ax0 - 6..=ax1 + 6).all(|x| w.m[idx(x, y)] != E));
+        if !sealed {
+            continue;
+        }
+        for y in ay0..ay1 {
+            for x in ax0..ax1 {
+                w.m[idx(x, y)] = E;
+            }
+        }
+        for y in ay0 - 4..ay1 + 4 {
+            for x in ax0 - 4..ax1 + 4 {
+                if w.m[idx(x, y)] == ROCK {
+                    w.m[idx(x, y)] = BRICK;
+                }
+            }
+        }
+        // the cracked plug between the room and the alcove
+        for y in ay1..r.y {
+            for x in cx - 8..cx + 8 {
+                let i = idx(x, y);
+                w.m[i] = BRICK;
+                w.aux[i] |= AUX_CRACK;
+            }
+        }
+        sp.chests.push((cx as f32, (ay0 + 14) as f32, 1));
+        barrels(w, &mut sp, (ax0 + 6) as f32, (ay1 - 4) as f32, 2, &[(3, 1.0)]);
+        for y in ay0 + 16..ay0 + 30 {
+            for x in ax0 + 2..ax1 - 2 {
+                if rnd() < 0.04 && w.at(x, y) == E {
+                    let i = idx(x, y);
+                    w.m[i] = BONE;
+                    w.col[i] = [196, 188, 166];
+                }
+            }
+        }
+        sp.cracks.push((cx as f32, r.y as f32 - 6.0));
+        secrets += 1;
     }
     // stairs up in the first room, down (or the boss) in the last
     let (ux, uy) = rooms[0].c();

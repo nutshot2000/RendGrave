@@ -61,6 +61,13 @@ impl Game {
                 }
             }
             AreaId::Crypt(_) | AreaId::Cellars(_) => {
+                if f % 20 == 0 {
+                    for &(x, y) in self.cracks.clone().iter() {
+                        if (x - cx - vw / 2.0).abs() < vw && (y - cy - vh / 2.0).abs() < vh {
+                            self.ptc(x + rr(-8.0, 8.0), y + 2.0, rr(10.0, 36.0), rr(-0.1, 0.1), 0.15, 0.05, 90, PtK::Smoke, [130, 120, 110]);
+                        }
+                    }
+                }
                 // dust hanging in the still air
                 if f % 5 == 0 {
                     let (x, y) = spot(10.0);

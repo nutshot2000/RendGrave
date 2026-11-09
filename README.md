@@ -59,6 +59,7 @@ one-minute blessing: Power, Haste, Warding or Mending.
     cargo run --release -- --loot loot        # every weapon type on a lineup, loot, the gear screen
     cargo run --release -- --maps maps        # overview picture of every area's layout
     cargo run --release -- --menus menus      # title screen, pause menu, end-of-act card
+    cargo run --release -- --extras extras    # secret walls, urns, champion types, grave robber, kill streaks
     add --press to any picture mode           # hides hints and banners, for store screenshots
     cargo run --release -- --navtest          # do hidden enemies find their way to you? (with and without pathfinding)
     cargo run --release -- --bosstest         # a bot fights both bosses with five builds: time to kill, damage taken

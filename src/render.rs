@@ -477,7 +477,14 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
                                 let row = k / 4;
                                 let mortar = k % 4 == 0 || (wx + row * 3) % 8 == 0;
                                 let base = if mortar { [52, 46, 58] } else { scl([92, 80, 96], 0.85 + h2(wx / 8, row, 2) * 0.25) };
-                                scl(base, 1.0 - k as f32 / h as f32 * 0.35)
+                                if w.aux[i] & AUX_CRACK != 0 {
+                                    // a cracked section: lighter, crumbling, split by dark fissures
+                                    let fis = (wx * 3 + k * 2).rem_euclid(11) == 0 || (wx * 5 - k * 3).rem_euclid(13) == 0;
+                                    let col = if fis { [24, 20, 26] } else { mixc(base, [128, 112, 100], 0.25) };
+                                    scl(col, 1.0 - k as f32 / h as f32 * 0.3)
+                                } else {
+                                    scl(base, 1.0 - k as f32 / h as f32 * 0.35)
+                                }
                             } else {
                                 wall_px(st, wx, h - k, s)
                             }
@@ -698,7 +705,32 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
         }
     }
     // ---- barrels: powder kegs (painted cross), oil (dark, steel hoops), acid (green, glowing seam)
-    for b in g.barrels.iter().filter(|b| b.alive) {
+    for b in g.barrels.iter().filter(|b| b.alive && b.k >= 3) {
+        let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);
+        if b.k == 3 {
+            // a clay urn: round belly, narrow neck, a lip
+            for k in 0..13i32 {
+                let half = if k < 9 { (4.6 - ((k as f32 - 4.0) / 4.5).powi(2) * 2.2) as i32 } else if k < 11 { 2 } else { 3 };
+                for dx in -half..=half {
+                    let shade = 0.72 + (dx + half) as f32 / (2 * half).max(1) as f32 * 0.45;
+                    let band = k == 6 && (dx + k) % 2 == 0;
+                    let col = if band { [90, 60, 40] } else if k == 12 { [120, 80, 56] } else { [150, 98, 66] };
+                    c.put(sx + dx, sy - k, b.y + 0.5, scl(col, shade), [0; 3], k as f32);
+                }
+            }
+        } else {
+            // a crate: planks with a cross brace
+            for k in 0..10i32 {
+                for dx in -5i32..=5 {
+                    let edge = dx.abs() == 5 || k == 0 || k == 9;
+                    let brace = (dx + 5) == k || (dx + 5) == 9 - k;
+                    let col = if edge || brace { [86, 58, 36] } else if (k / 3) % 2 == 0 { [128, 92, 58] } else { [116, 82, 52] };
+                    c.put(sx + dx, sy - k, b.y + 0.5, col, [0; 3], k as f32);
+                }
+            }
+        }
+    }
+    for b in g.barrels.iter().filter(|b| b.alive && b.k < 3) {
         let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);
         let (wood, hoop) = match b.k {
             0 => ([118u8, 74, 42], [40u8, 34, 30]),
@@ -848,6 +880,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             windup: e.st == St::Wind && e.k.big(),
             burn: false,
             elite: e.elite,
+            elite_col: crate::champions::champ_col(e.aff),
         };
         draw_body(&mut c, &e.body, e.x + jitter, e.y, tint);
     }
@@ -1099,7 +1132,8 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     }
     for e in &g.enemies {
         if e.alive && e.elite {
-            add(e.x, e.y, 60.0, 0.6, [1.0, 0.75, 0.3]);
+            let c = crate::champions::champ_col(e.aff);
+            add(e.x, e.y, 60.0, 0.6, [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0]);
         }
         if e.alive && !matches!(e.k, Kind::Zombie | Kind::Crawler) && e.frozen == 0 {
             let col = if e.k == Kind::King { [0.5, 0.7, 1.0] } else if e.k.bony() { [1.0, 0.25, 0.15] } else { [1.0, 0.5, 0.15] };
@@ -1480,6 +1514,7 @@ pub struct Tint {
     pub windup: bool,
     pub burn: bool,
     pub elite: bool,
+    pub elite_col: [u8; 3],
 }
 
 fn draw_body(c: &mut Ctx, b: &Body, x: f32, y: f32, tint: Tint) {
@@ -1562,7 +1597,8 @@ fn draw_part(c: &mut Ctx, p: &Part, xf: &Xf, mirror: bool, x: f32, y: f32, depth
                 let edge = p.get(lx - 1, ly).is_none() || p.get(lx + 1, ly).is_none() || p.get(lx, ly - 1).is_none();
                 if edge {
                     let pulse = 0.55 + ((t as f32 * 0.12) + ly as f32 * 0.3).sin() * 0.25;
-                    e = [(255.0 * pulse) as u8, (190.0 * pulse) as u8, (60.0 * pulse) as u8];
+                    let ec = tint.elite_col;
+                    e = [(ec[0] as f32 * pulse) as u8, (ec[1] as f32 * pulse) as u8, (ec[2] as f32 * pulse) as u8];
                 }
             }
             if tint.burn && h2(lx, ly + (t / 3) as i32, 9) < 0.15 {

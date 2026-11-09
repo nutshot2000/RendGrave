@@ -1047,7 +1047,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         let fw_ = ((e.hp / e.maxhp).clamp(0.0, 1.0) * w as f32) as i32;
         u.rect(sx - w / 2, sy, fw_, 2, if e.frozen > 0 { [140, 200, 255] } else if e.elite { [240, 180, 60] } else { [200, 40, 40] }, a);
         if e.elite {
-            u.text_c(sx, sy - 8, "CHAMPION", [255, 200, 90], 1);
+            u.text_c(sx, sy - 8, &crate::champions::champ_name(e.aff), crate::champions::champ_col(e.aff), 1);
         }
     }
     // loot names near the player, stacked so they never overlap
@@ -1182,6 +1182,14 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     if let Some((obj, _)) = g.objective() {
         let pulse = 0.8 + (t as f32 * 0.08).sin() * 0.2;
         u.text(8, 27, &obj, [(255.0 * pulse) as u8, (214.0 * pulse) as u8, 90], 1, true);
+    }
+    if g.streak >= 3 && g.streak_t > 0 {
+        // the streak counter, draining as the window closes
+        let w = 40;
+        let x = fw / 2 - w / 2;
+        u.text_c(fw / 2, 64, &format!("{} KILLS", g.streak), [255, 200, 70], 2);
+        u.rect(x, 78, w, 2, [40, 30, 20], 200);
+        u.rect(x, 78, w * g.streak_t / 150, 2, [255, 200, 70], 255);
     }
     if let Some((k, left)) = g.buff {
         let (name, _, c) = crate::props::SHRINES[k as usize];

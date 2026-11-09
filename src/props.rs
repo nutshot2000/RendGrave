@@ -49,7 +49,33 @@ impl Game {
     }
 
     /// buff timers every frame
+    /// another kill: keep the streak going, and call out the big ones
+    pub fn streak_kill(&mut self, xp: i32) {
+        self.streak = if self.streak_t > 0 { self.streak + 1 } else { 1 };
+        self.streak_t = 150;
+        let name = match self.streak {
+            3 => "TRIPLE KILL",
+            5 => "RAMPAGE",
+            8 => "MASSACRE",
+            12 => "SLAUGHTER",
+            20 => "BUTCHERY",
+            30 => "GODLIKE",
+            _ => return,
+        };
+        let bonus = (xp.max(5) as f32 * self.streak as f32 * 0.35) as i32;
+        self.gain_xp(bonus);
+        let (x, y) = (self.player.x, self.player.y);
+        self.float(x, y - 84.0, format!("{}  +{} XP", name, bonus), [255, 200, 70], true);
+        self.snd(Sfx::Chime, x, y, 0.6);
+    }
+
     pub fn tick_buffs(&mut self) {
+        if self.streak_t > 0 {
+            self.streak_t -= 1;
+            if self.streak_t == 0 {
+                self.streak = 0;
+            }
+        }
         if let Some((k, t)) = self.buff {
             if t <= 1 {
                 self.buff = None;
@@ -133,5 +159,52 @@ impl Game {
             self.ptc(x + rr(-6.0, 6.0), y, 6.0, rr(-0.8, 0.8), rr(-0.4, 0.4), rr(0.8, 2.4), 60, PtK::Spark, [255, 210, 110]);
         }
         self.light(x, y - 6.0, 70.0, 1.6, [1.0, 0.8, 0.4], 30);
+    }
+}
+
+impl Game {
+    /// a swing that meets a cracked wall knocks a hole in it
+    pub fn hit_cracks(&mut self, px: f32, py: f32, aim: f32, reach: f32) {
+        use crate::world::*;
+        let (ux, uy) = (aim.cos(), aim.sin());
+        let mut hit = None;
+        let mut d = 4.0;
+        while d < reach + 6.0 {
+            let (x, y) = ((px + ux * d) as i32, (py + uy * d * 0.8) as i32);
+            if World::inb(x, y) && self.world.aux[y as usize * W + x as usize] & AUX_CRACK != 0 && is_wall(self.world.at(x, y)) {
+                hit = Some((x, y));
+                break;
+            }
+            d += 2.0;
+        }
+        let Some((hx, hy)) = hit else { return };
+        for dy in -5i32..=5 {
+            for dx in -7i32..=7 {
+                let (x, y) = (hx + dx, hy + dy);
+                if dx * dx + dy * dy * 2 > 50 || !World::inb(x, y) {
+                    continue;
+                }
+                let i = y as usize * W + x as usize;
+                if self.world.aux[i] & AUX_CRACK != 0 && is_wall(self.world.m[i]) {
+                    self.world.set(x, y, if rnd() < 0.15 { RUBBLE } else { E });
+                    self.world.aux[i] &= !AUX_CRACK;
+                }
+            }
+        }
+        for _ in 0..16 {
+            self.ptc(hx as f32, hy as f32, rr(4.0, 30.0), rr(-1.5, 1.5), rr(-0.5, 1.5), rr(0.5, 2.0), 200, PtK::Debris, [92, 82, 96]);
+        }
+        self.snd(Sfx::Crumble, hx as f32, hy as f32, 0.9);
+        self.shake = self.shake.max(2.5);
+        self.secret_found(hx as f32, hy as f32);
+    }
+
+    /// the first breach in a cracked wall
+    pub fn secret_found(&mut self, x: f32, y: f32) {
+        if let Some(k) = self.cracks.iter().position(|c| (c.0 - x).abs() < 30.0 && (c.1 - y).abs() < 20.0) {
+            self.cracks.swap_remove(k);
+            self.float(x, y - 30.0, "A HIDDEN ROOM!".into(), [255, 214, 90], true);
+            self.snd(Sfx::Chime, x, y, 0.8);
+        }
     }
 }

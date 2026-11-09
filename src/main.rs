@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod champions;
 mod bosstest;
 mod bosses;
 mod ambient;
@@ -45,6 +46,7 @@ struct Showcase {
     tour: bool,
     loot: bool,
     menus: bool,
+    extras: bool,
     /// steps taken while the game is paused (the skill tree stops the clock)
     sub: i32,
 }
@@ -534,7 +536,91 @@ impl App {
         }
         None
     }
+    /// secret walls, urns, champion types, the grave robber and kill streaks
+    fn step_extras(&mut self) -> Option<String> {
+        use body::Kind;
+        let g = &mut self.game;
+        let f = g.frame as i32;
+        g.player.hp = g.player.maxhp;
+        let cam = |g: &mut game::Game| g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
+        match f {
+            1 => {
+                for _ in 0..20 {
+                    g.travel(areagen::AreaId::Crypt(2));
+                    if !g.cracks.is_empty() {
+                        break;
+                    }
+                }
+                g.banner = None;
+                for e in g.enemies.iter_mut() {
+                    e.stun = 100000;
+                    e.aggro = false;
+                }
+                if let Some(&(x, y)) = g.cracks.first() {
+                    g.player.x = x;
+                    g.player.y = y + 30.0;
+                }
+                cam(g);
+            }
+            61 | 75 => {
+                let (px, py) = (g.player.x, g.player.y);
+                g.hit_cracks(px, py, -std::f32::consts::FRAC_PI_2, 40.0);
+            }
+            91 => {
+                if let Some(b) = g.barrels.iter().position(|b| b.alive && b.k == 3) {
+                    let (x, y) = (g.barrels[b].x, g.barrels[b].y);
+                    g.player.x = x - 20.0;
+                    g.player.y = y + 14.0;
+                    cam(g);
+                    let near: Vec<usize> = (0..g.barrels.len()).filter(|&i| g.barrels[i].alive && (g.barrels[i].x - x).abs() < 30.0 && (g.barrels[i].y - y).abs() < 12.0).collect();
+                    for i in near.into_iter().take(2) {
+                        g.strike_barrel(i);
+                    }
+                }
+            }
+            121 => {
+                g.travel(areagen::AreaId::Pines);
+                g.banner = None;
+                g.enemies.clear();
+                let (px, py) = (g.player.x + 60.0, g.player.y);
+                for k in 0..5u8 {
+                    let mut e = g.scaled_enemy(Kind::Skeleton, px + k as f32 * 26.0, py + if k % 2 == 0 { 0.0 } else { 14.0 });
+                    e.elite = true;
+                    e.aff = k + 1;
+                    e.stun = 100000;
+                    e.hpbar = 200;
+                    g.enemies.push(e);
+                }
+                cam(g);
+                g.cam.0 += 60.0;
+            }
+            181 => {
+                g.enemies.clear();
+                let (px, py) = (g.player.x, g.player.y);
+                let mut r = g.scaled_enemy(Kind::Robber, px + 70.0, py);
+                r.skill_t = 25 * 60;
+                g.enemies.push(r);
+                for k in 0..6 {
+                    let mut z = g.scaled_enemy(Kind::Zombie, px - 40.0 + k as f32 * 6.0, py + 30.0);
+                    z.stun = 100000;
+                    g.enemies.push(z);
+                }
+            }
+            215 => {
+                // six quick kills for a streak
+                for e in g.enemies.iter_mut().filter(|e| e.k == Kind::Zombie) {
+                    e.hp = -1.0;
+                }
+            }
+            _ => {}
+        }
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak")];
+        shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
+    }
     fn step_showcase(&mut self) -> Option<String> {
+        if self.show.as_ref().map(|s| s.extras).unwrap_or(false) {
+            return self.step_extras();
+        }
         if self.show.as_ref().map(|s| s.menus).unwrap_or(false) {
             return self.step_menus();
         }
@@ -878,6 +964,8 @@ impl App {
         if let Some(sh) = &self.show {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
+            } else if sh.extras {
+                shot.as_deref() == Some("x5_streak")
             } else if sh.menus {
                 shot.as_deref() == Some("m4_dialogue")
             } else if sh.tour {
@@ -954,13 +1042,14 @@ fn main() {
     let tour = args.iter().any(|a| a == "--tour");
     let loot = args.iter().any(|a| a == "--loot");
     let menus = args.iter().any(|a| a == "--menus");
+    let extras = args.iter().any(|a| a == "--extras");
     // --press: no control hints, banners or toasts, for store screenshots
     let press = args.iter().any(|a| a == "--press");
     let fresh = args.iter().any(|a| a == "--new");
-    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot" || a == "--menus").map(|i| {
+    let show = args.iter().position(|a| a == "--showcase" || a == "--lab" || a == "--spells" || a == "--tour" || a == "--loot" || a == "--menus" || a == "--extras").map(|i| {
         let dir = args.get(i + 1).cloned().unwrap_or_else(|| "shots".into());
         std::fs::create_dir_all(&dir).ok();
-        Showcase { dir, log: vec![], lab, spells, tour, loot, menus, sub: 0 }
+        Showcase { dir, log: vec![], lab, spells, tour, loot, menus, extras, sub: 0 }
     });
     let seed = if show.is_some() { 7 } else { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(1) };
     let el = EventLoop::new().expect("event loop");
