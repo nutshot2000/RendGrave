@@ -25,6 +25,8 @@ pub enum MI {
     Sound,
     Volume,
     Fullscreen,
+    Shake,
+    Controls,
     ToTitle,
     Quit,
 }
@@ -36,10 +38,10 @@ impl Game {
             if self.has_save {
                 v.push(MI::Continue);
             }
-            v.extend([MI::NewGame, MI::Music, MI::Sound, MI::Volume, MI::Fullscreen, MI::Quit]);
+            v.extend([MI::NewGame, MI::Controls, MI::Music, MI::Sound, MI::Volume, MI::Shake, MI::Fullscreen, MI::Quit]);
             v
         } else {
-            vec![MI::Resume, MI::Music, MI::Sound, MI::Volume, MI::Fullscreen, MI::ToTitle, MI::Quit]
+            vec![MI::Resume, MI::Controls, MI::Music, MI::Sound, MI::Volume, MI::Shake, MI::Fullscreen, MI::ToTitle, MI::Quit]
         }
     }
 
@@ -59,6 +61,8 @@ impl Game {
             MI::Sound => format!("SOUND  {}", if sfx { "ON" } else { "OFF" }),
             MI::Volume => format!("-   VOLUME {}%   +", (vol * 100.0).round() as i32),
             MI::Fullscreen => "FULLSCREEN  F11".into(),
+            MI::Shake => format!("SCREEN SHAKE  {}", ["FULL", "LOW", "OFF"][self.shake_opt.min(2) as usize]),
+            MI::Controls => "CONTROLS".into(),
             MI::ToTitle => "SAVE AND QUIT TO TITLE".into(),
             MI::Quit => if self.title { "QUIT".into() } else { "SAVE AND QUIT GAME".into() },
         }
@@ -66,6 +70,16 @@ impl Game {
 
     /// mouse (or W / S and E / Space) over the current menu
     pub fn update_menu(&mut self, inp: &Input) {
+        if self.controls {
+            // any click or key closes the controls page
+            let any = (inp.lmb && !self.prev.lmb) || (inp.close && !self.prev.close) || (inp.interact && !self.prev.interact) || (inp.dodge && !self.prev.dodge);
+            if any {
+                self.controls = false;
+                let (x, y) = (self.player.x, self.player.y);
+                self.snd(Sfx::Click, x, y, 0.7);
+            }
+            return;
+        }
         let items = self.menu_items();
         let n = items.len();
         let hov = crate::hud::menu_at(inp.mouse, self.view, n, self.title);
@@ -111,6 +125,15 @@ impl Game {
                 Some(Req::Volume(if click && (inp.mouse.0 as i32) < bx + bw / 2 { -0.1 } else { 0.1 }))
             }
             MI::Fullscreen => Some(Req::Fullscreen),
+            MI::Shake => {
+                self.shake_opt = (self.shake_opt + 1) % 3;
+                save_shake(self.shake_opt);
+                None
+            }
+            MI::Controls => {
+                self.controls = true;
+                None
+            }
             MI::ToTitle => Some(Req::ToTitle),
             MI::Quit => Some(Req::Quit),
         };
@@ -124,4 +147,18 @@ impl Game {
             self.save();
         }
     }
+}
+
+/// screen shake is scaled by the player's setting
+pub fn shake_scale(opt: u8) -> f32 {
+    [1.0, 0.4, 0.0][opt.min(2) as usize]
+}
+pub fn load_shake() -> u8 {
+    std::fs::read_to_string("rendgrave_options.txt")
+        .ok()
+        .and_then(|t| t.lines().find_map(|l| l.strip_prefix("shake ").and_then(|v| v.trim().parse().ok())))
+        .unwrap_or(0)
+}
+fn save_shake(v: u8) {
+    let _ = std::fs::write("rendgrave_options.txt", format!("shake {}\n", v));
 }

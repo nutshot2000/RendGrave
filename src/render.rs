@@ -317,7 +317,7 @@ fn top_col(w: &World, i: usize, m: u8, x: i32, y: i32, t: u64, g: [u8; 3]) -> ([
 
 pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) {
     let (fw, fh) = (f.w as i32, f.h as i32);
-    let sh = g.shake;
+    let sh = g.shake * crate::menu::shake_scale(g.shake_opt);
     let (jx, jy) = if sh > 0.3 { (rr(-sh, sh) as i32, rr(-sh, sh) as i32) } else { (0, 0) };
     let cx = g.cam.0.floor() as i32 + jx;
     let cy = g.cam.1.floor() as i32 + jy;

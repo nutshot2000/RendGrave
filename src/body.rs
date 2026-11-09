@@ -37,6 +37,7 @@ pub enum PK {
 
 #[derive(Clone)]
 pub struct Part {
+    #[allow(dead_code)]
     pub k: PK,
     pub w: i32,
     pub h: i32,
@@ -185,6 +186,7 @@ impl Body {
     }
     /// position of a pixel relative to the feet (mirror applied)
     #[inline]
+    #[allow(dead_code)]
     pub fn rel(&self, i: usize, lx: f32, ly: f32) -> (f32, f32) {
         let (x, y) = self.xf[i].fwd(self.parts[i].pivot, lx, ly);
         (x * self.mx(), y)
@@ -316,7 +318,6 @@ impl Body {
                 if px.hp == 0 {
                     Self::strip(px);
                 }
-                pw = 0.0;
                 break;
             }
             let c = cost(px.m) + if px.im != 0 { cost(px.im) } else { 0.0 };

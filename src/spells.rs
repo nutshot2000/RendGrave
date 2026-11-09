@@ -608,6 +608,7 @@ impl Game {
     }
 
     /// keep the land populated: new groups rise away from the player
+    #[allow(dead_code)]
     pub fn respawn(&mut self) {
         self.spawn_t -= 1;
         if self.spawn_t > 0 {

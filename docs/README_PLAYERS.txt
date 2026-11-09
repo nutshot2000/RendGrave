@@ -23,7 +23,7 @@ F                   Drink a potion
 E                   Interact: exits, stairs, waypoints, chests, shrines, the merchant
 I                   Gear: click to equip, right click to sell
 K or Tab            Skill tree (A / D or click to change school)
-Esc                 Pause menu (settings, quit)
+Esc                 Pause menu (controls, sound, screen shake, fullscreen, quit)
 M / N               Music / sound on and off
 - / +               Volume
 F11                 Fullscreen
@@ -32,7 +32,7 @@ R                   After dying: wake in Ashford
 YOUR SAVE
 ---------
 The game saves by itself when you change area, open chests, change gear and quit.
-The save is rendgrave_save.txt next to the game. Settings are in rendgrave_settings.txt.
+The save is rendgrave_save.txt next to the game. Settings are in rendgrave_settings.txt and rendgrave_options.txt.
 
 WHERE TO GO
 -----------

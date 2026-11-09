@@ -152,6 +152,7 @@ pub enum PtK {
     Debris,
     Ice,
     Flame,
+    #[allow(dead_code)]
     Gold,
     Heal,
     Steam,
@@ -256,6 +257,10 @@ pub struct Game {
     pub novas: Vec<Nova>,
     pub cam: (f32, f32),
     pub shake: f32,
+    /// screen shake setting: 0 full, 1 low, 2 off
+    pub shake_opt: u8,
+    /// the controls page is open over a menu
+    pub controls: bool,
     pub flash: f32,
     pub hitstop: i32,
     pub frame: u64,
@@ -266,6 +271,7 @@ pub struct Game {
     pub fields: Vec<Field>,
     pub meteors: Vec<Meteor>,
     pub spikes: Vec<Spike>,
+    #[allow(dead_code)]
     pub spawn_t: i32,
     pub tree: bool,
     pub tree_hover: Option<usize>,
@@ -471,6 +477,8 @@ impl Game {
             novas: vec![],
             cam: (0.0, 0.0),
             shake: 0.0,
+            shake_opt: crate::menu::load_shake(),
+            controls: false,
             flash: 0.0,
             hitstop: 0,
             frame: 0,
@@ -709,6 +717,8 @@ impl Game {
         } else if inp.close && !self.prev.close {
             if self.tree {
                 self.tree = false;
+            } else if self.controls {
+                self.controls = false;
             } else if !self.player.dead && !menu_up {
                 self.paused = !self.paused;
                 self.menu_hover = None;
@@ -816,6 +826,7 @@ impl Game {
             }
         }
         self.update_player(&inp2);
+        self.update_talents();
         self.update_enemies();
         self.update_projs();
         self.update_gibs();
@@ -1087,7 +1098,6 @@ impl Game {
 
     fn sword_hit(&mut self, aim: f32, inp: &Input) {
         let (px, py) = (self.player.x, self.player.y);
-        let (mwx, mwy) = self.mouse_world(inp);
         // wooden things in the arc break
         for dy in -26i32..=26 {
             for dx in -34i32..=34 {

@@ -427,7 +427,7 @@ impl App {
             g.player.y = 660.0;
         }
         let at = |g: &game::Game, i: usize| (g.enemies[i].x, g.enemies[i].y);
-        let mut cast = |g: &mut game::Game, s: Sk, x: f32, y: f32| {
+        let cast = |g: &mut game::Game, s: Sk, x: f32, y: f32| {
             let i2 = inp.clone();
             g.cast(s, x, y, &i2);
         };
@@ -510,8 +510,11 @@ impl App {
                 self.game = g;
             }
             140 => return Some("m2_pause".into()),
-            141 => {
+            141 => self.game.controls = true,
+            143 => return Some("m2b_controls".into()),
+            144 => {
                 let g = &mut self.game;
+                g.controls = false;
                 g.paused = false;
                 g.ending = -1;
                 g.player.kills = 412;
@@ -519,8 +522,8 @@ impl App {
                 g.player.sk.level = 17;
                 g.played = 60 * 60 * 60 * 3 + 60 * 60 * 24;
             }
-            146 => return Some("m3_ending".into()),
-            147 => {
+            149 => return Some("m3_ending".into()),
+            150 => {
                 let g = &mut self.game;
                 g.ending = 0;
                 if let Some(m) = g.npcs.iter().find(|n| n.k == 0) {
@@ -531,7 +534,7 @@ impl App {
                 g.talk_to_maren();
                 g.talk.as_mut().unwrap().1 = 1;
             }
-            152 => return Some("m4_dialogue".into()),
+            156 => return Some("m4_dialogue".into()),
             _ => {}
         }
         None
@@ -829,7 +832,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
         if let Some(g) = &self.gfx {
             g.window.request_redraw();
         }
