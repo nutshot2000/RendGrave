@@ -1253,10 +1253,29 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         }
     }
     // interaction prompt
+    // interaction prompt: the button in a gold chip, the action beside it, twice the size of
+    // ordinary text and with a slowly pulsing frame, so you notice you can act here
     if let Some(pr) = &g.prompt {
-        let w = Ui::text_w(pr, 1);
-        u.rect(fw / 2 - w / 2 - 4, fh - 62, w + 8, 11, [10, 6, 10], 200);
-        u.text(fw / 2 - w / 2, fh - 59, pr, [255, 230, 150], 1, false);
+        let pr = crate::pad::tr(pr);
+        let (key, label) = pr.split_once("  ").unwrap_or(("", &pr));
+        let kw = if key.is_empty() { 0 } else { Ui::text_w(key, 2) + 8 };
+        let lw = Ui::text_w(label, 2);
+        let w = kw + lw + if key.is_empty() { 12 } else { 18 };
+        let (x0, y0, h) = (fw / 2 - w / 2, fh - 76, 20);
+        let pulse = 0.55 + (t as f32 * 0.1).sin() * 0.45;
+        u.rect(x0, y0, w, h, [12, 8, 14], 225);
+        let edge = [(255.0 * pulse) as u8, (200.0 * pulse) as u8, (110.0 * pulse) as u8];
+        u.rect(x0, y0, w, 1, edge, 255);
+        u.rect(x0, y0 + h - 1, w, 1, edge, 255);
+        u.rect(x0, y0, 1, h, edge, 255);
+        u.rect(x0 + w - 1, y0, 1, h, edge, 255);
+        let mut x = x0 + 6;
+        if !key.is_empty() {
+            u.rect(x, y0 + 3, kw, h - 6, [255, 204, 96], 255);
+            u.text(x + 4, y0 + 5, key, [30, 16, 10], 2, false);
+            x += kw + 6;
+        }
+        u.text(x, y0 + 5, label, [255, 240, 205], 2, true);
     }
     // controls hint for the first seconds
     if t < 900 && !g.press {
