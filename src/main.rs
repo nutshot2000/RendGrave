@@ -701,6 +701,20 @@ impl App {
                 g.puncture(n);
                 cam(g);
             }
+            490 => {
+                g.travel(areagen::AreaId::Ravenhold);
+                g.banner = None;
+                g.toast = None;
+                if let Some((sx, sy)) = g.setpiece {
+                    g.player.x = sx - 80.0;
+                    g.player.y = sy + 6.0;
+                    for e in g.enemies.iter_mut() {
+                        e.stun = 100000;
+                    }
+                    cam(g);
+                    g.cam.0 += 70.0;
+                }
+            }
             395 => {
                 if let Some(b) = g.enemies.iter().position(|e| e.k.boss() && e.alive) {
                     let m = g.enemies[b].maxhp;
@@ -721,7 +735,7 @@ impl App {
             }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
@@ -1073,7 +1087,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.extras {
-                shot.as_deref() == Some("x9_anatomy")
+                shot.as_deref() == Some("x10_bridge")
             } else if sh.menus {
                 shot.as_deref() == Some("m5_gift")
             } else if sh.tour {

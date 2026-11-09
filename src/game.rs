@@ -364,6 +364,8 @@ pub struct Game {
     pub part_hits: Vec<(usize, f32, f32)>,
     /// crossbows dropped by crossbowmen who lost their firing arm, still loaded
     pub loose_bows: Vec<crate::anatomy::LooseBow>,
+    /// a hand-built encounter in this area, and whether it has been announced this visit
+    pub setpiece: Option<(f32, f32)>,
     /// the starting gift (0 not chosen yet, 1 spark, 2 oil flasks, 3 weapon) and flasks left
     pub pick: u8,
     pub flasks: i32,
@@ -596,6 +598,7 @@ impl Game {
             hit_h: None,
             part_hits: vec![],
             loose_bows: vec![],
+            setpiece: None,
             pick: 0,
             flasks: 0,
             choice: None,
@@ -899,6 +902,13 @@ impl Game {
         self.update_player(&inp2);
         self.first_tips();
         self.ember_ring();
+        if let Some((sx, sy)) = self.setpiece {
+            if ((self.player.x - sx).powi(2) + (self.player.y - sy).powi(2)).sqrt() < 230.0 {
+                self.setpiece = None;
+                self.banner = Some(("THE RAVENHOLD BRIDGE".into(), "OIL IN THE DITCH, WOOD IN THE BARRICADE - FIND A WAY OVER".into(), 260));
+                self.snd(crate::audio::Sfx::Shout, sx, sy, 1.0);
+            }
+        }
         if let Some(m) = self.save_fail.borrow_mut().take() {
             self.toast = Some((m, 400));
         }

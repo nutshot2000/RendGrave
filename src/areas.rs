@@ -192,6 +192,7 @@ impl Game {
         self.merchant = sp.merchant;
         self.posts = sp.posts.clone();
         self.cracks = sp.cracks.clone();
+        self.setpiece = sp.setpiece;
         if to.is_dungeon() {
             self.seen.remove(&to.key());
         }

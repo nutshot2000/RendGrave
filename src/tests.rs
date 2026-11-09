@@ -361,3 +361,16 @@ fn respec_gives_every_point_back() {
     assert_eq!(g.player.gold, 1000 - 300);
     assert!(g.player.sk.rank.iter().all(|r| *r == 0));
 }
+
+#[test]
+fn ravenhold_bridge_is_built() {
+    for seed in [1u64, 2, 3] {
+        let (w, sp) = crate::areagen::generate(AreaId::Ravenhold, seed);
+        let (bx, by) = sp.setpiece.expect("the bridge set piece");
+        let (bx, by) = (bx as i32, by as i32);
+        let near = |m: u8| (-30..30).flat_map(|dx| (-70..70).map(move |dy| (dx, dy))).filter(|(dx, dy)| w.at(bx + dx, by + dy) == m).count();
+        assert!(near(crate::world::OIL) > 500, "oil in the ditch");
+        assert!(near(crate::world::WOOD) > 200, "a barricade");
+        assert!(w.at(bx, by) == crate::world::E, "the bridge is walkable");
+    }
+}
