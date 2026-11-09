@@ -788,6 +788,25 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             c.put(sx, sy - 14 - k, wy, [130, 150, 190], scl([80, 120, 255], pulse * 0.6), 14.0 + k as f32);
         }
     }
+    // ---- portal: a swirling violet gate where the boss fell
+    if let Some((qx, qy)) = g.portal {
+        let (sx, sy) = (qx as i32 - cx, qy as i32 - cy);
+        let tf = t as f32;
+        // rune ring on the floor
+        for k in 0..110 {
+            let a = k as f32 / 110.0 * std::f32::consts::TAU;
+            let (x, y) = (sx + (a.cos() * 17.0) as i32, sy + (a.sin() * 8.0) as i32);
+            c.glow(x, y, scl([150, 90, 255], 0.6 + (tf * 0.08 + a * 3.0).sin() * 0.3));
+        }
+        // the standing gate: an upright oval of spinning light
+        for k in 0..420 {
+            let a = k as f32 / 420.0 * std::f32::consts::TAU * 3.0 + tf * 0.05;
+            let r = 0.25 + 0.75 * ((k as f32 * 0.37 + tf * 0.11).sin() * 0.5 + 0.5);
+            let (x, y) = (sx + (a.cos() * 12.0 * r) as i32, sy - 26 + (a.sin() * 24.0 * r) as i32);
+            let col = if k % 7 == 0 { [220, 190, 255] } else { [130, 70, 240] };
+            c.put(x, y, qy + 0.5, scl(col, 0.5), scl(col, 0.6), (sy - y) as f32);
+        }
+    }
     // ---- pickups
     for p in &g.pickups {
         let (sx, sy) = (p.x as i32 - cx, (p.y - p.z) as i32 - cy - (((p.t as f32) * 0.08).sin() * 1.5) as i32);
@@ -1093,6 +1112,9 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     }
     if let Some((wx, wy)) = g.waypoint {
         add(wx, wy + 2.0, 90.0, 0.9, [0.45, 0.6, 1.0]);
+    }
+    if let Some((qx, qy)) = g.portal {
+        add(qx, qy - 14.0, 130.0, 1.6 + (t as f32 * 0.07).sin() * 0.2, [0.65, 0.45, 1.0]);
     }
     for &(bx, by) in &g.braziers {
         let fl = 1.0 + (t as f32 * 0.21 + bx).sin() * 0.08 + (t as f32 * 0.73 + by).sin() * 0.05;

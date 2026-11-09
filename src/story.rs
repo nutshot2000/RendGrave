@@ -111,6 +111,9 @@ impl Game {
             }
             return self.enemies.iter().find(|e| e.alive && e.k.boss()).map(|e| (e.x, e.y));
         }
+        if let Some(p) = self.portal {
+            return Some(p);
+        }
         let hop = next_hop(self.area, target)?;
         self.exits.iter().find(|e| e.to == hop).map(|e| (((e.x0 + e.x1) / 2) as f32, ((e.y0 + e.y1) / 2) as f32))
     }

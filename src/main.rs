@@ -615,9 +615,38 @@ impl App {
                     e.hp = -1.0;
                 }
             }
+            226 => {
+                // the Hollow King falls and a portal opens where he stood
+                g.travel(areagen::AreaId::Crypt(3));
+                g.banner = None;
+                if let Some(b) = g.enemies.iter().position(|e| e.k.boss()) {
+                    let (bx, by) = (g.enemies[b].x, g.enemies[b].y);
+                    g.player.x = bx + 40.0;
+                    g.player.y = by + 30.0;
+                    for (i, e) in g.enemies.iter_mut().enumerate() {
+                        if i == b {
+                            e.hp = -1.0;
+                        } else {
+                            e.alive = false;
+                        }
+                    }
+                }
+                cam(g);
+            }
+            300 => {
+                if let Some((qx, qy)) = g.portal {
+                    g.player.x = qx + 18.0;
+                    g.player.y = qy + 2.0;
+                    g.enemies.retain(|e| !e.k.boss() || e.alive);
+                    for e in g.enemies.iter_mut() {
+                        e.alive = false;
+                    }
+                }
+                cam(g);
+            }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
@@ -968,7 +997,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.extras {
-                shot.as_deref() == Some("x5_streak")
+                shot.as_deref() == Some("x6_portal")
             } else if sh.menus {
                 shot.as_deref() == Some("m4_dialogue")
             } else if sh.tour {

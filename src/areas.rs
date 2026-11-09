@@ -91,6 +91,9 @@ impl Game {
         self.area = to;
         self.alvl = to.level();
         let (king_dead, chief_dead) = (self.king_dead, self.chief_dead);
+        self.boss_spot = sp.enemies.iter().find(|e| e.0.boss()).map(|e| (e.1, e.2 + 10.0));
+        let boss_gone = sp.enemies.iter().any(|e| (e.0 == Kind::King && king_dead) || (e.0 == Kind::Chief && chief_dead));
+        self.portal = if boss_gone { self.boss_spot } else { None };
         self.enemies = sp.enemies.iter().filter(|e| !(e.0 == Kind::King && king_dead) && !(e.0 == Kind::Chief && chief_dead)).map(|&(k, x, y)| self.scaled_enemy(k, x, y)).collect();
         // now and then a grave robber is out on the prowl
         if !to.is_dungeon() && to != AreaId::Ashford && rnd() < 0.4 {
@@ -124,7 +127,12 @@ impl Game {
         self.fields.clear();
         self.meteors.clear();
         self.spikes.clear();
-        let (x, y) = if from == to { sp.start } else { sp.arrival(from) };
+        let (x, y) = match sp.waypoint {
+            Some((wx, wy)) if self.via_wp => (wx + 6.0, wy + 16.0),
+            _ if from == to => sp.start,
+            _ => sp.arrival(from),
+        };
+        self.via_wp = false;
         self.braziers = sp.braziers.clone();
         self.buildings = sp.buildings.clone();
         self.lamps = sp.lamps.clone();
@@ -209,6 +217,17 @@ impl Game {
                 return;
             }
         }
+        if let Some((qx, qy)) = self.portal {
+            if ((self.player.x - qx).powi(2) + ((self.player.y - qy) * 1.4).powi(2)).sqrt() < 22.0 {
+                self.prompt = Some("E  PORTAL - TRAVEL TO A WAYPOINT".into());
+                if press {
+                    self.snd(Sfx::Click, qx, qy, 0.8);
+                    self.wp_open = true;
+                    self.hold_block = true;
+                }
+                return;
+            }
+        }
         if let Some(m) = self.npcs.iter().find(|n| n.k == 0) {
             if ((self.player.x - m.x).powi(2) + ((self.player.y - m.y) * 1.4).powi(2)).sqrt() < 28.0 {
                 self.prompt = Some("E  TALK TO ELDER MAREN".into());
@@ -264,6 +283,7 @@ impl Game {
             self.wp_open = false;
             self.hold_block = true;
             if to != self.area {
+                self.via_wp = true;
                 self.travel(to);
             }
         }
@@ -313,6 +333,7 @@ impl Game {
             self.pickups.push(Pickup { k: 0, x: x + rr(-16.0, 16.0), y: y + rr(-8.0, 8.0), z: 14.0, vz: rr(1.5, 3.0), amt: 60 + ri(50) as i32, t: k * 5 });
         }
         self.flash = 0.2;
+        self.open_portal();
         self.save();
     }
 
@@ -329,7 +350,20 @@ impl Game {
             self.pickups.push(Pickup { k: 2, x, y: y + 6.0, z: 16.0, vz: 3.0, amt: i as i32, t: 0 });
         }
         self.flash = 0.25;
+        self.open_portal();
         self.save();
+    }
+
+    /// the boss is dead: a way home opens where it stood
+    pub fn open_portal(&mut self) {
+        let Some((x, y)) = self.boss_spot else { return };
+        self.portal = Some((x, y));
+        for _ in 0..60 {
+            let a = rnd() * std::f32::consts::TAU;
+            self.ptc(x, y, rr(5.0, 40.0), a.cos() * rr(0.5, 2.5), a.sin() * rr(0.3, 1.5), rr(0.5, 2.0), 80, PtK::Spark, [170, 120, 255]);
+        }
+        self.light(x, y - 20.0, 200.0, 2.5, [0.7, 0.5, 1.0], 60);
+        self.toast = Some(("A PORTAL HOME HAS OPENED".into(), 300));
     }
 
     // ---------------------------------------------------------------- saving

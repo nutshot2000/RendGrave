@@ -885,6 +885,12 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
             }
         }
     }
+    if let Some((qx, qy)) = g.portal {
+        let (x, y) = (ox + (qx / sx) as i32, oy + (qy / sy) as i32);
+        for &(dx, dy) in &[(0, 0), (1, 0), (0, 1), (1, 1)] {
+            u.px(x + dx, y + dy, [190, 130, 255], 255);
+        }
+    }
     if let Some((wx, wy)) = g.waypoint {
         let (x, y) = (ox + (wx / sx) as i32, oy + (wy / sy) as i32);
         u.px(x, y, [120, 170, 255], 255);

@@ -283,6 +283,12 @@ pub struct Game {
     pub alvl: i32,
     pub exits: Vec<Exit>,
     pub waypoint: Option<(f32, f32)>,
+    /// the way out of a dungeon once its boss is dead
+    pub portal: Option<(f32, f32)>,
+    /// where this floor's boss stands, for the portal
+    pub boss_spot: Option<(f32, f32)>,
+    /// set while travelling by waypoint or portal: arrive at the stone
+    pub via_wp: bool,
     pub discovered: Vec<AreaId>,
     pub wp_open: bool,
     pub wp_hover: Option<usize>,
@@ -499,6 +505,9 @@ impl Game {
             alvl: 1,
             exits: vec![],
             waypoint: None,
+            portal: None,
+            boss_spot: None,
+            via_wp: false,
             discovered: vec![],
             wp_open: false,
             wp_hover: None,
