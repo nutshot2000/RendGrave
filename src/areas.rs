@@ -115,6 +115,9 @@ impl Game {
         self.waypoint = sp.waypoint;
         self.merchant = sp.merchant;
         self.posts = sp.posts.clone();
+        if to.is_dungeon() {
+            self.seen.remove(&to.key());
+        }
         self.npcs = match sp.maren {
             Some(m) => crate::story::town_folk(m, &self.world),
             None => vec![],
@@ -332,6 +335,18 @@ impl Game {
             format!("played {}", self.played),
         ];
         let mut lines: Vec<String> = lines.to_vec();
+        // explored minimap, packed into hex, for the outdoor areas
+        for (k, v) in &self.seen {
+            if AreaId::from_key(k).map(|a| a.is_dungeon()).unwrap_or(true) {
+                continue;
+            }
+            let mut hex = String::new();
+            for c in v.chunks(4) {
+                let n = c.iter().enumerate().fold(0u8, |a, (i, b)| a | ((*b as u8) << i));
+                hex.push(char::from_digit(n as u32, 16).unwrap());
+            }
+            lines.push(format!("seen_{} {}", k, hex));
+        }
         for (k, it) in self.player.equip.iter().enumerate() {
             if let Some(it) = it {
                 lines.push(format!("equip{} {}", k, it.encode()));
@@ -372,6 +387,17 @@ impl Game {
                 "chief" => self.chief_dead = v == "1",
                 "act1" => self.act1_done = v == "1",
                 "story" => self.story = v.parse().unwrap_or(0),
+                _ if k.starts_with("seen_") => {
+                    let mut out = vec![];
+                    for ch in v.chars() {
+                        let n = ch.to_digit(16).unwrap_or(0);
+                        for i in 0..4 {
+                            out.push(n & (1 << i) != 0);
+                        }
+                    }
+                    out.resize(crate::game::MM.0 * crate::game::MM.1, false);
+                    self.seen.insert(k[5..].to_string(), out);
+                }
                 "played" => self.played = v.parse().unwrap_or(0),
                 "equip0" | "equip1" | "equip2" | "equip3" => {
                     if !gear_loaded {

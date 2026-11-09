@@ -117,13 +117,19 @@ impl Game {
 
     /// entering an area can tick off an objective
     pub fn story_arrive(&mut self, to: AreaId) {
-        if to == AreaId::Crypt(1) && self.has(MET) && !self.has(IN_CRYPT) {
+        let before = self.objective().map(|o| o.0);
+        if to == AreaId::Crypt(1) && self.has(MET) {
             self.story |= IN_CRYPT;
-            self.toast = Some(("OBJECTIVE: SLAY THE HOLLOW KING".into(), 200));
         }
-        if to == AreaId::Ravenhold && !self.has(AT_RAVENHOLD) {
+        if to == AreaId::Ravenhold {
             self.story |= AT_RAVENHOLD;
-            self.toast = Some(("OBJECTIVE: SLAY THE BANDIT CHIEF".into(), 200));
+        }
+        // tell the player when that changed what they're doing
+        let after = self.objective().map(|o| o.0);
+        if after != before {
+            if let Some(a) = after {
+                self.toast = Some((format!("NEW OBJECTIVE: {}", a), 220));
+            }
         }
     }
 

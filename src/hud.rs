@@ -802,6 +802,11 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
     u.rect(ox - 2, oy - 2, mw + 4, mh + 4, [70, 58, 66], 220);
     for y in 0..mh {
         for x in 0..mw {
+            if !g.seen_at(x as usize, y as usize) {
+                // not explored yet
+                u.px(ox + x, oy + y, [12, 10, 16], 220);
+                continue;
+            }
             let (wx, wy) = ((x as f32 * sx) as usize, (y as f32 * sy) as usize);
             let i = wy * W + wx;
             let m = g.world.m[i];
@@ -841,17 +846,18 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
         u.px(rx, ry + k, [200, 190, 170], 140);
         u.px(rx + rw, ry + k, [200, 190, 170], 140);
     }
-    for ch in g.chests.iter().filter(|c| !c.open) {
+    let seen_w = |x: f32, y: f32| g.seen_at(((x / sx) as usize).min(83), ((y / sy) as usize).min(62));
+    for ch in g.chests.iter().filter(|c| !c.open && seen_w(c.x, c.y)) {
         u.px(ox + (ch.x / sx) as i32, oy + (ch.y / sy) as i32, [255, 210, 60], 255);
     }
-    for s in g.shrines.iter().filter(|s| !s.used) {
+    for s in g.shrines.iter().filter(|s| !s.used && seen_w(s.x, s.y)) {
         let c = crate::props::SHRINES[s.k as usize].2;
         let (x, y) = (ox + (s.x / sx) as i32, oy + (s.y / sy) as i32);
         for &(dx, dy) in &[(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
             u.px(x + dx, y + dy, c, 255);
         }
     }
-    for e in &g.enemies {
+    for e in g.enemies.iter().filter(|e| g.seen_at(((e.x / sx) as usize).min(83), ((e.y / sy) as usize).min(62))) {
         if e.alive {
             let (x, y) = (ox + (e.x / sx) as i32, oy + (e.y / sy) as i32);
             if x >= ox && y >= oy && x < ox + mw && y < oy + mh {
@@ -1450,7 +1456,7 @@ fn draw_guide(g: &Game, u: &mut Ui, fw: i32, fh: i32, cx: i32, cy: i32) {
     let tx = if ux.abs() > 1e-3 { ((fw / 2 - m) as f32 / ux.abs()).min(1e9) } else { 1e9 };
     let ty = if uy.abs() > 1e-3 { ((fh / 2 - m - 30) as f32 / uy.abs()).min(1e9) } else { 1e9 };
     let tt = tx.min(ty);
-    let (ax, ay) = (pcx as f32 + ux * tt, pcy as f32 + uy * tt);
+    let (ax, ay) = (pcx as f32 + ux * tt, (pcy as f32 + uy * tt).clamp(50.0, fh as f32 - 100.0));
     let pulse = (200.0 + (g.frame as f32 * 0.15).sin() * 55.0) as u8;
     for k in 0..8 {
         let w = (8 - k) as f32 * 0.6;

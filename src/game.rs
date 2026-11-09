@@ -287,6 +287,8 @@ pub struct Game {
     /// open dialogue: its pages and the page shown
     pub talk: Option<(Vec<&'static str>, usize)>,
     pub npcs: Vec<crate::story::Npc>,
+    /// minimap fog of war: which minimap cells you've seen, per area (dungeons reset each visit)
+    pub seen: std::collections::HashMap<String, Vec<bool>>,
     /// screenshots for the store page: hide hints, banners and toasts
     pub press: bool,
     /// counts down to the end-of-act card; -1 while the card is showing
@@ -483,6 +485,7 @@ impl Game {
             story: 0,
             talk: None,
             npcs: vec![],
+            seen: std::collections::HashMap::new(),
             press: false,
             ending: 0,
             played: 0,
@@ -796,6 +799,10 @@ impl Game {
         self.update_area(&inp2);
         self.update_ground();
         self.update_npcs();
+        self.ambient();
+        if self.frame % 6 == 0 {
+            self.reveal();
+        }
         self.tick_buffs();
         self.update_barrels();
         self.prev = inp.clone();
@@ -2399,4 +2406,29 @@ pub fn jag(a: (f32, f32), b: (f32, f32)) -> Vec<(f32, f32)> {
         amp *= 0.5;
     }
     pts
+}
+
+/// minimap size in cells
+pub const MM: (usize, usize) = (84, 63);
+
+impl Game {
+    /// uncover the minimap around you
+    pub fn reveal(&mut self) {
+        let key = self.area.key();
+        let (sx, sy) = (self.world.aw as f32 / MM.0 as f32, self.world.ah as f32 / MM.1 as f32);
+        let (px, py) = (self.player.x / sx, self.player.y / sy);
+        let (rx, ry) = (230.0 / sx, 170.0 / sy);
+        let v = self.seen.entry(key).or_insert_with(|| vec![false; MM.0 * MM.1]);
+        for y in (py - ry).floor().max(0.0) as usize..((py + ry).ceil() as usize).min(MM.1) {
+            for x in (px - rx).floor().max(0.0) as usize..((px + rx).ceil() as usize).min(MM.0) {
+                let (dx, dy) = ((x as f32 + 0.5 - px) / rx, (y as f32 + 0.5 - py) / ry);
+                if dx * dx + dy * dy < 1.0 {
+                    v[y * MM.0 + x] = true;
+                }
+            }
+        }
+    }
+    pub fn seen_at(&self, x: usize, y: usize) -> bool {
+        self.seen.get(&self.area.key()).map(|v| v[y * MM.0 + x]).unwrap_or(false)
+    }
 }
