@@ -1019,6 +1019,9 @@ fn draw_tree(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
         u.text(18, ty + 8, "HOVER A SKILL TO SEE WHAT IT DOES. EARN POINTS BY LEVELLING UP.", [200, 190, 190], 1, false);
         u.text(18, ty + 18, "EACH SCHOOL SPLITS INTO TWO PATHS. EITHER PATH LEADS TO ITS ULTIMATE.", [160, 150, 160], 1, false);
         u.text(18, ty + 28, "ULTIMATE SPELLS ALSO NEED THEIR TOME, FOUND IN THE WORLD.", [160, 150, 160], 1, false);
+        if crate::pad::active() {
+            u.text(18, ty + 40, "TO CHOOSE YOUR X, Y AND B SPELLS: POINT AT A SPELL YOU KNOW AND PRESS X, Y OR B.", [120, 200, 255], 1, false);
+        }
     }
 }
 
