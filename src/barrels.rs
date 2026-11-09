@@ -104,8 +104,8 @@ impl Game {
                     if f % 2 == 0 {
                         self.ptc(x + rr(-1.0, 1.0), y, 15.0, rr(-0.6, 0.6), rr(-0.3, 0.3), rr(0.6, 1.6), 14, PtK::Spark, [255, 200, 90]);
                     }
-                    if f % 12 == 0 {
-                        self.snd(Sfx::Zap, x, y, 0.25);
+                    if f % 16 == 0 {
+                        self.snd(Sfx::Fuse, x, y, 0.55);
                     }
                     self.light(x, y - 16.0, 30.0, 0.6, [1.0, 0.6, 0.2], 2);
                 } else if b.fuse == 0 {
@@ -139,7 +139,7 @@ impl Game {
         self.clear_barrel(i);
         self.snd(Sfx::Wood, x, y, 1.0);
         let m = if k == 2 { ACID } else { OIL };
-        self.snd(if k == 2 { Sfx::Acid } else { Sfx::HitFlesh }, x, y, 0.7);
+        self.snd(if k == 2 { Sfx::Acid } else { Sfx::Splash }, x, y, 0.8);
         let r = 15.0;
         for dy in -(r as i32)..=r as i32 {
             for dx in -(r as i32) * 2..=(r as i32) * 2 {

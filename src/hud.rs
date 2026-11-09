@@ -22,6 +22,8 @@ const FONT: &[(char, &str)] = &[
     ('6', "011100111101111"), ('7', "111001010010010"), ('8', "111101111101111"), ('9', "111101111001110"),
     ('-', "000000111000000"), ('.', "000000000000010"), ('!', "010010010000010"), (':', "000010000010000"),
     ('+', "000010111010000"), ('/', "001001010100100"), ('%', "101001010100101"), (' ', "000000000000000"),
+    ('\'', "010010000000000"), (',', "000000000010100"), ('(', "010100100100010"), (')', "010001001001010"),
+    ('<', "001010100010001"), ('>', "100010001010100"), ('?', "110001010000010"), ('=', "000111000111000"),
 ];
 
 fn glyph(ch: char) -> &'static str {
@@ -1106,7 +1108,11 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     }
     u.text(qx + 5, qy + 2, &format!("{} F", p.potions), [255, 200, 200], 1, true);
     // spell bar: every learned spell
-    let bar = p.sk.bar();
+    let full = p.sk.bar();
+    // at most 12 slots on screen; the window follows the selected spell
+    let vis = 12usize;
+    let start = if full.len() > vis { p.sel.saturating_sub(vis / 2).min(full.len() - vis) } else { 0 };
+    let bar: Vec<_> = full.iter().copied().skip(start).take(vis).collect();
     let n = bar.len() as i32;
     let sw = 20;
     let total = (n * sw + (n - 1) * 3).max(0);
@@ -1117,8 +1123,15 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     } else {
         u.text_c(fw / 2, by + 6, "NO SPELLS YET - LEVEL UP AND PRESS K", [150, 140, 150], 1);
     }
-    for (k, &s) in bar.iter().enumerate() {
-        let x = bx + k as i32 * (sw + 3);
+    if start > 0 {
+        u.text(bx - 12, by + 6, "<", [240, 214, 150], 1, true);
+    }
+    if start + bar.len() < full.len() {
+        u.text(bx + total + 7, by + 6, ">", [240, 214, 150], 1, true);
+    }
+    for (k0, &s) in bar.iter().enumerate() {
+        let k = k0 + start;
+        let x = bx + k0 as i32 * (sw + 3);
         let nd = node(s);
         let sel = p.sel == k;
         let rim = if sel { [240, 196, 80] } else { [90, 74, 84] };
@@ -1137,7 +1150,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
             u.text(x + 1, by + 1, &format!("{}", k + 1), [230, 220, 200], 1, true);
         }
     }
-    if let Some(&s) = bar.get(p.sel) {
+    if let Some(&s) = full.get(p.sel) {
         u.text_c(fw / 2, by - 17, node(s).name, [240, 214, 150], 1);
     }
     // experience

@@ -34,6 +34,13 @@ YOUR SAVE
 The game saves by itself when you change area, open chests, change gear and quit.
 The save is rendgrave_save.txt next to the game. Settings are in rendgrave_settings.txt.
 
+WHERE TO GO
+-----------
+Talk to Elder Maren by the fire in Ashford. The line under the area name always says what
+to do next, and a gold marker (or an arrow at the edge of the screen) points the way.
+Roads are lined with lanterns, and every exit is marked with lit posts and its name.
+The minimap fills in as you explore.
+
 WHAT'S IN ACT I
 ---------------
 Ashford, the Hollow Pines, the Sunken Crypt, the Old Graveyard, the Blackwater Fen,

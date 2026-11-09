@@ -873,7 +873,7 @@ impl Game {
             if l > 0.0 && p.dodge == 0 && p.slip == 0 && p.sk.r(Sk::Titan) == 0 && rnd() < 0.005 {
                 p.slip = 34;
                 p.slide = (dx * 2.6, dy * 2.6);
-                self.sounds.push(Snd { k: Sfx::Dodge, x: p.x, y: p.y, v: 0.9 });
+                self.sounds.push(Snd { k: Sfx::Slip, x: p.x, y: p.y, v: 0.9 });
             }
         }
         if p.swing > 0 {
@@ -1783,7 +1783,7 @@ impl Game {
                 let k = match e.k {
                     Kind::Zombie | Kind::Crawler | Kind::Bloater => Sfx::Groan,
                     Kind::Brute | Kind::Chief => Sfx::Roar,
-                    Kind::Bandit | Kind::Crossbow => Sfx::HitMetal,
+                    Kind::Bandit | Kind::Crossbow => Sfx::Shout,
                     Kind::King => Sfx::KingRoar,
                     _ => Sfx::Rattle,
                 };
@@ -1803,7 +1803,7 @@ impl Game {
                 e.stun = e.stun.max(75);
                 e.vx += e.face * 2.5;
                 let (sx3, sy3) = (e.x, e.y);
-                self.sounds.push(Snd { k: Sfx::Dodge, x: sx3, y: sy3, v: 0.7 });
+                self.sounds.push(Snd { k: Sfx::Slip, x: sx3, y: sy3, v: 0.8 });
             }
             let e = &mut self.enemies[i];
             let crawling = legs == 0 || e.slip > 0;

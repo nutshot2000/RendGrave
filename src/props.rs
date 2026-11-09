@@ -89,8 +89,8 @@ impl Game {
                 let c = SHRINES[k].2;
                 let cf = [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0];
                 self.light(sx, sy - 20.0, 180.0, 2.5, cf, 50);
-                self.snd(Sfx::Chime, sx, sy, 1.0);
-                self.snd(Sfx::LevelUp, sx, sy, 0.5);
+                self.snd(Sfx::Shrine, sx, sy, 1.0);
+                self.snd(Sfx::Chime, sx, sy, 0.4);
                 self.banner = Some((SHRINES[k].0.into(), SHRINES[k].1.into(), 170));
                 for _ in 0..60 {
                     self.ptc(px + rr(-10.0, 10.0), py, rr(0.0, 50.0), rr(-0.6, 0.6), rr(-0.4, 0.4), rr(0.5, 2.5), 60, PtK::Spark, c);
@@ -110,7 +110,7 @@ impl Game {
     fn open_chest(&mut self, i: usize) {
         let (x, y, tier) = (self.chests[i].x, self.chests[i].y, self.chests[i].tier);
         self.chests[i].open = true;
-        self.snd(Sfx::Wood, x, y, 0.9);
+        self.snd(Sfx::ChestOpen, x, y, 1.0);
         self.snd(Sfx::Coin, x, y, 0.8);
         let fortune = self.rank(crate::skills::Sk::Fortune) as f32;
         let lv = self.alvl;

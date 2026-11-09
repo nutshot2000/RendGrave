@@ -27,6 +27,7 @@ The world is simulated too. Light a powder keg and run. Shoot an oil barrel and 
 - **Loot that matters:** five weapon types that fight differently, magic and rare affixes, legendaries with unique powers, champions that glow
 - **A big, handmade-feeling world:** a burning-lit town, haunted pines, a sunken crypt, an old graveyard, a black fen, a bandit castle and its cellars
 - **Two bosses:** the Hollow King and the Bandit Chief
+- **A story to follow:** Elder Maren sets you on your way, an objective tracker and guide marker show where to go, and the map fills in as you explore
 - **Original chiptune soundtrack** and synthesised sound
 
 ### Early Access

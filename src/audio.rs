@@ -42,6 +42,12 @@ pub enum Sfx {
     Whirl,
     Wood,
     Crumble,
+    Fuse,
+    Slip,
+    ChestOpen,
+    Shrine,
+    Shout,
+    Splash,
 }
 
 pub struct Snd {

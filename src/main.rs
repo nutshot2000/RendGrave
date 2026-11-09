@@ -504,6 +504,18 @@ impl App {
                 g.played = 60 * 60 * 60 * 3 + 60 * 60 * 24;
             }
             146 => return Some("m3_ending".into()),
+            147 => {
+                let g = &mut self.game;
+                g.ending = 0;
+                if let Some(m) = g.npcs.iter().find(|n| n.k == 0) {
+                    g.player.x = m.x + 20.0;
+                    g.player.y = m.y + 10.0;
+                    g.cam = (g.player.x - g.view.0 / 2.0, g.player.y - 26.0 - g.view.1 / 2.0);
+                }
+                g.talk_to_maren();
+                g.talk.as_mut().unwrap().1 = 1;
+            }
+            152 => return Some("m4_dialogue".into()),
             _ => {}
         }
         None
@@ -853,7 +865,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.menus {
-                shot.as_deref() == Some("m3_ending")
+                shot.as_deref() == Some("m4_dialogue")
             } else if sh.tour {
                 shot.as_deref() == Some("t15_shop")
             } else if sh.spells {
