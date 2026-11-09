@@ -129,6 +129,12 @@ fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
         DIRT => scl([92, 72, 54], 0.82 + n * 0.25 + s * 0.12),
         MUD => scl([62, 50, 40], 0.85 + s * 0.15),
         BURNT => scl([38, 33, 31], 0.85 + s * 0.2),
+        ROAD => {
+            // packed earth with cobbles showing through
+            let cob = h2(x / 3, y / 2 + (x / 3) % 2, 13);
+            let base = if cob > 0.62 { [128, 112, 90] } else { [112, 92, 66] };
+            scl(base, 0.84 + n * 0.2 + s * 0.1)
+        }
         PEAT => {
             let fib = vnoise(x as f32 * 0.5, y as f32 * 0.12, 61);
             scl([54, 42, 32], 0.75 + fib * 0.35 + s * 0.1)
@@ -512,6 +518,70 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             }
         }
     }
+    // ---- townsfolk: Elder Maren with her staff and lantern, villagers in plain clothes
+    for n in &g.npcs {
+        let (sx, sy) = (n.x as i32 - cx, n.y as i32 - cy);
+        shadow(&mut c, n.x, n.y, 6.0);
+        let pal: [[u8; 3]; 5] = [[86, 98, 80], [124, 72, 50], [70, 92, 124], [116, 104, 62], [92, 62, 96]];
+        let robe = pal[n.k as usize % 5];
+        let hair: [u8; 3] = if n.k == 0 { [214, 210, 200] } else { [[60, 40, 30], [150, 110, 60], [40, 30, 26], [110, 70, 40]][n.k as usize % 4] };
+        let walk = (n.phase.sin() * 2.0) as i32;
+        // legs
+        for k in 0..9 {
+            c.put(sx - 2 + if k < 5 { walk / 2 } else { 0 }, sy - k, n.y, [56, 46, 40], [0; 3], k as f32);
+            c.put(sx + 1 - if k < 5 { walk / 2 } else { 0 }, sy - k, n.y, [48, 40, 36], [0; 3], k as f32);
+        }
+        // body: a robe for Maren, tunic and belt for villagers
+        for k in 9..27 {
+            let half = if n.k == 0 { 4 + (27 - k) / 7 } else { 4 };
+            for dx in -half..=half {
+                let shade = 0.78 + (dx + half) as f32 / (2 * half) as f32 * 0.35;
+                let belt = n.k != 0 && k == 15;
+                let col = if belt { [60, 40, 28] } else { scl(robe, shade) };
+                c.put(sx + dx, sy - k, n.y, col, [0; 3], k as f32);
+            }
+        }
+        // head
+        let f = n.face as i32;
+        for dy in 0..7 {
+            for dx in -3i32..=3 {
+                let hairy = dy > 4 || (dx * f < -1 && dy > 1);
+                let col = if hairy { hair } else { [214, 172, 138] };
+                c.put(sx + dx, sy - 27 - dy, n.y, col, [0; 3], 27.0 + dy as f32);
+            }
+        }
+        c.put(sx + f * 2, sy - 30, n.y + 0.1, [30, 20, 20], [0; 3], 30.0);
+        if n.k == 0 {
+            // her staff, with a little lantern hung on it
+            for k in 0..38 {
+                c.put(sx + f * 7, sy - k, n.y + 0.2, [100, 72, 44], [0; 3], k as f32);
+            }
+            let fl = 0.8 + (t as f32 * 0.21).sin() * 0.15;
+            for &(dx, dy) in &[(0, 0), (1, 0), (0, 1), (1, 1)] {
+                c.put(sx + f * 7 + dx, sy - 40 + dy, n.y + 0.3, [255, 220, 150], scl([255, 180, 90], fl), 40.0);
+            }
+        }
+    }
+    // ---- lantern posts: a pole with a lantern hung from a short arm
+    for &(px, py) in &g.posts {
+        let (sx, sy) = (px as i32 - cx, py as i32 - cy);
+        shadow(&mut c, px, py, 3.0);
+        for k in 0..28 {
+            c.put(sx, sy - k, py, [86, 62, 40], [0; 3], k as f32);
+            c.put(sx + 1, sy - k, py, [66, 48, 32], [0; 3], k as f32);
+        }
+        for dx in 0..6 {
+            c.put(sx + dx, sy - 28, py, [80, 58, 38], [0; 3], 28.0);
+        }
+        c.put(sx + 5, sy - 27, py, [60, 60, 66], [0; 3], 27.0);
+        let fl = 0.85 + (t as f32 * 0.19 + px).sin() * 0.1;
+        for dy in 0..4 {
+            for dx in 4..7 {
+                let rim = dx == 4 || dx == 6 || dy == 0 || dy == 3;
+                c.put(sx + dx, sy - 26 + dy, py + 0.1, if rim { [70, 66, 70] } else { [255, 214, 130] }, if rim { [0; 3] } else { scl([255, 170, 70], fl) }, 26.0 - dy as f32);
+            }
+        }
+    }
     // ---- barrels: powder kegs (painted cross), oil (dark, steel hoops), acid (green, glowing seam)
     for b in g.barrels.iter().filter(|b| b.alive) {
         let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);
@@ -872,6 +942,10 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
     for &(lx, ly, lc) in &g.lamps {
         let fl = 1.0 + (t as f32 * 0.17 + lx).sin() * 0.06;
         add(lx, ly, 90.0, 1.3 * fl, lc);
+    }
+    for &(px, py) in &g.posts {
+        let fl = 1.0 + (t as f32 * 0.19 + px).sin() * 0.07;
+        add(px + 4.0, py + 2.0, 85.0, 1.1 * fl, [1.0, 0.68, 0.32]);
     }
     for l in &g.lights {
         let k = if l.max > 0 { l.t as f32 / l.max as f32 } else { 1.0 };

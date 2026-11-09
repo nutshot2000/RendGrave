@@ -822,6 +822,7 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
                     DIRT | MUD => [70, 56, 42],
                     BURNT => [30, 26, 26],
                     PEAT => [44, 34, 26],
+                    ROAD => [150, 124, 84],
                     _ => [36, 60, 34],
                 },
             } };
@@ -855,6 +856,24 @@ fn minimap(g: &Game, u: &mut Ui, fw: i32, cx: i32, cy: i32) {
             let (x, y) = (ox + (e.x / sx) as i32, oy + (e.y / sy) as i32);
             if x >= ox && y >= oy && x < ox + mw && y < oy + mh {
                 u.px(x, y, if e.k.big() { [255, 150, 40] } else { [230, 50, 50] }, 255);
+            }
+        }
+    }
+    // exits: a bright notch where each one leaves the map
+    for e in &g.exits {
+        let (x0, y0) = (ox + (e.x0 as f32 / sx) as i32, oy + (e.y0 as f32 / sy) as i32);
+        let (x1, y1) = (ox + (e.x1 as f32 / sx) as i32, oy + (e.y1 as f32 / sy) as i32);
+        for y in y0..=y1.max(y0 + 1) {
+            for x in x0..=x1.max(x0 + 1) {
+                u.px(x, y, [235, 235, 255], 255);
+            }
+        }
+    }
+    if let Some((gx, gy)) = g.guide() {
+        if (g.frame / 15) % 2 == 0 {
+            let (x, y) = (ox + (gx / sx) as i32, oy + (gy / sy) as i32);
+            for &(dx, dy) in &[(0, -2), (-1, -1), (0, -1), (1, -1), (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0), (-1, 1), (0, 1), (1, 1), (0, 2)] {
+                u.px(x + dx, y + dy, [255, 214, 90], 255);
             }
         }
     }
@@ -1141,13 +1160,17 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     let _ = alive;
     u.text(8, 8, &g.area.name(), [220, 205, 170], 1, true);
     u.text(8, 17, &format!("AREA LEVEL {}", g.alvl), [150, 140, 150], 1, true);
+    if let Some((obj, _)) = g.objective() {
+        let pulse = 0.8 + (t as f32 * 0.08).sin() * 0.2;
+        u.text(8, 27, &obj, [(255.0 * pulse) as u8, (214.0 * pulse) as u8, 90], 1, true);
+    }
     if let Some((k, left)) = g.buff {
         let (name, _, c) = crate::props::SHRINES[k as usize];
         let s = left / 60;
         let txt = format!("{}  {}:{:02}", name.trim_start_matches("SHRINE OF "), s / 60, s % 60);
         let blink = left > 600 || (left / 15) % 2 == 0;
         if blink {
-            u.text(8, 27, &txt, c, 1, true);
+            u.text(8, 37, &txt, c, 1, true);
         }
     }
     // boss health
@@ -1206,6 +1229,9 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     if g.shop_open {
         draw_shop(g, &mut u, fw, fh);
     }
+    draw_guide(g, &mut u, fw, fh, cx, cy);
+    draw_exit_labels(g, &mut u, fw, fh, cx, cy);
+    draw_talk(g, &mut u, fw, fh);
     if g.ending == -1 {
         draw_ending(g, &mut u, fw, fh);
     }
@@ -1396,5 +1422,91 @@ fn draw_ending(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     u.text_c(fw / 2, fh / 2 + 58, "KEEP EXPLORING, HUNT CHAMPIONS AND LEGENDARIES, OR STOP HERE", [150, 140, 150], 1);
     if (g.frame / 30) % 2 == 0 {
         u.text_c(fw / 2, fh - 30, "CLICK TO CONTINUE", [255, 214, 90], 1);
+    }
+}
+
+// ------------------------------------------------------------------ story
+/// the gold chevron over your objective, or an arrow at the screen edge pointing to it
+fn draw_guide(g: &Game, u: &mut Ui, fw: i32, fh: i32, cx: i32, cy: i32) {
+    let Some((gx, gy)) = g.guide() else { return };
+    if g.player.dead || g.tree || g.inv_open || g.shop_open || g.wp_open || g.paused {
+        return;
+    }
+    let (sx, sy) = (gx as i32 - cx, gy as i32 - cy - 56);
+    let col = [255, 214, 90];
+    let m = 18;
+    if sx >= m && sx < fw - m && sy >= m + 40 && sy < fh - 70 {
+        let bob = ((g.frame as f32 * 0.1).sin() * 3.0) as i32;
+        for k in 0..5 {
+            u.rect(sx - 4 + k, sy + bob + k, 9 - k * 2, 1, col, 230);
+        }
+        return;
+    }
+    // off screen: a small arrow at the edge, pointing the way
+    let (pcx, pcy) = (fw / 2, fh / 2);
+    let (dx, dy) = ((sx - pcx) as f32, (sy - pcy) as f32);
+    let l = (dx * dx + dy * dy).sqrt().max(1.0);
+    let (ux, uy) = (dx / l, dy / l);
+    let tx = if ux.abs() > 1e-3 { ((fw / 2 - m) as f32 / ux.abs()).min(1e9) } else { 1e9 };
+    let ty = if uy.abs() > 1e-3 { ((fh / 2 - m - 30) as f32 / uy.abs()).min(1e9) } else { 1e9 };
+    let tt = tx.min(ty);
+    let (ax, ay) = (pcx as f32 + ux * tt, pcy as f32 + uy * tt);
+    let pulse = (200.0 + (g.frame as f32 * 0.15).sin() * 55.0) as u8;
+    for k in 0..8 {
+        let w = (8 - k) as f32 * 0.6;
+        let (bx, by) = (ax - ux * k as f32, ay - uy * k as f32);
+        for s in -(w as i32)..=(w as i32) {
+            u.px((bx - uy * s as f32) as i32, (by + ux * s as f32) as i32, col, pulse);
+        }
+    }
+}
+
+/// the dialogue box at the foot of the screen
+fn draw_talk(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
+    let Some((pages, page)) = &g.talk else { return };
+    let (x, y, w, h) = (30, fh - 92, fw - 60, 62);
+    u.rect(x, y, w, h, [16, 11, 14], 238);
+    u.rect(x, y, w, 1, [200, 170, 110], 255);
+    u.rect(x, y + h - 1, w, 1, [90, 70, 50], 255);
+    // a little portrait: Maren's lantern-lit face
+    u.rect(x + 8, y + 10, 26, 30, [40, 30, 34], 255);
+    u.rect(x + 13, y + 14, 16, 12, [214, 172, 138], 255);
+    u.rect(x + 11, y + 12, 20, 4, [214, 210, 200], 255);
+    u.rect(x + 11, y + 12, 3, 14, [214, 210, 200], 255);
+    u.rect(x + 17, y + 19, 2, 1, [30, 20, 20], 255);
+    u.rect(x + 24, y + 19, 2, 1, [30, 20, 20], 255);
+    u.rect(x + 11, y + 26, 20, 14, [86, 98, 80], 255);
+    u.text(x + 44, y + 7, "ELDER MAREN", [240, 214, 150], 1, true);
+    let maxc = ((w - 56) / 4) as usize;
+    if let Some(txt) = pages.get(*page) {
+        for (k, l) in wrap(txt, maxc).iter().enumerate() {
+            u.text(x + 44, y + 20 + k as i32 * 9, l, [230, 222, 210], 1, false);
+        }
+    }
+    let more = if *page + 1 < pages.len() { format!("E  NEXT  ({}/{})", page + 1, pages.len()) } else { "E  CLOSE".into() };
+    if (g.frame / 30) % 2 == 0 || *page + 1 >= pages.len() {
+        u.text(x + w - Ui::text_w(&more, 1) - 8, y + h - 10, &more, [255, 214, 90], 1, false);
+    }
+}
+
+/// names over nearby exits, so you know where a road or a stair leads
+fn draw_exit_labels(g: &Game, u: &mut Ui, fw: i32, fh: i32, cx: i32, cy: i32) {
+    if g.player.dead || g.tree || g.inv_open || g.shop_open || g.wp_open || g.paused || g.talk.is_some() {
+        return;
+    }
+    for e in &g.exits {
+        let (ex, ey) = ((e.x0 + e.x1) as f32 / 2.0, (e.y0 + e.y1) as f32 / 2.0);
+        let d = ((ex - g.player.x).powi(2) + (ey - g.player.y).powi(2)).sqrt();
+        if d > 260.0 {
+            continue;
+        }
+        let a = (((260.0 - d) / 80.0).min(1.0) * 230.0) as u8;
+        let txt = format!("TO {}", e.label);
+        let w = Ui::text_w(&txt, 1);
+        let (sx, sy) = (ex as i32 - cx, e.y0 - cy - 14);
+        let x = (sx - w / 2).clamp(6, fw - w - 6);
+        let y = sy.clamp(44, fh - 80);
+        u.rect(x - 3, y - 2, w + 6, 10, [10, 8, 14], a.min(190));
+        u.text(x, y, &txt, [210, 220, 255], 1, false);
     }
 }

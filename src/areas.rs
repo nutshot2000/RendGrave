@@ -114,6 +114,12 @@ impl Game {
         self.exits = sp.exits;
         self.waypoint = sp.waypoint;
         self.merchant = sp.merchant;
+        self.posts = sp.posts.clone();
+        self.npcs = match sp.maren {
+            Some(m) => crate::story::town_folk(m, &self.world),
+            None => vec![],
+        };
+        self.story_arrive(to);
         self.shop_open = false;
         if to == AreaId::Ashford {
             self.restock();
@@ -174,6 +180,15 @@ impl Game {
                     self.snd(Sfx::Click, wx, wy, 0.8);
                     self.wp_open = true;
                     self.hold_block = true;
+                }
+                return;
+            }
+        }
+        if let Some(m) = self.npcs.iter().find(|n| n.k == 0) {
+            if ((self.player.x - m.x).powi(2) + ((self.player.y - m.y) * 1.4).powi(2)).sqrt() < 28.0 {
+                self.prompt = Some("E  TALK TO ELDER MAREN".into());
+                if press {
+                    self.talk_to_maren();
                 }
                 return;
             }
@@ -274,7 +289,6 @@ impl Game {
         }
         self.flash = 0.2;
         self.save();
-        self.check_act_end();
     }
 
     pub fn king_slain(&mut self, x: f32, y: f32) {
@@ -291,7 +305,6 @@ impl Game {
         }
         self.flash = 0.25;
         self.save();
-        self.check_act_end();
     }
 
     // ---------------------------------------------------------------- saving
@@ -315,6 +328,7 @@ impl Game {
             format!("king {}", self.king_dead as u8),
             format!("chief {}", self.chief_dead as u8),
             format!("act1 {}", self.act1_done as u8),
+            format!("story {}", self.story),
             format!("played {}", self.played),
         ];
         let mut lines: Vec<String> = lines.to_vec();
@@ -357,6 +371,7 @@ impl Game {
                 "king" => self.king_dead = v == "1",
                 "chief" => self.chief_dead = v == "1",
                 "act1" => self.act1_done = v == "1",
+                "story" => self.story = v.parse().unwrap_or(0),
                 "played" => self.played = v.parse().unwrap_or(0),
                 "equip0" | "equip1" | "equip2" | "equip3" => {
                     if !gear_loaded {
@@ -374,6 +389,7 @@ impl Game {
                 _ => {}
             }
         }
+        self.infer_story();
         self.apply_gear();
         self.player.hp = self.player.maxhp;
         self.player.mana = self.player.maxmana;

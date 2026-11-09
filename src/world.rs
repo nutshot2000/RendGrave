@@ -40,6 +40,8 @@ pub const STAIRSUP: u8 = 7;
 pub const PLANK: u8 = 8;
 /// bog peat: once lit it smoulders for a long time and creeps outwards
 pub const PEAT: u8 = 9;
+/// a trodden road: lighter, with cobbles, so it reads at night
+pub const ROAD: u8 = 10;
 
 pub const AUX_TRUNK: u8 = 1;
 pub const AUX_INDOOR: u8 = 2;

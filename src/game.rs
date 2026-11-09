@@ -282,6 +282,11 @@ pub struct Game {
     /// (music on, sound on, volume), kept up to date by main.rs for the menus
     pub audio_state: (bool, bool, f32),
     pub act1_done: bool,
+    /// story flags, see story.rs
+    pub story: u8,
+    /// open dialogue: its pages and the page shown
+    pub talk: Option<(Vec<&'static str>, usize)>,
+    pub npcs: Vec<crate::story::Npc>,
     /// screenshots for the store page: hide hints, banners and toasts
     pub press: bool,
     /// counts down to the end-of-act card; -1 while the card is showing
@@ -310,6 +315,7 @@ pub struct Game {
     pub shop: Vec<Item>,
     pub shop_hover: Option<(u8, usize)>,
     pub merchant: Option<(f32, f32)>,
+    pub posts: Vec<(f32, f32)>,
     pub inv_hover: Option<(u8, usize)>,
 }
 
@@ -474,6 +480,9 @@ impl Game {
             req: None,
             audio_state: (true, true, 0.7),
             act1_done: false,
+            story: 0,
+            talk: None,
+            npcs: vec![],
             press: false,
             ending: 0,
             played: 0,
@@ -497,6 +506,7 @@ impl Game {
             shop: vec![],
             shop_hover: None,
             merchant: None,
+            posts: vec![],
             inv_hover: None,
         }
     }
@@ -513,7 +523,32 @@ impl Game {
     pub fn light(&mut self, x: f32, y: f32, r: f32, i: f32, c: [f32; 3], t: i32) {
         self.lights.push(Lt { x, y, r, i, c, t, max: t });
     }
+    /// floating text. Damage numbers landing on the same spot add up into one number,
+    /// repeated words aren't stacked, and other text steps up so it doesn't overlap
     pub fn float(&mut self, x: f32, y: f32, txt: String, c: [u8; 3], big: bool) {
+        let num: Option<i32> = txt.parse().ok();
+        for f in self.floats.iter_mut() {
+            if f.t < 38 || (f.x - x).abs() > 16.0 || (f.y - y).abs() > 18.0 {
+                continue;
+            }
+            if let (Some(a), Ok(b)) = (num, f.txt.parse::<i32>()) {
+                if f.c == c {
+                    f.txt = (a + b).to_string();
+                    f.t = 60;
+                    f.big = f.big || big;
+                    return;
+                }
+            } else if f.txt == txt {
+                f.t = 60;
+                return;
+            }
+        }
+        let mut y = y;
+        for _ in 0..4 {
+            if self.floats.iter().any(|f| f.t > 30 && (f.x - x).abs() < 30.0 && (f.y - y).abs() < 7.0) {
+                y -= 9.0;
+            }
+        }
         self.floats.push(Float { x, y, t: 60, txt, c, big });
     }
     fn walkable(&self, x: f32, y: f32, r: f32) -> bool {
@@ -524,7 +559,7 @@ impl Game {
         }
         true
     }
-    fn mv(&self, x: &mut f32, y: &mut f32, dx: f32, dy: f32, r: f32) -> bool {
+    pub(crate) fn mv(&self, x: &mut f32, y: &mut f32, dx: f32, dy: f32, r: f32) -> bool {
         let mut ok = true;
         if self.walkable(*x + dx, *y, r) {
             *x += dx;
@@ -623,6 +658,11 @@ impl Game {
                 self.ending = 0;
                 self.hold_block = true;
             }
+            self.prev = inp.clone();
+            return;
+        }
+        if self.talk.is_some() {
+            self.update_talk(inp);
             self.prev = inp.clone();
             return;
         }
@@ -755,6 +795,7 @@ impl Game {
         self.update_whirl();
         self.update_area(&inp2);
         self.update_ground();
+        self.update_npcs();
         self.tick_buffs();
         self.update_barrels();
         self.prev = inp.clone();

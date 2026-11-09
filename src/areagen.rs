@@ -207,10 +207,14 @@ pub struct Spawns {
     pub barrels: Vec<(f32, f32, u8)>,
     /// the merchant's stall
     pub merchant: Option<(f32, f32)>,
+    /// where Elder Maren stands
+    pub maren: Option<(f32, f32)>,
+    /// lantern posts along the roads and at the exits
+    pub posts: Vec<(f32, f32)>,
 }
 impl Spawns {
     fn new() -> Spawns {
-        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None }
+        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None, maren: None, posts: vec![] }
     }
     pub fn arrival(&self, from: AreaId) -> (f32, f32) {
         self.entries.iter().find(|e| e.0 == from).map(|e| (e.1, e.2)).unwrap_or(self.start)
@@ -270,7 +274,7 @@ fn path(w: &mut World, ctrl: &[(f32, f32)], width: f32, seed_: u32) -> Vec<(f32,
                             w.g[i] = PLANK;
                             continue;
                         }
-                        w.g[i] = if d > r - 1.5 && rnd() < 0.5 { MUD } else { DIRT };
+                        w.g[i] = if d > r - 1.5 { if rnd() < 0.5 { MUD } else { DIRT } } else { ROAD };
                         if matches!(w.m[i], TREE | STONE | GAS) {
                             w.m[i] = E;
                         }
@@ -534,6 +538,30 @@ fn edge_exit(w: &World, sp: &mut Spawns, east: bool, y: f32, to: AreaId) {
     let (x0, x1, ax) = if east { (aw - 28, aw - 6, aw as f32 - 44.0) } else { (6, 28, 44.0) };
     sp.exits.push(Exit { x0, y0: y as i32 - 26, x1, y1: y as i32 + 26, to, label: to.name() });
     sp.entries.push((to, ax, y));
+    let px = if east { aw as f32 - 34.0 } else { 34.0 };
+    sp.posts.push((px, y - 24.0));
+    sp.posts.push((px, y + 26.0));
+}
+/// lantern posts every so often along a road, on alternating sides
+fn road_posts(w: &World, sp: &mut Spawns, road: &[(f32, f32)], every: f32) {
+    let mut since = every * 0.5;
+    let mut side = 1.0;
+    for k in 1..road.len().saturating_sub(1) {
+        let (a, b) = (road[k - 1], road[k + 1]);
+        since += ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt() * 0.5;
+        if since < every {
+            continue;
+        }
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let l = (dx * dx + dy * dy).sqrt().max(0.01);
+        let (x, y) = (road[k].0 - dy / l * 14.0 * side, road[k].1 + dx / l * 14.0 * side);
+        if x < 60.0 || y < 60.0 || x > w.aw as f32 - 60.0 || y > w.ah as f32 - 60.0 || !open_spot(w, x, y, 2) {
+            continue;
+        }
+        sp.posts.push((x, y));
+        since = 0.0;
+        side = -side;
+    }
 }
 /// clear a round patch of ground to `g`
 fn clearing(w: &mut World, x: f32, y: f32, rx: f32, ry: f32, g: u8) {
@@ -656,6 +684,7 @@ fn town(w: &mut World, s: u32) -> Spawns {
     clearing(w, mx, my, 26.0, 14.0, DIRT);
     w.rect(mx as i32 - 14, my as i32 - 2, mx as i32 + 15, my as i32 + 2, WOOD);
     sp.merchant = Some((mx, my));
+    sp.maren = Some((sx - 30.0, sy - 14.0));
     sp.lamps.push((mx, my - 10.0, [1.0, 0.75, 0.4]));
     for &(x, y) in &[(712.0, 372.0), (712.0, 408.0), (400.0, 330.0), (620.0, 340.0), (400.0, 430.0), (620.0, 436.0)] {
         sp.braziers.push((x, y));
@@ -663,6 +692,7 @@ fn town(w: &mut World, s: u32) -> Spawns {
     // the dark forest all around
     let inside = |x: f32, y: f32, r: f32| x > tx0 as f32 - r - 8.0 && x < tx1 as f32 + r + 8.0 && y > ty0 as f32 - r - 8.0 && y < ty1 as f32 + r + 8.0;
     plant_trees(w, 170, 6000, 10.0, 16.0, s, false, &|x, y, r| !inside(x, y, r) && !near(&road, x, y, r * 0.6 + 14.0) && !near(&cross, x, y, r));
+    road_posts(w, &mut sp, &road, 170.0);
     border(w);
     edge_exit(w, &mut sp, true, road_y, AreaId::Pines);
     sp.start = (sx + 20.0, sy + 16.0);
@@ -736,6 +766,7 @@ fn forest(w: &mut World, s: u32) -> Spawns {
         let dens = fbm(x * 0.008, y * 0.008, s + 40) * 1.25 + if edge { 0.5 } else { 0.0 };
         rnd() < dens && !near(&road, x, y, r * 0.6 + 12.0) && !near(&side, x, y, r * 0.5 + 8.0) && !near(&camp_road, x, y, r * 0.5 + 8.0) && !keep(x, y)
     });
+    road_posts(w, &mut sp, &road, 170.0);
     border(w);
     edge_exit(w, &mut sp, false, yw, AreaId::Ashford);
     edge_exit(w, &mut sp, true, ye, AreaId::Graveyard);
@@ -849,6 +880,7 @@ fn graveyard(w: &mut World, s: u32) -> Spawns {
     let keep = |x: f32, y: f32| x < 170.0 && (y - yw).abs() < 100.0;
     plant_trees(w, 170, 9000, 8.0, 13.0, s, true, &|x, y, r| !near(&road, x, y, r * 0.5 + 10.0) && !keep(x, y) && !((x - cx).abs() < 110.0 + r && (y - cy).abs() < 90.0 + r) && !((x - qx).abs() < 90.0 + r && (y - qy).abs() < 60.0 + r));
     rocks(w, 90, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
+    road_posts(w, &mut sp, &road, 170.0);
     border(w);
     edge_exit(w, &mut sp, false, yw, AreaId::Pines);
     edge_exit(w, &mut sp, true, ye, AreaId::Fen);
@@ -934,6 +966,7 @@ fn fen(w: &mut World, s: u32) -> Spawns {
     plant_trees(w, 160, 9000, 8.0, 13.0, s, true, &|x, y, r| !near(&road, x, y, r * 0.5 + 10.0) && !near(&trails, x, y, r * 0.5 + 6.0) && !keep(x, y) && !by_hut(x, y, r));
     plant_trees(w, 120, 9000, 9.0, 14.0, s + 5, false, &|x, y, r| fbm(x * 0.01, y * 0.01, s + 41) > 0.5 && !near(&road, x, y, r * 0.5 + 10.0) && !near(&trails, x, y, r * 0.5 + 6.0) && !keep(x, y) && !by_hut(x, y, r));
     rocks(w, 50, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y));
+    road_posts(w, &mut sp, &road, 170.0);
     border(w);
     edge_exit(w, &mut sp, false, yw, AreaId::Graveyard);
     edge_exit(w, &mut sp, true, ye, AreaId::Ravenhold);
@@ -1096,6 +1129,7 @@ fn ravenhold(w: &mut World, s: u32) -> Spawns {
         rnd() < dens && !near(&road, x, y, r * 0.6 + 12.0) && !keep(x, y) && !castle(x, y, r)
     });
     rocks(w, 120, s, &|x, y| !near(&road, x, y, 14.0) && !keep(x, y) && !castle(x, y, 0.0));
+    road_posts(w, &mut sp, &road, 170.0);
     border(w);
     edge_exit(w, &mut sp, false, yw, AreaId::Fen);
     sp.start = (60.0, yw);
