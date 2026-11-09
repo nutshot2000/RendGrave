@@ -1333,8 +1333,13 @@ fn draw_building(c: &mut Ctx, b: &Building, player: Option<(f32, f32)>) {
     let dc = b.door_c();
     let half = b.door / 2;
     let style = if b.k == BKind::House { 1 } else { 2 };
-    // --- wall above the doorway, with a lintel or an arch
+    // --- wall above the doorway, with a lintel or an arch (gone while you're inside, so it
+    // never cuts across you in the doorway)
+    let in_here = player.is_some_and(|(px, py)| b.inside(px, py));
     for x in dc - half..dc + half {
+        if in_here {
+            break;
+        }
         let dx = (x - dc) as f32 + 0.5;
         let dh = if style == 1 {
             30
@@ -1348,10 +1353,10 @@ fn draw_building(c: &mut Ctx, b: &Building, player: Option<(f32, f32)>) {
             } else if style == 2 && z < dh + 3 {
                 col = scl([160, 156, 162], 0.9 + h2(x, z, 9) * 0.15);
             }
-            c.put(x - cx, gy - z - cy, depth, col, [0; 3], z as f32);
+            c.put_w(x - cx, gy - z - cy, depth, col, [0; 3], z as f32);
         }
         for wy in gy - 3..=gy {
-            c.put(x - cx, wy - wh - cy, wy as f32, if style == 1 { [92, 66, 46] } else { [132, 128, 134] }, [0; 3], (wh + 1) as f32);
+            c.put_w(x - cx, wy - wh - cy, wy as f32, if style == 1 { [92, 66, 46] } else { [132, 128, 134] }, [0; 3], (wh + 1) as f32);
         }
     }
     // --- windows (houses) with warm light
@@ -1372,12 +1377,12 @@ fn draw_building(c: &mut Ctx, b: &Building, player: Option<(f32, f32)>) {
                     } else {
                         ([30, 34, 48], [0; 3])
                     };
-                    c.put(x - cx, gy - z - cy, depth + 0.1, col, e, z as f32);
+                    c.put_w(x - cx, gy - z - cy, depth + 0.1, col, e, z as f32);
                 }
             }
             // sill
             for x in wx0 - 2..wx0 + 10 {
-                c.put(x - cx, gy - 11 - cy, depth + 0.1, [96, 72, 52], [0; 3], 11.0);
+                c.put_w(x - cx, gy - 11 - cy, depth + 0.1, [96, 72, 52], [0; 3], 11.0);
             }
         }
     }

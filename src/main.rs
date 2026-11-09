@@ -763,6 +763,19 @@ impl App {
                 g.player.y = 430.0;
                 cam(g);
             }
+            690 => {
+                // just inside a house's doorway: the wall over the door must not cut across you
+                if let Some(b) = g.buildings.iter().find(|b| b.k == areagen::BKind::House).copied() {
+                    g.player.x = b.door_c() as f32;
+                    g.player.y = (b.y0 + b.h - 6) as f32;
+                }
+                cam(g);
+            }
+            706 => {
+                g.player.x = 552.0;
+                g.player.y = 430.0;
+                cam(g);
+            }
             740 => {
                 // the same town, played on a controller: the controls page
                 pad::show_names(true);
@@ -793,7 +806,7 @@ impl App {
             }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge"), (595, "x11_camp"), (630, "x12_overlook"), (665, "x13_pen"), (720, "x14_ashford_free"), (790, "x16_pad_prompts")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge"), (595, "x11_camp"), (630, "x12_overlook"), (665, "x13_pen"), (700, "x13b_house_door"), (720, "x14_ashford_free"), (790, "x16_pad_prompts")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
