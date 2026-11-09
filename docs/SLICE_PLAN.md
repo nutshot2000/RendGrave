@@ -61,12 +61,12 @@ counts against his health too.
 Each has a visible tell, and a first-time tip the first time you meet it.
 
 ## Step 3 - Gear that changes how you fight
-Four new uniques, dropped by champions, bosses and secret rooms:
+Four new uniques. Each boss gives you one you don't have yet, and they can drop anywhere legendaries do:
 
 | Item | Effect | Trade-off |
 |---|---|---|
 | **Splintering Maul** (hammer) | Shattering a frozen enemy drives ice shards through those behind it | Slow |
-| **Mudwalker Boots** (new boots slot) | Never slip; +25% damage while standing in oil | Less armour |
+| **Mudwalker's Leathers** (armour) | Never slip; +25% damage while standing in oil | Less armour |
 | **The Conduit** (sword) | Lightning chains through severed metal armour pieces lying on the ground | |
 | **Ember Ring** | Standing near burning ground restores mana | Fire burns you 50% longer |
 

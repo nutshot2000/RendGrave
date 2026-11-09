@@ -24,7 +24,7 @@ impl Game {
         self.player.equip[0].as_ref().map(|w| w.wk).unwrap_or(WKind::Sword)
     }
     pub fn has_legend(&self, l: Legend) -> bool {
-        self.player.equip[0].as_ref().and_then(|w| w.legend) == Some(l)
+        self.player.equip.iter().any(|it| it.as_ref().and_then(|w| w.legend) == Some(l))
     }
     /// share of damage that gets through your armour
     pub fn armor_mult(&self) -> f32 {
@@ -174,6 +174,9 @@ impl Game {
 
     /// affixes and legendary powers that trigger on every hit
     pub(crate) fn on_hit(&mut self, i: usize, dmg: f32, h: f32) {
+        if self.has_legend(Legend::Conduit) {
+            self.conduit_arc(i, dmg);
+        }
         let g = self.player.gear;
         let (ex, ey) = (self.enemies[i].x, self.enemies[i].y);
         if g.burning || self.has_legend(Legend::Pyre) {

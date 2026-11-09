@@ -56,7 +56,7 @@ impl Game {
 
     pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
         self.puncture(i);
-        let dmg = dmg * self.power_mult() * self.status_mult(i);
+        let dmg = dmg * self.power_mult() * self.status_mult(i) * crate::uniques::mud_bonus(self);
         if let Some(h) = self.hit_h.take() {
             self.boss_part_hit(i, h, dmg);
         }

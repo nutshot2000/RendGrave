@@ -406,6 +406,7 @@ impl Game {
         let gold: i32 = (0..8).map(|_| 60 + ri(50) as i32).sum();
         self.boss_gold(x, y, gold);
         self.flash = 0.2;
+        self.give_unique();
         self.open_portal();
         self.save();
     }
@@ -423,6 +424,7 @@ impl Game {
             self.toast = Some((format!("THE KING'S TOME: {} - LEARN IT AT LEVEL 30", NODES[i].name), 400));
         }
         self.flash = 0.25;
+        self.give_unique();
         self.open_portal();
         self.save();
     }

@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod uniques;
 mod anatomy;
 mod kingparts;
 mod savefile;

@@ -51,7 +51,30 @@ pub enum Legend {
     WintersGrudge,
     /// spear: thrusts breathe fire ahead
     Pyre,
+    /// hammer: shattering a frozen foe drives ice into those behind it
+    SplinterMaul,
+    /// armour: you never slip, and hit harder standing in oil
+    Mudwalker,
+    /// sword: hits arc through severed metal armour lying on the ground
+    Conduit,
+    /// ring: burning ground near you restores mana; your own burns last longer
+    EmberRing,
 }
+
+/// every legendary, in save order (only ever add at the end)
+pub const ALL_LEGENDS: [Legend; 9] = [
+    Legend::Stormcaller,
+    Legend::Gravecleaver,
+    Legend::MiresKiss,
+    Legend::WintersGrudge,
+    Legend::Pyre,
+    Legend::SplinterMaul,
+    Legend::Mudwalker,
+    Legend::Conduit,
+    Legend::EmberRing,
+];
+/// the uniques that turn the world into a weapon, given by the bosses
+pub const UNIQUES: [Legend; 4] = [Legend::SplinterMaul, Legend::Mudwalker, Legend::Conduit, Legend::EmberRing];
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Affix {
@@ -226,6 +249,16 @@ pub fn legendary(l: Legend, ilvl: i32) -> Item {
         Legend::MiresKiss => (WKind::Dagger, "THE MIRE'S KISS", vec![Affix::Swift(15), Affix::Leech(3)]),
         Legend::WintersGrudge => (WKind::Hammer, "WINTER'S GRUDGE", vec![Affix::Damage(30), Affix::Armor(8)]),
         Legend::Pyre => (WKind::Spear, "PYRE", vec![Affix::Damage(20), Affix::Burning]),
+        Legend::SplinterMaul => (WKind::Hammer, "THE SPLINTERING MAUL", vec![Affix::Damage(20), Affix::Keen(10)]),
+        Legend::Conduit => (WKind::Sword, "THE CONDUIT", vec![Affix::Damage(15), Affix::Crit(8)]),
+        Legend::Mudwalker => {
+            // light leathers: less armour than they look
+            let base = ((3.0 + ilvl as f32) * 0.6) as i32;
+            return Item { slot: Slot::Armor, wk: WKind::Sword, rarity: Rarity::Legendary, ilvl, base, affixes: vec![Affix::Speed(8), Affix::Regen(2)], legend: Some(l), name: "MUDWALKER'S LEATHERS".into() };
+        }
+        Legend::EmberRing => {
+            return Item { slot: Slot::Ring, wk: WKind::Sword, rarity: Rarity::Legendary, ilvl, base: 0, affixes: vec![Affix::Wisdom(8)], legend: Some(l), name: "THE EMBER RING".into() };
+        }
     };
     Item { slot: Slot::Weapon, wk, rarity: Rarity::Legendary, ilvl, base: weapon_base(wk, ilvl) + 6, affixes: aff, legend: Some(l), name: name.into() }
 }
@@ -260,7 +293,7 @@ pub fn roll(ilvl: i32, luck: f32) -> Item {
         Rarity::Common
     };
     if rarity == Rarity::Legendary {
-        let l = [Legend::Stormcaller, Legend::Gravecleaver, Legend::MiresKiss, Legend::WintersGrudge, Legend::Pyre][ri(5)];
+        let l = ALL_LEGENDS[ri(ALL_LEGENDS.len())];
         return legendary(l, ilvl);
     }
     let slot = [Slot::Weapon, Slot::Weapon, Slot::Weapon, Slot::Helm, Slot::Armor, Slot::Ring][ri(6)];
@@ -330,6 +363,10 @@ impl Item {
             Legend::MiresKiss => "WOUNDS FILL WITH ACID",
             Legend::WintersGrudge => "HITS FREEZE - FROZEN FOES BURST IN FROST",
             Legend::Pyre => "THRUSTS BREATHE FIRE",
+            Legend::SplinterMaul => "SHATTERS DRIVE ICE INTO FOES BEHIND",
+            Legend::Mudwalker => "NEVER SLIP - +25% DAMAGE STANDING IN OIL",
+            Legend::Conduit => "HITS ARC THROUGH METAL ARMOUR ON THE GROUND",
+            Legend::EmberRing => "FIRE NEAR YOU GIVES MANA - BURNS LAST LONGER",
         })
     }
     /// a rough measure of how good an item is, for "is this an upgrade?"
@@ -394,7 +431,7 @@ impl Item {
         let rarity = [Rarity::Common, Rarity::Magic, Rarity::Rare, Rarity::Legendary][f[2].parse::<usize>().ok()?.min(3)];
         let affixes = f[5].split(',').filter(|x| !x.is_empty()).filter_map(Affix::from_code).collect();
         let li: i32 = f[6].parse().unwrap_or(-1);
-        let legend = if li < 0 { None } else { [Legend::Stormcaller, Legend::Gravecleaver, Legend::MiresKiss, Legend::WintersGrudge, Legend::Pyre].get(li as usize).copied() };
+        let legend = if li < 0 { None } else { ALL_LEGENDS.get(li as usize).copied() };
         Some(Item { slot, wk, rarity, ilvl: f[3].parse().ok()?, base: f[4].parse().ok()?, affixes, legend, name: f[7].to_string() })
     }
 }

@@ -270,3 +270,48 @@ fn burning_enemies_run_at_their_friends() {
     let lit = g.enemies[1].body.parts.iter().flat_map(|p| p.px.iter()).filter(|p| p.m != 0 && p.burn > 0).count();
     assert!(lit > 0, "and sets it alight");
 }
+
+#[test]
+fn splintering_maul_freezes_those_behind() {
+    let (mut g, i) = arena(Kind::Zombie);
+    g.player.equip[0] = Some(crate::items::legendary(crate::items::Legend::SplinterMaul, 5));
+    let (px, py) = (g.player.x, g.player.y);
+    g.enemies[i].x = px + 20.0;
+    g.enemies[i].y = py;
+    let mut behind = g.scaled_enemy(Kind::Zombie, px + 60.0, py);
+    behind.hp = 10000.0;
+    g.enemies.push(behind);
+    g.enemies[i].frozen = 50;
+    assert!(g.shatter(i));
+    assert!(g.enemies[1].frozen > 0, "the one behind is frozen by the shards");
+}
+
+#[test]
+fn ember_ring_turns_fire_into_mana() {
+    let mut g = Game::new(4);
+    g.saving = false;
+    g.player.equip[3] = Some(crate::items::legendary(crate::items::Legend::EmberRing, 5));
+    g.player.mana = 0.0;
+    let (px, py) = (g.player.x as i32, g.player.y as i32);
+    for dx in -10..10 {
+        g.world.set(px + dx, py + 6, crate::world::FIRE);
+    }
+    g.frame = 10;
+    g.ember_ring();
+    assert!(g.player.mana > 0.5);
+}
+
+#[test]
+fn bosses_give_a_unique_you_lack() {
+    let (mut g, i) = arena(Kind::King);
+    g.enemies[i].hp = 0.0;
+    g.enemies[i].alive = false;
+    g.on_kill(i);
+    let n = g.player.bag.iter().filter(|it| it.legend.map(|l| crate::items::UNIQUES.contains(&l)).unwrap_or(false)).count();
+    assert_eq!(n, 1);
+    // and it survives a save
+    let it = g.player.bag.iter().find(|it| it.legend.is_some() && crate::items::UNIQUES.contains(&it.legend.unwrap())).unwrap();
+    let back = crate::items::Item::decode(&it.encode()).unwrap();
+    assert_eq!(back.legend, it.legend);
+    assert_eq!(back.slot, it.slot);
+}

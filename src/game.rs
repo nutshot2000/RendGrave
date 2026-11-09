@@ -142,6 +142,8 @@ pub struct Player {
     pub frost: i32,
     pub ice: i32,
     pub stand_cd: i32,
+    /// wearing the Ember Ring (burns last longer)
+    pub gear_ember: bool,
     pub equip: [Option<Item>; 4],
     pub bag: Vec<Item>,
     pub gear: GearStats,
@@ -500,6 +502,7 @@ impl Game {
             frost: 0,
             ice: 0,
             stand_cd: 0,
+            gear_ember: false,
             equip: [Some(starter_weapon()), None, Some(starter_armor()), None],
             bag: vec![],
             gear: GearStats::default(),
@@ -664,7 +667,7 @@ impl Game {
         }
         ok
     }
-    fn under(&self, x: f32, y: f32) -> [bool; 6] {
+    pub(crate) fn under(&self, x: f32, y: f32) -> [bool; 6] {
         // fire, acid, water, oil, blood, ice
         let mut r = [false; 6];
         for dy in -1..=1 {
@@ -880,6 +883,7 @@ impl Game {
         }
         self.update_player(&inp2);
         self.first_tips();
+        self.ember_ring();
         if let Some(m) = self.save_fail.borrow_mut().take() {
             self.toast = Some((m, 400));
         }
@@ -959,6 +963,7 @@ impl Game {
             dy /= l;
         }
         let u = self.under(self.player.x, self.player.y);
+        let mud = self.has_legend(Legend::Mudwalker);
         let hm = self.haste_mult() * if self.player.frost > 0 { 0.6 } else { 1.0 };
         let p = &mut self.player;
         let mut speed = 1.25 * (1.0 + 0.07 * p.sk.r(Sk::Swiftness) as f32) * (1.0 + p.gear.speed / 100.0) * hm;
@@ -971,7 +976,7 @@ impl Game {
         }
         if u[3] {
             speed *= 0.78;
-            if l > 0.0 && p.dodge == 0 && p.slip == 0 && p.sk.r(Sk::Titan) == 0 && rnd() < 0.005 {
+            if l > 0.0 && p.dodge == 0 && p.slip == 0 && p.sk.r(Sk::Titan) == 0 && !mud && rnd() < 0.005 {
                 p.slip = 34;
                 p.slide = (dx * 2.6, dy * 2.6);
                 self.sounds.push(Snd { k: Sfx::Slip, x: p.x, y: p.y, v: 0.9 });
@@ -1025,7 +1030,8 @@ impl Game {
         if u[2] {
             p.burn = 0;
         }
-        if p.burn > 0 {
+        if p.burn > 0 && !(self.frame % 3 == 0 && self.player.gear_ember) {
+            let p = &mut self.player;
             p.burn -= 1;
             p.hp -= 0.09 * (1.0 - 0.3 * p.sk.r(Sk::Fireproof) as f32).max(0.1);
             p.hurt = p.hurt.max(0.2);
@@ -1695,6 +1701,9 @@ impl Game {
         self.shake = self.shake.max(5.0);
         self.hitstop = 5;
         self.float(ex, ey - 60.0, "SHATTERED".into(), [180, 220, 255], true);
+        if self.has_legend(Legend::SplinterMaul) {
+            self.splinter(ex, ey);
+        }
         self.on_kill(i);
         true
     }
