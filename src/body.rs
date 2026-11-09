@@ -701,7 +701,10 @@ pub fn humanoid(orig: Kind) -> Body {
             if king && y >= 2 && y < th - 7 && nx.abs() < 0.82 {
                 let rust = vary([128, 86, 58], x, y, s + 11, 0.3);
                 let rivet = (y == 3 || y == th - 9) && x % 4 == 1;
-                return Some((PM_METAL, if rivet { [190, 170, 130] } else { rust }, PM_BONE, bone));
+                // under the breastplate, a glowing core in the ribcage
+                let core = fx.abs() < 3.5 && y >= th / 3 && y < th / 3 + 7;
+                let (im, ic) = if core { (PM_GLOW, vary([255, 90, 50], x, y, s + 17, 0.25)) } else { (PM_BONE, bone) };
+                return Some((PM_METAL, if rivet { [190, 170, 130] } else { rust }, im, ic));
             }
             let spine = fx.abs() < 1.0;
             let ribs = y >= 2 && y < th * 6 / 10 && y % 3 != 1 && nx.abs() < 0.92 - (y as f32 / th as f32) * 0.2;
@@ -760,6 +763,11 @@ pub fn humanoid(orig: Kind) -> Body {
             let cx = lw as f32 / 2.0;
             let fx = x as f32 + 0.5 - cx;
             if sk {
+                if king && (y - ll / 2).abs() <= 3 && fx.abs() < 3.4 {
+                    // the King's rusted knee plates
+                    let rivet = (y - ll / 2).abs() == 3 && x % 3 == 1;
+                    return Some((PM_METAL, if rivet { [190, 170, 130] } else { vary([128, 86, 58], x, y, s + 13, 0.3) }, PM_BONE, bone));
+                }
                 let knee = (y - ll / 2).abs() <= 1 && fx.abs() < 1.6;
                 let foot = y >= ll - 2 && fx > -1.5;
                 if fx.abs() < 1.0 || knee || foot {

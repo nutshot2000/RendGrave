@@ -155,3 +155,41 @@ fn potions_are_capped() {
     }
     assert_eq!(g.player.potions, crate::shop::MAX_POTIONS);
 }
+
+#[test]
+fn king_weak_points_break_and_change_the_fight() {
+    use crate::kingparts::*;
+    let (mut g, i) = arena(Kind::King);
+    let maxhp = g.enemies[i].maxhp;
+    let metal_legs = |g: &Game| [crate::body::T_LEGF, crate::body::T_LEGB].iter().map(|&p| g.enemies[i].body.parts[p].px.iter().filter(|q| q.m == crate::body::PM_METAL).count()).sum::<usize>();
+    assert!(metal_legs(&g) > 20, "the King has knee plates");
+    // knees: a hit low drains the knee pool and strips plates as it goes
+    g.boss_part_hit(i, -10.0, maxhp * 0.035);
+    assert!(g.enemies[i].wk[KNEES] > 0.3 && g.enemies[i].wk[KNEES] < 0.7);
+    g.boss_part_hit(i, -10.0, maxhp * 0.05);
+    assert_eq!(g.enemies[i].wk[KNEES], 0.0);
+    assert_eq!(metal_legs(&g), 0, "every knee plate is gone");
+    // chest: the core is bared and he takes more damage
+    let before = g.status_mult(i);
+    g.boss_part_hit(i, -50.0, maxhp * 0.2);
+    assert!((g.status_mult(i) / before - 1.4).abs() < 0.01);
+    // arm: it comes off, and so does his sword swing
+    g.boss_part_hit(i, -30.0, maxhp * 0.2);
+    assert!(!g.enemies[i].body.parts[crate::body::T_ARMF].on);
+    assert!(g.gibs.len() > 0);
+    // a hit on the head breaks nothing
+    let wk = g.enemies[i].wk;
+    g.boss_part_hit(i, -70.0, maxhp);
+    assert_eq!(g.enemies[i].wk, wk);
+}
+
+#[test]
+fn one_armed_king_calls_archers() {
+    let (mut g, i) = arena(Kind::King);
+    g.enemies[i].wk[crate::kingparts::ARM] = 0.0;
+    g.enemies[i].hp = g.enemies[i].maxhp * 0.4;
+    g.boss_logic(i);
+    let archers = g.enemies.iter().filter(|e| e.k == Kind::Archer).count();
+    let skels = g.enemies.iter().filter(|e| e.k == Kind::Skeleton).count();
+    assert!(archers >= 3 && skels == 0, "archers {} skeletons {}", archers, skels);
+}

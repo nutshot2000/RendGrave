@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod kingparts;
 mod savefile;
 #[cfg(test)]
 mod tests;
@@ -636,6 +637,36 @@ impl App {
                 }
                 cam(g);
             }
+            335 => {
+                // the King with his knees and chest broken
+                g.king_dead = false;
+                g.travel(areagen::AreaId::Crypt(3));
+                g.banner = None;
+                g.toast = None;
+                g.tips = 0xff;
+                if let Some(b) = g.enemies.iter().position(|e| e.k.boss()) {
+                    for (k, e) in g.enemies.iter_mut().enumerate() {
+                        if k != b {
+                            e.alive = false;
+                        }
+                    }
+                    let (bx, by) = (g.enemies[b].x, g.enemies[b].y);
+                    g.player.x = bx - 60.0;
+                    g.player.y = by + 8.0;
+                    g.enemies[b].aggro = true;
+                    let m = g.enemies[b].maxhp;
+                    g.boss_part_hit(b, -10.0, m * 0.03);
+                    g.boss_part_hit(b, -50.0, m * 0.2);
+                }
+                cam(g);
+            }
+            395 => {
+                if let Some(b) = g.enemies.iter().position(|e| e.k.boss() && e.alive) {
+                    let m = g.enemies[b].maxhp;
+                    g.boss_part_hit(b, -10.0, m * 0.2);
+                    g.boss_part_hit(b, -30.0, m * 0.2);
+                }
+            }
             300 => {
                 if let Some((qx, qy)) = g.portal {
                     g.player.x = qx + 18.0;
@@ -649,7 +680,7 @@ impl App {
             }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
@@ -1000,7 +1031,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.extras {
-                shot.as_deref() == Some("x6_portal")
+                shot.as_deref() == Some("x8_king_broken")
             } else if sh.menus {
                 shot.as_deref() == Some("m4_dialogue")
             } else if sh.tour {

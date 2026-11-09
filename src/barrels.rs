@@ -234,6 +234,8 @@ impl Game {
             let dir = (dx / l, dy / l);
             let boss = k.boss();
             let dmg = (150.0 * f + 25.0) * if boss { 0.6 } else { 1.0 } * self.status_mult(i);
+            // a keg goes off at knee height
+            self.part_hits.push((i, -8.0, dmg));
             let e = &mut self.enemies[i];
             e.hp -= dmg;
             e.aggro = true;

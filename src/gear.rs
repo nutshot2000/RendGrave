@@ -164,6 +164,7 @@ impl Game {
                 self.blood(ex, ey, -h, 1, (dir, 0.0), k);
             }
         }
+        self.hit_h = Some(h);
         self.hurt(i, dmg * mult, if crit { [255, 220, 90] } else { [255, 255, 255] }, crit);
     }
 

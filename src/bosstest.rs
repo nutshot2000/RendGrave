@@ -87,11 +87,13 @@ pub fn run() {
             let caster = build != "sword" && build != "frost";
             let (mut taken, mut deaths, mut potions) = (0.0f32, 0, 0);
             let mut first_death: Option<f32> = None;
+            let mut wk = [1.0f32; 3];
             let mut t = 0;
             let maxhp = g.enemies[0].maxhp;
             while t < 60 * 180 {
                 t += 1;
                 let Some(bi) = g.enemies.iter().position(|e| e.alive && e.k.boss()) else { break };
+                wk = g.enemies[bi].wk;
                 let (bx, by) = (g.enemies[bi].x, g.enemies[bi].y);
                 let (px, py) = (g.player.x, g.player.y);
                 let (dx, dy) = (bx - px, by - py);
@@ -185,6 +187,10 @@ pub fn run() {
                     Some(l) => format!("died, boss at {:.0}%", l),
                 }
             );
+            if lvl == 10 {
+                let names: Vec<&str> = (0..3).filter(|&k| wk[k] <= 0.0).map(|k| crate::kingparts::WEAK_NAMES[k]).collect();
+                println!("         broke: {}", if names.is_empty() { "nothing".to_string() } else { names.join(", ") });
+            }
         }
     }
 }

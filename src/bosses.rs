@@ -43,6 +43,10 @@ impl Game {
         if e.skill_t > 0 {
             e.skill_t -= 1;
         }
+        if self.king_grab(i) {
+            return;
+        }
+        let e = &mut self.enemies[i];
         if e.slam > 0 {
             // rooted while winding up the slam
             e.slam -= 1;
@@ -58,8 +62,16 @@ impl Game {
             return;
         }
         let enraged = e.enraged;
+        let (knees, arm) = (e.wk[crate::kingparts::KNEES] > 0.0, e.wk[crate::kingparts::ARM] > 0.0);
         match bk {
-            Kind::King if dist < 130.0 => {
+            // without his sword arm he lunges to grab you; with his knees gone he can't slam
+            Kind::King if !arm && dist < 125.0 && (!knees || rnd() < 0.6) => {
+                e.grab = crate::kingparts::GRAB_T;
+                e.skill_t = if enraged { 120 } else { 190 };
+                self.float(x, y - 90.0, "!".into(), [255, 80, 60], true);
+                self.snd(Sfx::KingRoar, x, y, 0.9);
+            }
+            Kind::King if knees && dist < 130.0 => {
                 e.slam = SLAM_T;
                 e.skill_t = if enraged { 220 } else { 340 };
                 self.snd(Sfx::KingRoar, x, y, 1.0);

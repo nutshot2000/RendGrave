@@ -330,6 +330,33 @@ impl Game {
         }
         e.summoned = true;
         let (x, y, bk) = (e.x, e.y, e.k);
+        // a King who has lost his sword arm calls archers instead, in a ring well back:
+        // you have to close in on him while they shoot
+        let archers = bk == Kind::King && e.wk[crate::kingparts::ARM] <= 0.0;
+        if archers {
+            self.banner = Some(("THE ARCHERS OF THE CRYPT".into(), "THE KING CALLS HIS BOWMEN".into(), 150));
+            self.snd(Sfx::KingRoar, x, y, 1.2);
+            self.shake = 8.0;
+            for k in 0..6 {
+                // find open floor around him, closer in if the walls are near
+                let spot = (0..12).find_map(|t| {
+                    let a = k as f32 / 6.0 * std::f32::consts::TAU + 0.3 + t as f32 * 0.4;
+                    let r = 120.0 - t as f32 * 6.0;
+                    let (sx, sy) = (x + a.cos() * r, y + a.sin() * r * 0.6);
+                    let open = !self.world.solid(sx as i32, sy as i32) && !self.world.solid(sx as i32 - 3, sy as i32) && !self.world.solid(sx as i32 + 3, sy as i32);
+                    if open { Some((sx, sy)) } else { None }
+                });
+                let Some((sx, sy)) = spot else { continue };
+                let mut s = self.scaled_enemy(Kind::Archer, sx, sy);
+                s.aggro = true;
+                s.stun = 30;
+                self.enemies.push(s);
+                for _ in 0..20 {
+                    self.ptc(sx, sy, 0.0, rr(-1.0, 1.0), rr(-0.6, 0.6), rr(0.5, 2.0), 200, PtK::Debris, [90, 76, 64]);
+                }
+            }
+            return;
+        }
         if bk == Kind::Chief {
             self.banner = Some(("TO ME, BROTHERS".into(), "THE CHIEF CALLS HIS GANG".into(), 150));
             self.snd(Sfx::Roar, x, y, 1.2);

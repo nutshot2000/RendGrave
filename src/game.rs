@@ -82,6 +82,11 @@ pub struct Enemy {
     pub slow: i32,
     pub bleed_dot: i32,
     pub bleed_amt: f32,
+    /// the Hollow King's weak points (knees, sword arm, chest): what's left of each, 1 to 0
+    pub wk: [f32; 3],
+    pub wk_init: [i32; 3],
+    /// the one-armed King's grab: >0 winding up, <0 lunging
+    pub grab: i32,
 }
 
 pub struct Player {
@@ -338,6 +343,10 @@ pub struct Game {
     pub toast: Option<(String, i32)>,
     /// a rare item waiting for a second right-click to sell
     pub sell_confirm: Option<usize>,
+    /// height the next hurt() lands at, for the King's weak points
+    pub hit_h: Option<f32>,
+    /// (enemy, height, damage) hits on the King from explosions and acid, applied after
+    pub part_hits: Vec<(usize, f32, f32)>,
     /// first-time tips already shown (bits)
     pub tips: u8,
     /// a save that failed, to tell the player about
@@ -407,6 +416,9 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         elite: false,
         aff: 0,
         slip: 0,
+        wk: [1.0; 3],
+        wk_init: [0; 3],
+        grab: 0,
         slow: 0,
         bleed_dot: 0,
         bleed_amt: 0.0,
@@ -551,6 +563,8 @@ impl Game {
             toast: None,
             save_fail: std::cell::RefCell::new(None),
             sell_confirm: None,
+            hit_h: None,
+            part_hits: vec![],
             tips: 0,
             ground: vec![],
             inv_open: false,
@@ -851,6 +865,11 @@ impl Game {
         self.update_talents();
         self.update_enemies();
         self.update_projs();
+        for (i, h, d) in std::mem::take(&mut self.part_hits) {
+            if i < self.enemies.len() {
+                self.boss_part_hit(i, h, d);
+            }
+        }
         self.update_gibs();
         self.update_ptcs();
         self.update_misc();
@@ -1423,6 +1442,7 @@ impl Game {
             }
             let f = 1.0 - d / (r * 2.2);
             let dmg = (36.0 * f + 6.0) * sp * self.status_mult(i);
+            self.part_hits.push((i, -z.max(4.0), dmg));
             let e = &mut self.enemies[i];
             e.hp -= dmg;
             e.aggro = true;
@@ -1514,6 +1534,7 @@ impl Game {
                             if let Some(i) = hit_e {
                                 // a direct hit hurts on top of the blast
                                 let d = 16.0 * (1.0 + 0.15 * self.rank(Sk::Kindling) as f32) * self.spell_power();
+                                self.hit_h = Some(-z);
                                 self.hurt(i, d, [255, 170, 80], false);
                             }
                             self.explode(x, y, z.max(2.0), r);
@@ -1590,6 +1611,7 @@ impl Game {
         self.sounds.push(Snd { k: Sfx::Acid, x: x, y: y, v: 0.7 });
         if let Some(i) = e {
             let ad = 6.0 * self.spell_power() * self.status_mult(i);
+            self.part_hits.push((i, -z, ad));
             let en = &mut self.enemies[i];
             en.aggro = true;
             en.hp -= ad;
@@ -1843,7 +1865,7 @@ impl Game {
             let legs = e.body.whole(T_LEGF) as i32 + e.body.whole(T_LEGB) as i32;
             let head = e.body.parts[T_HEAD].on && e.body.frac(T_HEAD) > 0.3;
             let torso = e.body.frac(T_TORSO);
-            let armed = e.body.whole(T_ARMF) || e.k.boss();
+            let armed = if e.k == Kind::King { e.wk[1] > 0.0 } else { e.body.whole(T_ARMF) || e.k.boss() };
             if e.hp <= 0.0 || (!e.k.boss() && (!head || torso < 0.45)) {
                 e.alive = false;
                 let ds = e.body.detach_everything();

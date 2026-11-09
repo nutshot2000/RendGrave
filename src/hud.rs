@@ -1213,6 +1213,20 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         u.rect(bx - 2, 62, bw + 4, 8, [10, 6, 10], 230);
         u.rect(bx, 64, (bw as f32 * (b.hp / b.maxhp).clamp(0.0, 1.0)) as i32, 4, [190, 30, 30], 255);
         u.text_c(fw / 2, 53, if b.k == Kind::King { "THE HOLLOW KING" } else { "THE BANDIT CHIEF" }, [240, 200, 120], 1);
+        if b.k == Kind::King {
+            // his weak points: knees, sword arm, chest
+            let cw = bw / 3 - 4;
+            for (k, name) in crate::kingparts::WEAK_NAMES.iter().enumerate() {
+                let x0 = bx + k as i32 * (cw + 6);
+                let left = b.wk[k].clamp(0.0, 1.0);
+                u.rect(x0 - 1, 71, cw + 2, 4, [10, 6, 10], 230);
+                if left > 0.0 {
+                    u.rect(x0, 72, (cw as f32 * left) as i32, 2, [230, 170, 70], 255);
+                }
+                let (txt, col) = if left > 0.0 { (name.to_string(), [200, 180, 150]) } else { (format!("{} - BROKEN", name), [255, 120, 90]) };
+                u.text_c(x0 + cw / 2, 77, &txt, col, 1);
+            }
+        }
     }
     // interaction prompt
     if let Some(pr) = &g.prompt {

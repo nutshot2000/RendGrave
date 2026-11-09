@@ -47,11 +47,18 @@ impl Game {
         if e.frozen > 0 {
             m *= 1.0 + 0.2 * self.rank(Sk::DeepFreeze) as f32;
         }
+        // the King's bared core
+        if e.k == Kind::King && e.wk[crate::kingparts::CHEST] <= 0.0 {
+            m *= 1.4;
+        }
         m
     }
 
     pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
         let dmg = dmg * self.power_mult() * self.status_mult(i);
+        if let Some(h) = self.hit_h.take() {
+            self.boss_part_hit(i, h, dmg);
+        }
         let (chill, war) = (self.rank(Sk::Chill), self.rank(Sk::Warlord));
         let e = &mut self.enemies[i];
         if chill > 0 {
@@ -128,6 +135,7 @@ impl Game {
             let p = &mut self.player;
             p.hp = (p.hp + heal).min(p.maxhp);
         }
+        self.hit_h = Some(h);
         self.hurt(i, d, if crit { [255, 220, 90] } else { [255, 255, 255] }, crit);
     }
 
@@ -163,6 +171,7 @@ impl Game {
         for _ in 0..8 {
             self.ptc(ex, ey, rr(5.0, 50.0), rr(-1.5, 1.5), rr(-1.0, 1.0), rr(0.0, 1.5), 16, PtK::Spark, [200, 220, 255]);
         }
+        self.hit_h = Some(-50.0);
         self.hurt(i, dmg, if wet { [150, 210, 255] } else { [210, 225, 255] }, wet);
     }
 

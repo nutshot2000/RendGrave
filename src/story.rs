@@ -308,11 +308,13 @@ impl Game {
         }
         let p = &self.player;
         let near_frozen = self.enemies.iter().any(|e| e.alive && e.frozen > 0 && (e.x - p.x).abs() < 150.0 && (e.y - p.y).abs() < 100.0);
-        let tips: [(bool, &str); 4] = [
+        let king = self.enemies.iter().any(|e| e.alive && e.k == crate::body::Kind::King && e.aggro);
+        let tips: [(bool, &str); 5] = [
             (p.sk.points > 0 && p.sk.level >= 2, "TIP: YOU HAVE A SKILL POINT - PRESS K TO SPEND IT"),
             (p.hp < p.maxhp * 0.45 && p.potions > 0, "TIP: PRESS F TO DRINK A POTION"),
             (!p.bag.is_empty(), "TIP: PRESS I TO SEE YOUR GEAR - CLICK AN ITEM TO EQUIP IT"),
             (near_frozen, "TIP: FROZEN FOES SHATTER WHEN YOU STRIKE THEM"),
+            (king, "TIP: AIM AT THE KING'S KNEES, SWORD HAND OR CHEST TO BREAK THEM"),
         ];
         for (k, (when, text)) in tips.iter().enumerate() {
             if *when && self.tips & (1 << k) == 0 {
