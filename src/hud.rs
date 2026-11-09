@@ -1471,7 +1471,8 @@ fn draw_title(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     u.text_c(fw / 2, fh / 5 + 30, "A PIXEL-SIMULATED ACTION RPG", [190, 170, 160], 1);
     u.text_c(fw / 2, fh / 5 + 42, "EARLY ACCESS  -  ACT I: THE HOLLOW KING", [150, 130, 130], 1);
     draw_menu(g, u, fw, fh);
-    u.text_c(fw / 2, fh - 14, "WASD MOVE   LMB ATTACK   RMB CAST   SPACE DODGE   E INTERACT", [120, 110, 120], 1);
+    let foot = if crate::pad::active() { "LEFT STICK MOVE   A ATTACK   X Y B CAST   RB DODGE   A INTERACT" } else { "WASD MOVE   LMB ATTACK   RMB CAST   SPACE DODGE   E INTERACT" };
+    u.text_c(fw / 2, fh - 14, foot, [120, 110, 120], 1);
 }
 /// the full list of keys, from the title or the pause menu
 fn draw_controls(u: &mut Ui, fw: i32, fh: i32) {
