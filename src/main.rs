@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod quiet;
 mod agency;
 mod uniques;
 mod anatomy;
@@ -715,6 +716,38 @@ impl App {
                     g.cam.0 += 70.0;
                 }
             }
+            565 | 600 | 635 => {
+                // the quiet places
+                let (area, kind) = match f {
+                    565 => (areagen::AreaId::Pines, 0u8),
+                    600 => (areagen::AreaId::Fen, 1),
+                    _ => (areagen::AreaId::Graveyard, 2),
+                };
+                g.travel(area);
+                g.banner = None;
+                g.toast = None;
+                if let Some(&(x, y, _)) = g.lore.iter().find(|l| l.2 == kind) {
+                    g.player.x = x + 24.0;
+                    g.player.y = y + 22.0;
+                    for e in g.enemies.iter_mut() {
+                        e.stun = 100000;
+                        e.aggro = false;
+                    }
+                }
+                cam(g);
+            }
+            670 => {
+                // Ashford after both bosses, with Tomas home
+                g.king_dead = true;
+                g.chief_dead = true;
+                g.lore_done = 7;
+                g.travel(areagen::AreaId::Ashford);
+                g.banner = None;
+                g.toast = None;
+                g.player.x = 552.0;
+                g.player.y = 430.0;
+                cam(g);
+            }
             395 => {
                 if let Some(b) = g.enemies.iter().position(|e| e.k.boss() && e.alive) {
                     let m = g.enemies[b].maxhp;
@@ -735,7 +768,7 @@ impl App {
             }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy"), (560, "x10_bridge"), (595, "x11_camp"), (630, "x12_overlook"), (665, "x13_pen"), (720, "x14_ashford_free")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
@@ -1087,7 +1120,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.extras {
-                shot.as_deref() == Some("x10_bridge")
+                shot.as_deref() == Some("x14_ashford_free")
             } else if sh.menus {
                 shot.as_deref() == Some("m5_gift")
             } else if sh.tour {

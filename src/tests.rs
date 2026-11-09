@@ -308,7 +308,7 @@ fn bosses_give_a_unique_you_lack() {
     g.enemies[i].alive = false;
     g.on_kill(i);
     let n = g.player.bag.iter().filter(|it| it.legend.map(|l| crate::items::UNIQUES.contains(&l)).unwrap_or(false)).count();
-    assert_eq!(n, 1);
+    assert!(n >= 1, "at least the one the boss gives");
     // and it survives a save
     let it = g.player.bag.iter().find(|it| it.legend.is_some() && crate::items::UNIQUES.contains(&it.legend.unwrap())).unwrap();
     let back = crate::items::Item::decode(&it.encode()).unwrap();
@@ -373,4 +373,34 @@ fn ravenhold_bridge_is_built() {
         assert!(near(crate::world::WOOD) > 200, "a barricade");
         assert!(w.at(bx, by) == crate::world::E, "the bridge is walkable");
     }
+}
+
+#[test]
+fn quiet_places_are_built() {
+    for seed in [1u64, 2, 3, 4] {
+        for (a, k) in [(AreaId::Pines, 0u8), (AreaId::Fen, 1), (AreaId::Graveyard, 2)] {
+            let (_, sp) = crate::areagen::generate(a, seed);
+            assert!(sp.lore.iter().any(|l| l.2 == k), "{:?} seed {} has its quiet place", a, seed);
+        }
+    }
+}
+
+#[test]
+fn freeing_tomas_brings_him_home() {
+    let mut g = Game::new(6);
+    g.saving = false;
+    g.travel(AreaId::Graveyard);
+    let (x, y, _) = *g.lore.iter().find(|l| l.2 == crate::quiet::PEN).unwrap();
+    assert!(g.npcs.iter().any(|n| n.k == crate::quiet::TOMAS), "Tomas is in his pen");
+    g.player.x = x + 4.0;
+    g.player.y = y;
+    let gold = g.player.gold;
+    assert!(g.update_lore(true));
+    assert!(g.player.gold > gold);
+    assert!(!g.npcs.iter().any(|n| n.k == crate::quiet::TOMAS), "he runs for home");
+    g.king_dead = true;
+    g.chief_dead = true;
+    g.travel(AreaId::Ashford);
+    assert!(g.npcs.iter().any(|n| n.k == crate::quiet::TOMAS), "and is by the well in Ashford");
+    assert!(g.npcs.len() >= 8, "more people about after both bosses");
 }

@@ -13,7 +13,7 @@ Each step below is one commit and is playable on its own.
 
 ---
 
-## Step 1 - The Hollow King you take apart
+## Step 1 - The Hollow King you take apart (done)
 The fight moves from "a big health bar" to "a body you dismantle".
 
 **Weak points.** Each has its own small pool. Damage landing on that part of his body fills
@@ -46,7 +46,7 @@ counts against his health too.
 - Both second phases happen.
 - The boss test can still win with every build.
 
-## Step 2 - Enemies whose anatomy changes the fight
+## Step 2 - Enemies whose anatomy changes the fight (done)
 1. **Shield-bearer** (new skeleton in the crypt, bandit at Ravenhold). Blocks blows from the
    front with a wooden or iron shield. Break the shield hand, burn the wooden shield, or get
    behind him. Without the shield he is an ordinary fighter.
@@ -60,7 +60,7 @@ counts against his health too.
 
 Each has a visible tell, and a first-time tip the first time you meet it.
 
-## Step 3 - Gear that changes how you fight
+## Step 3 - Gear that changes how you fight (done)
 Four new uniques. Each boss gives you one you don't have yet, and they can drop anywhere legendaries do:
 
 | Item | Effect | Trade-off |
@@ -70,7 +70,7 @@ Four new uniques. Each boss gives you one you don't have yet, and they can drop 
 | **The Conduit** (sword) | Lightning chains through severed metal armour pieces lying on the ground | |
 | **Ember Ring** | Standing near burning ground restores mana | Fire burns you 50% longer |
 
-## Step 4 - Agency from the first minute
+## Step 4 - Agency from the first minute (done)
 - **Starting choice**, at Elder Maren's first conversation. Pick one:
   - *Spark* (Lightning, rank 1);
   - *Oil flasks* (a throwable oil flask with 5 charges that refill in town);
@@ -81,7 +81,7 @@ Four new uniques. Each boss gives you one you don't have yet, and they can drop 
   (50 gold x level). Tomes stay learned.
 - This replaces unlocking ultimates earlier. Ultimates stay a later-act reward.
 
-## Step 5 - The Ravenhold bridge
+## Step 5 - The Ravenhold bridge (done)
 A hand-built set piece on the road into Ravenhold:
 - Bandits hold a wooden bridge and barricade above a drainage ditch full of oil and water.
 - Fight across, burn the barricade, lure them down into the oil and light it, or freeze the
@@ -89,7 +89,7 @@ A hand-built set piece on the road into Ravenhold:
 - A chest behind the barricade.
 - All solutions work. It teaches what the systems can do.
 
-## Step 6 - Quiet and consequence
+## Step 6 - Quiet and consequence (done)
 - **Quiet scenes**, each with a few lines of text and a small reward:
   - a burned camp in the Pines with a dying traveller's note;
   - a safe overlook in the Fen;

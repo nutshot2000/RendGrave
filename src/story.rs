@@ -45,7 +45,7 @@ const AFTER_CHIEF: [&str; 3] = [
     "BUT THE TRADERS FROM THE NORTH TELL OF WORSE. THE PASSES ARE FROZEN, AND SOMETHING WALKS IN THE ICE.",
     "REST NOW. WHEN THE SNOWS BREAK, THE NORTH WILL NEED YOU.",
 ];
-const BARKS: [&str; 10] = [
+pub const BARKS: [&str; 10] = [
     "STAY NEAR THE FIRE AFTER DARK.",
     "MY BROTHER WENT INTO THE PINES. HE CAME BACK WRONG.",
     "THE MERCHANT'S PRICES ARE A CRIME.",
@@ -168,7 +168,14 @@ impl Game {
         let next = (inp.interact && !self.prev.interact) || (inp.lmb && !self.prev.lmb) || (inp.dodge && !self.prev.dodge);
         let close = inp.close && !self.prev.close;
         let told_chief = self.has(TOLD_CHIEF);
+        let lore_talk = self.talk_name.is_some();
         let Some((pages, page)) = &mut self.talk else { return };
+        if (close || (next && *page + 1 >= pages.len())) && lore_talk {
+            self.talk = None;
+            self.talk_name = None;
+            self.hold_block = true;
+            return;
+        }
         if close || (next && *page + 1 >= pages.len()) {
             let generic = pages.len() == 1;
             let was_chief = told_chief && pages.len() == AFTER_CHIEF.len() && pages[0] == AFTER_CHIEF[0];
@@ -207,8 +214,14 @@ impl Game {
                 n.bark -= 1;
             }
             let near = ((n.x - px).powi(2) + (n.y - py).powi(2)).sqrt();
-            if n.k == 0 {
+            if n.k == 0 || n.k == crate::quiet::TOMAS {
                 n.face = if px < n.x { -1.0 } else { 1.0 };
+                if n.k == crate::quiet::TOMAS && near < 34.0 && n.bark == 0 && self.area == AreaId::Ashford {
+                    n.bark = 900;
+                    let (x, y) = (n.x, n.y);
+                    let line = self.bark_for(crate::quiet::TOMAS, i);
+                    self.float(x, y - 44.0, line.into(), [220, 210, 190], false);
+                }
                 continue;
             }
             n.t -= 1;
@@ -240,7 +253,8 @@ impl Game {
             if near < 34.0 && n.bark == 0 && !self.player.dead {
                 n.bark = 900;
                 let (x, y) = (n.x, n.y);
-                let line = BARKS[(i * 3 + (self.frame / 600) as usize) % BARKS.len()];
+                let nk = self.npcs[i].k;
+                let line = self.bark_for(nk, i);
                 self.float(x, y - 44.0, line.into(), [220, 210, 190], false);
             }
         }

@@ -928,6 +928,22 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             }
         }
     }
+    // ---- quiet places not yet visited: a pale note on the ground that catches the light
+    for &(lx, ly, k) in &g.lore {
+        if g.lore_done & (1 << k) != 0 || k == crate::quiet::PEN {
+            continue;
+        }
+        let (sx, sy) = (lx as i32 - cx, ly as i32 - cy);
+        let gl = 60 + ((t as f32 * 0.08).sin() * 50.0 + 50.0) as u8;
+        for dy in 0..3i32 {
+            for dx in -2i32..=2 {
+                c.put(sx + dx, sy - dy, ly + 0.3, [226, 214, 180], [gl, gl, gl / 2], dy as f32);
+            }
+        }
+        if (t / 20) % 5 == 0 {
+            c.glow(sx, sy - 6, [255, 230, 150]);
+        }
+    }
     // ---- loose crossbows: still loaded, glinting
     for b in &g.loose_bows {
         let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);

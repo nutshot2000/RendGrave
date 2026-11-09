@@ -366,6 +366,10 @@ pub struct Game {
     pub loose_bows: Vec<crate::anatomy::LooseBow>,
     /// a hand-built encounter in this area, and whether it has been announced this visit
     pub setpiece: Option<(f32, f32)>,
+    /// quiet places in this area, which ones you've found (bits), and who is talking
+    pub lore: Vec<(f32, f32, u8)>,
+    pub lore_done: u8,
+    pub talk_name: Option<String>,
     /// the starting gift (0 not chosen yet, 1 spark, 2 oil flasks, 3 weapon) and flasks left
     pub pick: u8,
     pub flasks: i32,
@@ -599,6 +603,9 @@ impl Game {
             part_hits: vec![],
             loose_bows: vec![],
             setpiece: None,
+            lore: vec![],
+            lore_done: 0,
+            talk_name: None,
             pick: 0,
             flasks: 0,
             choice: None,

@@ -215,10 +215,12 @@ pub struct Spawns {
     pub cracks: Vec<(f32, f32)>,
     /// a hand-built encounter announced when you come near
     pub setpiece: Option<(f32, f32)>,
+    /// quiet places: (x, y, kind) - see quiet.rs
+    pub lore: Vec<(f32, f32, u8)>,
 }
 impl Spawns {
     fn new() -> Spawns {
-        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None, maren: None, posts: vec![], cracks: vec![], setpiece: None }
+        Spawns { buildings: vec![], lamps: vec![], start: (100.0, 100.0), entries: vec![], enemies: vec![], braziers: vec![], exits: vec![], waypoint: None, chests: vec![], shrines: vec![], barrels: vec![], merchant: None, maren: None, posts: vec![], cracks: vec![], setpiece: None, lore: vec![] }
     }
     pub fn arrival(&self, from: AreaId) -> (f32, f32) {
         self.entries.iter().find(|e| e.0 == from).map(|e| (e.1, e.2)).unwrap_or(self.start)
@@ -230,7 +232,7 @@ pub fn generate(id: AreaId, seed_: u64) -> (World, Spawns) {
     seed(s);
     let (aw, ah) = id.size();
     let mut w = World::sized(aw, ah);
-    let sp = match id {
+    let mut sp = match id {
         AreaId::Ashford => town(&mut w, s as u32),
         AreaId::Pines => forest(&mut w, s as u32),
         AreaId::Graveyard => graveyard(&mut w, s as u32),
@@ -239,8 +241,157 @@ pub fn generate(id: AreaId, seed_: u64) -> (World, Spawns) {
         AreaId::Crypt(f) => dungeon(&mut w, f, false),
         AreaId::Cellars(f) => dungeon(&mut w, f, true),
     };
+    quiet_scene(&mut w, &mut sp, id);
     w.wake_all();
     (w, sp)
+}
+
+/// a quiet place off the beaten track, one per outdoor area that has one (see quiet.rs)
+fn quiet_scene(w: &mut World, sp: &mut Spawns, id: AreaId) {
+    let kind = match id {
+        AreaId::Pines => 0u8,
+        AreaId::Fen => 1,
+        AreaId::Graveyard => 2,
+        _ => return,
+    };
+    let (aw, ah) = (w.aw as f32, w.ah as f32);
+    let mut spot = None;
+    for t in 0..1500 {
+        let (x, y) = if kind == 1 && t < 900 {
+            // the overlook sits near the top or bottom edge
+            (rr(160.0, aw - 160.0), if rnd() < 0.5 { rr(110.0, 200.0) } else { rr(ah - 200.0, ah - 110.0) })
+        } else {
+            (rr(140.0, aw - 140.0), rr(140.0, ah - 140.0))
+        };
+        let far = |p: (f32, f32), d: f32| ((p.0 - x).powi(2) + (p.1 - y).powi(2)).sqrt() > d;
+        if !far(sp.start, 260.0) || !sp.exits.iter().all(|e| far((((e.x0 + e.x1) / 2) as f32, ((e.y0 + e.y1) / 2) as f32), 220.0)) {
+            continue;
+        }
+        if let Some((sx, sy)) = sp.waypoint {
+            if !far((sx, sy), 160.0) {
+                continue;
+            }
+        }
+        // dry, open ground, off the road, clear of buildings
+        let ok = (-36..=36).step_by(4).all(|dy: i32| {
+            (-44..=44).step_by(4).all(|dx: i32| {
+                let (px, py) = (x as i32 + dx, y as i32 + dy);
+                if !inarea(w, px, py) {
+                    return false;
+                }
+                let i = idx(px, py);
+                !is_liquid(w.m[i]) && !matches!(w.m[i], BRICK | STONE) && !matches!(w.g[i], ROAD | FLOOR | PLANK | STAIRS | STAIRSUP)
+            })
+        });
+        if ok {
+            spot = Some((x as i32, y as i32));
+            break;
+        }
+    }
+    let Some((cx, cy)) = spot else { return };
+    // clear the trees and rocks
+    for dy in -30..=30 {
+        for dx in -38..=38 {
+            if (dx * dx) as f32 / 1444.0 + (dy * dy) as f32 / 900.0 < 1.0 {
+                let i = idx(cx + dx, cy + dy);
+                if matches!(w.m[i], TREE | ROCK | WOOD | GAS) {
+                    w.m[i] = E;
+                    w.aux[i] &= !AUX_TRUNK;
+                }
+            }
+        }
+    }
+    match kind {
+        0 => {
+            // a burned camp: scorched ground, ash, a collapsed tent, a dead fire, bones
+            for dy in -24..=24 {
+                for dx in -30..=30 {
+                    let d = (dx * dx) as f32 / 900.0 + (dy * dy) as f32 / 576.0;
+                    if d < 1.0 {
+                        let i = idx(cx + dx, cy + dy);
+                        w.g[i] = BURNT;
+                        if rnd() < 0.08 * (1.0 - d) {
+                            w.m[i] = ASH;
+                            w.col[i] = [70, 66, 62];
+                        }
+                    }
+                }
+            }
+            // the collapsed tent: scorched canvas with burnt-through holes, two charred poles
+            for ty in 0..14 {
+                for tx in -(ty / 2 + 4)..=(ty / 2 + 4) {
+                    let i = idx(cx - 18 + tx, cy - 16 + ty);
+                    if h2(tx, ty, 77) < 0.8 {
+                        w.m[i] = CLOTH;
+                        w.col[i] = if h2(tx, ty, 78) < 0.3 { [44, 36, 32] } else { [132, 116, 92] };
+                    }
+                }
+            }
+            for &(px, py) in &[(cx - 26, cy - 4), (cx - 10, cy - 4)] {
+                w.rect(px, py, px + 2, py + 1, WOOD);
+            }
+            // the dead campfire: a ring of stones round the ash
+            for k in 0..7 {
+                let a = k as f32 / 7.0 * std::f32::consts::TAU;
+                let (sx, sy) = (cx + 12 + (a.cos() * 7.0) as i32, cy + 6 + (a.sin() * 4.0) as i32);
+                w.rect(sx, sy, sx + 2, sy + 1, ROCK);
+            }
+            for _ in 0..10 {
+                let i = idx(cx + rr(-12.0, 12.0) as i32, cy + rr(4.0, 14.0) as i32);
+                w.m[i] = BONE;
+                w.col[i] = [196, 188, 166];
+            }
+            barrels(w, sp, cx as f32 + 22.0, cy as f32 - 10.0, 1, &[(4, 1.0)]);
+        }
+        1 => {
+            // an old stone overlook ringed with boulders, a lamp left burning
+            for dy in -20..=20 {
+                for dx in -28..=28 {
+                    let d = (dx * dx) as f32 / 784.0 + (dy * dy) as f32 / 400.0;
+                    let i = idx(cx + dx, cy + dy);
+                    if d < 1.0 {
+                        w.g[i] = FLOOR;
+                    }
+                }
+            }
+            // a ring of old standing stones, open to the south
+            for k in 0..9 {
+                let a = std::f32::consts::PI * (1.15 + k as f32 * 0.09) * 2.0;
+                let (sx, sy) = (cx + (a.cos() * 34.0) as i32, cy + (a.sin() * 24.0) as i32);
+                if a.sin() > 0.5 && a.cos().abs() < 0.6 {
+                    continue;
+                }
+                w.rect(sx - 2, sy - 1, sx + 2, sy + 1, STONE);
+            }
+            sp.lamps.push((cx as f32, cy as f32 - 4.0, [1.0, 0.75, 0.45]));
+            sp.posts.push((cx as f32 + 16.0, cy as f32 - 8.0));
+        }
+        _ => {
+            // a pen of stakes with a villager inside, and the dead nosing about it
+            for dy in -14..=14 {
+                for dx in -14..=14 {
+                    let d = ((dx * dx + dy * dy) as f32).sqrt();
+                    let i = idx(cx + dx, cy + dy);
+                    if d < 10.0 {
+                        w.m[i] = E;
+                        w.g[i] = DIRT;
+                    } else if d < 12.5 {
+                        w.m[i] = WOOD;
+                        w.col[i] = if (dx + dy) % 3 == 0 { [84, 60, 38] } else { [118, 84, 52] };
+                    }
+                }
+            }
+            for k in 0..3 {
+                let a = k as f32 * 2.1;
+                sp.enemies.push((Kind::Zombie, cx as f32 + a.cos() * 34.0, cy as f32 + a.sin() * 24.0));
+            }
+        }
+    }
+    if kind < 2 {
+        // nothing dead comes near the quiet places
+        sp.enemies.retain(|e| ((e.1 - cx as f32).powi(2) + (e.2 - cy as f32).powi(2)).sqrt() > 170.0);
+    }
+    sp.lore.push((cx as f32, cy as f32, kind));
 }
 
 // ------------------------------------------------------------------ helpers

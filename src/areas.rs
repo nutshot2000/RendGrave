@@ -193,6 +193,7 @@ impl Game {
         self.posts = sp.posts.clone();
         self.cracks = sp.cracks.clone();
         self.setpiece = sp.setpiece;
+        self.lore = sp.lore.clone();
         if to.is_dungeon() {
             self.seen.remove(&to.key());
         }
@@ -200,6 +201,7 @@ impl Game {
             Some(m) => crate::story::town_folk(m, &self.world),
             None => vec![],
         };
+        self.place_quiet();
         self.story_arrive(to);
         self.shop_open = false;
         if to == AreaId::Ashford {
@@ -298,6 +300,9 @@ impl Game {
                 }
                 return;
             }
+        }
+        if self.update_lore(press) {
+            return;
         }
         if self.update_props(press) {
             return;
@@ -482,6 +487,7 @@ impl Game {
             format!("played {}", self.played),
             format!("tips {}", self.tips),
             format!("pick {}", self.pick),
+            format!("lore {}", self.lore_done),
             format!("flasks {}", self.flasks),
         ];
         // skills by name, so adding or reordering skills never scrambles a save
@@ -597,6 +603,7 @@ impl Game {
                 "played" => self.played = v.parse().unwrap_or(0),
                 "tips" => self.tips = v.parse().unwrap_or(0),
                 "pick" => self.pick = v.parse().unwrap_or(0),
+                "lore" => self.lore_done = v.parse().unwrap_or(0),
                 "flasks" => self.flasks = v.parse().unwrap_or(0),
                 "equipped" => self.player.equip = [None, None, None, None],
                 "equip0" | "equip1" | "equip2" | "equip3" => {

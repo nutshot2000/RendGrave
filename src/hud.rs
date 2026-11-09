@@ -1602,6 +1602,19 @@ fn draw_talk(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     u.rect(x, y, w, h, [16, 11, 14], 238);
     u.rect(x, y, w, 1, [200, 170, 110], 255);
     u.rect(x, y + h - 1, w, 1, [90, 70, 50], 255);
+    if let Some(name) = &g.talk_name {
+        // a note, a place, a stranger: just the words
+        u.text(x + 12, y + 7, name, [240, 214, 150], 1, true);
+        let maxc = ((w - 24) / 4) as usize;
+        if let Some(txt) = pages.get(*page) {
+            for (k, l) in wrap(txt, maxc).iter().enumerate() {
+                u.text(x + 12, y + 20 + k as i32 * 9, l, [230, 222, 210], 1, false);
+            }
+        }
+        let more = if *page + 1 < pages.len() { format!("E  NEXT  ({}/{})", page + 1, pages.len()) } else { "E  CLOSE".into() };
+        u.text(x + w - Ui::text_w(&more, 1) - 8, y + h - 10, &more, [255, 214, 90], 1, false);
+        return;
+    }
     // a little portrait: Maren's lantern-lit face
     u.rect(x + 8, y + 10, 26, 30, [40, 30, 34], 255);
     u.rect(x + 13, y + 14, 16, 12, [214, 172, 138], 255);
