@@ -497,6 +497,7 @@ fn gamepad_button_names_replace_keys() {
     let mut pad = crate::pad::Pad::off();
     pad.fake("", (0.0, 0.0), (0.0, 0.0));
     assert_eq!(crate::pad::tr("E  OPEN CHEST"), "A  OPEN CHEST");
+    assert_eq!(crate::pad::tr("E  SHRINE OF HASTE"), "A  SHRINE OF HASTE");
     assert_eq!(crate::pad::tr("CLICK TO EQUIP OR TAKE OFF   RIGHT CLICK TO SELL"), "A TO EQUIP OR TAKE OFF   X TO SELL");
     assert_eq!(crate::pad::tr("PRESS R TO WAKE IN ASHFORD"), "PRESS A TO WAKE IN ASHFORD");
     assert_eq!(crate::pad::tr("DESCEND THE CRYPT AND SLAY THE HOLLOW KING"), "DESCEND THE CRYPT AND SLAY THE HOLLOW KING");

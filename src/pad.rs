@@ -63,6 +63,10 @@ pub fn tr(s: &str) -> Cow<'_, str> {
             out = Some(cur.replace(a, b));
         }
     }
+    // every interaction prompt starts with the key: "E  OPEN CHEST", "E  SHRINE OF ...", and so on
+    if out.as_deref().unwrap_or(s).starts_with("E  ") {
+        out = Some(out.as_deref().unwrap_or(s).replacen("E  ", "A  ", 1));
+    }
     match out {
         Some(o) => Cow::Owned(o),
         None => Cow::Borrowed(s),
