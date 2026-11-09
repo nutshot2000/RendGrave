@@ -203,6 +203,9 @@ impl Game {
         self.shop_open = false;
         if to == AreaId::Ashford {
             self.restock();
+            if self.pick == 2 {
+                self.flasks = crate::agency::FLASKS;
+            }
         }
         self.player.x = x;
         self.player.y = y;
@@ -477,6 +480,8 @@ impl Game {
             format!("story {}", self.story),
             format!("played {}", self.played),
             format!("tips {}", self.tips),
+            format!("pick {}", self.pick),
+            format!("flasks {}", self.flasks),
         ];
         // skills by name, so adding or reordering skills never scrambles a save
         for (i, n) in NODES.iter().enumerate() {
@@ -590,6 +595,8 @@ impl Game {
                 }
                 "played" => self.played = v.parse().unwrap_or(0),
                 "tips" => self.tips = v.parse().unwrap_or(0),
+                "pick" => self.pick = v.parse().unwrap_or(0),
+                "flasks" => self.flasks = v.parse().unwrap_or(0),
                 "equipped" => self.player.equip = [None, None, None, None],
                 "equip0" | "equip1" | "equip2" | "equip3" => {
                     let s: usize = k[5..].parse().unwrap_or(0);

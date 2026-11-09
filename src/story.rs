@@ -170,6 +170,7 @@ impl Game {
         let told_chief = self.has(TOLD_CHIEF);
         let Some((pages, page)) = &mut self.talk else { return };
         if close || (next && *page + 1 >= pages.len()) {
+            let generic = pages.len() == 1;
             let was_chief = told_chief && pages.len() == AFTER_CHIEF.len() && pages[0] == AFTER_CHIEF[0];
             let was_king = pages.len() == AFTER_KING.len() && pages[0] == AFTER_KING[0];
             self.talk = None;
@@ -182,6 +183,12 @@ impl Game {
             if was_chief {
                 self.toast = Some(("+300 GOLD".into(), 160));
                 self.check_act_end();
+            }
+            // after the first talk, a gift for the road; later, the offer of a respec
+            if self.pick == 0 && self.has(MET) {
+                self.offer_start();
+            } else if generic && self.pick != 0 {
+                self.offer_respec();
             }
             self.save();
         } else if next {

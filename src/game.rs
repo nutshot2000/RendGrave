@@ -27,6 +27,8 @@ pub struct Input {
     pub close: bool,
     pub interact: bool,
     pub inv: bool,
+    /// Q: throw an oil flask
+    pub throw: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -362,6 +364,11 @@ pub struct Game {
     pub part_hits: Vec<(usize, f32, f32)>,
     /// crossbows dropped by crossbowmen who lost their firing arm, still loaded
     pub loose_bows: Vec<crate::anatomy::LooseBow>,
+    /// the starting gift (0 not chosen yet, 1 spark, 2 oil flasks, 3 weapon) and flasks left
+    pub pick: u8,
+    pub flasks: i32,
+    /// a choice box on screen (the starting gift, a respec)
+    pub choice: Option<crate::agency::Choice>,
     /// first-time tips already shown (bits)
     pub tips: u8,
     /// a save that failed, to tell the player about
@@ -589,6 +596,9 @@ impl Game {
             hit_h: None,
             part_hits: vec![],
             loose_bows: vec![],
+            pick: 0,
+            flasks: 0,
+            choice: None,
             tips: 0,
             ground: vec![],
             inv_open: false,
@@ -755,6 +765,11 @@ impl Game {
             self.prev = inp.clone();
             return;
         }
+        if self.choice.is_some() {
+            self.update_choice(inp);
+            self.prev = inp.clone();
+            return;
+        }
         if self.talk.is_some() {
             self.update_talk(inp);
             self.prev = inp.clone();
@@ -917,6 +932,9 @@ impl Game {
         if inp.restart && !self.prev.restart && self.player.dead {
             self.revive();
             return;
+        }
+        if inp.throw && !self.prev.throw && !self.player.dead {
+            self.throw_flask(inp);
         }
         let (mwx, mwy) = self.mouse_world(inp);
         let p = &mut self.player;
@@ -1513,7 +1531,7 @@ impl Game {
                 let p = &mut self.projs[k];
                 p.x += p.vx / steps as f32;
                 p.y += p.vy / steps as f32;
-                if p.k == 1 || p.k == 5 {
+                if p.k == 1 || p.k == 5 || p.k == 6 {
                     p.vz -= 0.09 / steps as f32;
                 }
                 p.z += p.vz / steps as f32;
@@ -1580,6 +1598,7 @@ impl Game {
                         }
                         1 => self.acid_hit(x, y, z, hit_e),
                         5 => self.drop_keg(x - self.projs[k].vx * 2.0, y - self.projs[k].vy * 2.0),
+                        6 => self.flask_break(x, y),
                         3 | 4 => {
                             self.sounds.push(Snd { k: Sfx::ArrowHit, x: x, y: y, v: 0.7 });
                             if hit_p && self.player.inv == 0 {

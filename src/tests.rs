@@ -315,3 +315,49 @@ fn bosses_give_a_unique_you_lack() {
     assert_eq!(back.legend, it.legend);
     assert_eq!(back.slot, it.slot);
 }
+
+#[test]
+fn starting_gifts() {
+    let mut g = Game::new(8);
+    g.saving = false;
+    g.take_gift(1);
+    assert!(g.player.sk.bar().contains(&Sk::Lightning), "spark: lightning on the bar");
+    let mut g = Game::new(8);
+    g.saving = false;
+    g.take_gift(2);
+    assert_eq!(g.flasks, crate::agency::FLASKS);
+    let mut g = Game::new(8);
+    g.saving = false;
+    g.take_gift(3);
+    let w = g.player.equip[0].as_ref().unwrap();
+    assert!(matches!(w.wk, crate::items::WKind::Axe | crate::items::WKind::Spear));
+}
+
+#[test]
+fn a_thrown_flask_spills_oil() {
+    let mut g = Game::new(8);
+    g.saving = false;
+    g.take_gift(2);
+    let (x, y) = (g.player.x, g.player.y);
+    g.flask_break(x + 30.0, y);
+    let oil = (-8..=8).flat_map(|dx| (-6..=6).map(move |dy| (dx, dy))).filter(|(dx, dy)| g.world.at(x as i32 + 30 + dx, y as i32 + dy) == crate::world::OIL).count();
+    assert!(oil > 10);
+}
+
+#[test]
+fn respec_gives_every_point_back() {
+    let mut g = Game::new(8);
+    g.saving = false;
+    g.player.sk.level = 6;
+    g.player.gold = 1000;
+    set_rank(&mut g, Sk::Edge, 3);
+    set_rank(&mut g, Sk::Vigor, 2);
+    let pts = g.player.sk.points;
+    g.offer_respec();
+    let mut inp = Input::default();
+    inp.sel = Some(0);
+    g.update_choice(&inp);
+    assert_eq!(g.player.sk.points, pts + 5);
+    assert_eq!(g.player.gold, 1000 - 300);
+    assert!(g.player.sk.rank.iter().all(|r| *r == 0));
+}

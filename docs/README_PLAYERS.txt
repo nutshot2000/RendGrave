@@ -20,6 +20,7 @@ Right mouse         Cast the selected spell
 1-9 / mouse wheel   Choose a spell
 Space               Dodge roll
 F                   Drink a potion
+Q                   Throw an oil flask (if you chose flasks from Elder Maren)
 E                   Interact: exits, stairs, waypoints, chests, shrines, the merchant
 I                   Gear: click to equip, right click to sell (rare items: right click twice)
 K or Tab            Skill tree (A / D or click to change school)
@@ -38,7 +39,8 @@ Settings are in rendgrave_settings.txt and rendgrave_options.txt.
 
 Dungeons are rebuilt every time you enter them. If you quit inside one, you continue
 at its entrance. When a dungeon's boss dies, a portal opens to take you to any waypoint.
-If you die you wake in Ashford and lose a tenth of your gold. Your gear is safe.
+Elder Maren gives you a gift for the road after your first talk, and later she can
+reset your skills for a little gold (talk to her again). If you die you wake in Ashford and lose a tenth of your gold. Your gear is safe.
 
 WHERE TO GO
 -----------

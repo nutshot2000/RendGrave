@@ -960,6 +960,16 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             c.glow(sx + 1, sy - 7, [255, 200, 80]);
             continue;
         }
+        if p.k == 6 {
+            // a thrown oil flask: dark glass, a cork
+            for dy in 0..4i32 {
+                for dx in -1i32..=1 {
+                    c.put(sx + dx, sy - dy, p.y + 0.5, if dx == 1 { [90, 110, 120] } else { [40, 46, 52] }, [0; 3], p.z + dy as f32);
+                }
+            }
+            c.put(sx, sy - 4, p.y + 0.5, [150, 110, 70], [0; 3], p.z + 4.0);
+            continue;
+        }
         if p.k == 3 || p.k == 4 {
             // arrow: shaft along its flight, grey head
             let l = (p.vx * p.vx + p.vy * p.vy).sqrt().max(0.01);

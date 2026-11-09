@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod agency;
 mod uniques;
 mod anatomy;
 mod kingparts;
@@ -541,6 +542,12 @@ impl App {
                 g.talk.as_mut().unwrap().1 = 1;
             }
             156 => return Some("m4_dialogue".into()),
+            157 => {
+                self.game.talk = None;
+                self.game.offer_start();
+                self.game.choice.as_mut().unwrap().hover = Some(1);
+            }
+            160 => return Some("m5_gift".into()),
             _ => {}
         }
         None
@@ -855,6 +862,7 @@ impl ApplicationHandler for App {
                         KeyCode::KeyD | KeyCode::ArrowRight => i.right = down,
                         KeyCode::Space => i.dodge = down,
                         KeyCode::KeyF => i.potion = down,
+                        KeyCode::KeyQ => i.throw = down,
                         KeyCode::KeyR => i.restart = down,
                         KeyCode::KeyE => i.interact = down,
                         KeyCode::KeyI => i.inv = down,
@@ -1067,7 +1075,7 @@ impl App {
             } else if sh.extras {
                 shot.as_deref() == Some("x9_anatomy")
             } else if sh.menus {
-                shot.as_deref() == Some("m4_dialogue")
+                shot.as_deref() == Some("m5_gift")
             } else if sh.tour {
                 shot.as_deref() == Some("t15_shop")
             } else if sh.spells {

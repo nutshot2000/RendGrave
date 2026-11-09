@@ -1113,6 +1113,16 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
         }
     }
     u.text(qx + 5, qy + 2, &format!("{} F", p.potions), [255, 200, 200], 1, true);
+    if g.pick == 2 {
+        // oil flasks
+        let fx = qx + 26;
+        for dy in 0..6 {
+            for dx in -1i32..=1 {
+                u.px(fx + dx, qy + 2 + dy, if dy == 0 { [150, 110, 70] } else if dx == 1 { [100, 120, 130] } else { [50, 56, 64] }, 255);
+            }
+        }
+        u.text(fx + 4, qy + 2, &format!("{} Q", g.flasks), [200, 210, 220], 1, true);
+    }
     // spell bar: every learned spell
     let full = p.sk.bar();
     // at most 12 slots on screen; the window follows the selected spell
@@ -1283,6 +1293,7 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, cx: i32, cy: i32) {
     draw_guide(g, &mut u, fw, fh, cx, cy);
     draw_exit_labels(g, &mut u, fw, fh, cx, cy);
     draw_talk(g, &mut u, fw, fh);
+    draw_choice(g, &mut u, fw, fh);
     if g.ending == -1 {
         draw_ending(g, &mut u, fw, fh);
     }
@@ -1459,13 +1470,14 @@ fn draw_title(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
 }
 /// the full list of keys, from the title or the pause menu
 fn draw_controls(u: &mut Ui, fw: i32, fh: i32) {
-    let rows: [(&str, &str); 16] = [
+    let rows: [(&str, &str); 17] = [
         ("WASD / ARROWS", "MOVE"),
         ("LEFT MOUSE", "ATTACK WITH YOUR WEAPON"),
         ("RIGHT MOUSE", "CAST THE SELECTED SPELL"),
         ("1 - 9 / WHEEL", "CHOOSE A SPELL"),
         ("SPACE", "DODGE ROLL"),
         ("F", "DRINK A POTION"),
+        ("Q", "THROW AN OIL FLASK (IF YOU HAVE THEM)"),
         ("E", "INTERACT, TALK, OPEN, PICK UP"),
         ("I", "GEAR AND INVENTORY"),
         ("K / TAB", "SKILL TREE"),
@@ -1550,6 +1562,40 @@ fn draw_guide(g: &Game, u: &mut Ui, fw: i32, fh: i32, cx: i32, cy: i32) {
 }
 
 /// the dialogue box at the foot of the screen
+/// the boxes of a choice: the starting gift, the respec
+pub fn choice_box(k: usize, n: usize, fw: i32, fh: i32) -> (i32, i32, i32, i32) {
+    let w = ((fw - 40) / n as i32 - 8).min(170);
+    let total = n as i32 * (w + 8) - 8;
+    let x0 = fw / 2 - total / 2;
+    (x0 + k as i32 * (w + 8), fh / 2 - 30, w, 62)
+}
+pub fn choice_at(m: (f32, f32), view: (f32, f32), n: usize) -> Option<usize> {
+    let (fw, fh) = (view.0 as i32, view.1 as i32);
+    (0..n).find(|&k| {
+        let (x, y, w, h) = choice_box(k, n, fw, fh);
+        let (mx, my) = (m.0 as i32, m.1 as i32);
+        mx >= x && mx < x + w && my >= y && my < y + h
+    })
+}
+fn draw_choice(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
+    let Some(c) = &g.choice else { return };
+    u.rect(0, 0, fw, fh, [6, 3, 8], 150);
+    u.text_c(fw / 2, fh / 2 - 50, &c.title, [240, 214, 150], 1);
+    let n = c.opts.len();
+    for (k, (name, desc)) in c.opts.iter().enumerate() {
+        let (x, y, w, h) = choice_box(k, n, fw, fh);
+        let hov = c.hover == Some(k);
+        u.rect(x, y, w, h, if hov { [60, 36, 28] } else { [20, 13, 18] }, 240);
+        u.rect(x, y, w, 1, if hov { [255, 190, 110] } else { [90, 70, 60] }, 255);
+        u.text_c(x + w / 2, y + 6, &format!("{}  {}", k + 1, name), if hov { [255, 236, 200] } else { [240, 214, 150] }, 1);
+        for (j, l) in wrap(desc, ((w - 10) / 4) as usize).iter().enumerate() {
+            u.text(x + 6, y + 20 + j as i32 * 9, l, [200, 190, 190], 1, false);
+        }
+    }
+    let foot = if c.kind == crate::agency::ChoiceKind::Start { "CLICK ONE, OR PRESS 1, 2 OR 3" } else { "CLICK ONE, OR ESC" };
+    u.text_c(fw / 2, fh / 2 + 52, foot, [150, 140, 150], 1);
+}
+
 fn draw_talk(g: &Game, u: &mut Ui, fw: i32, fh: i32) {
     let Some((pages, page)) = &g.talk else { return };
     let (x, y, w, h) = (30, fh - 92, fw - 60, 62);
