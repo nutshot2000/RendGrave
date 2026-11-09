@@ -68,6 +68,19 @@ impl Game {
         e.hp *= 1.0 + 0.18 * l;
         e.maxhp = e.hp;
         e.dmg *= 1.0 + 0.1 * l;
+        // shield-bearers in the crypt and at Ravenhold
+        let shields_here = match k {
+            Kind::Skeleton => matches!(self.area, AreaId::Crypt(_)),
+            Kind::Bandit => matches!(self.area, AreaId::Ravenhold | AreaId::Cellars(_)),
+            _ => false,
+        };
+        if shields_here && rnd() < 0.25 {
+            e.shield_wood = rnd() < 0.5;
+            e.shield_max = (if e.shield_wood { 40.0 } else { 60.0 }) * (1.0 + 0.18 * (self.alvl - 1) as f32);
+            e.shield = e.shield_max;
+            e.speed *= 0.85;
+            return e;
+        }
         // now and then a champion: tougher, glowing, better loot
         if !k.boss() && self.area != AreaId::Ashford && rnd() < 0.07 {
             e.elite = true;
@@ -160,6 +173,7 @@ impl Game {
         self.fields.clear();
         self.meteors.clear();
         self.spikes.clear();
+        self.loose_bows.clear();
         let (x, y) = match sp.waypoint {
             Some((wx, wy)) if self.via_wp => (wx + 6.0, wy + 16.0),
             _ if from == to => sp.start,

@@ -55,6 +55,7 @@ impl Game {
     }
 
     pub fn hurt(&mut self, i: usize, dmg: f32, col: [u8; 3], big: bool) {
+        self.puncture(i);
         let dmg = dmg * self.power_mult() * self.status_mult(i);
         if let Some(h) = self.hit_h.take() {
             self.boss_part_hit(i, h, dmg);
@@ -82,6 +83,9 @@ impl Game {
     /// A blade stroke through an enemy at height `h` (negative = above the feet), coming from `src_x`.
     pub fn cut_enemy(&mut self, i: usize, h: f32, power: f32, dmg: f32, src_x: f32, crit: bool) {
         if self.enemies[i].frozen > 0 && self.shatter(i) {
+            return;
+        }
+        if self.shield_block(i, dmg, false) {
             return;
         }
         // a boss's hide is thick: blades scar it but rarely take anything off

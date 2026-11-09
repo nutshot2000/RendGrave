@@ -902,6 +902,49 @@ pub fn draw(g: &Game, f: &mut Frame, inp: &Input, lights_out: &mut Vec<GLight>) 
             elite_col: crate::champions::champ_col(e.aff),
         };
         draw_body(&mut c, &e.body, e.x + jitter, e.y, tint);
+        if e.shield > 0.0 {
+            // the shield, held out on the side it faces; cracks show as it weakens
+            let frac = e.shield / e.shield_max.max(1.0);
+            let (bx, by) = ((e.x + jitter + e.sface * 7.0) as i32 - cx, e.y as i32 - cy);
+            for k in 0..16i32 {
+                let half: i32 = if k == 0 || k == 15 { 2 } else { 3 };
+                for dx in -half..=half {
+                    let rim = dx.abs() == half || k == 0 || k == 15;
+                    let crack = frac < 0.6 && (dx * 7 + k * 3).rem_euclid(5) == 0 && k > 2 && k < 13;
+                    let col = if crack {
+                        [36, 28, 24]
+                    } else if e.shield_wood {
+                        if rim { [86, 88, 96] } else if dx == 0 || dx == 2 { [96, 66, 40] } else { [128, 88, 52] }
+                    } else if rim {
+                        [170, 174, 186]
+                    } else if dx == 0 && (k - 8).abs() < 2 {
+                        [200, 196, 170]
+                    } else {
+                        [118, 122, 134]
+                    };
+                    let sh = 0.8 + (dx + half) as f32 / (2 * half) as f32 * 0.3;
+                    c.put(bx + dx, by - 18 - k, e.y + 3.0, scl(col, sh), [0; 3], (18 + k) as f32);
+                }
+            }
+        }
+    }
+    // ---- loose crossbows: still loaded, glinting
+    for b in &g.loose_bows {
+        let (sx, sy) = (b.x as i32 - cx, b.y as i32 - cy);
+        let f = if b.dir.cos() >= 0.0 { 1 } else { -1 };
+        for k in -6..=4i32 {
+            for w in 0..2 {
+                c.put(sx + k * f, sy - 2 - w, b.y + 0.5, [150, 102, 60], [12, 8, 4], 2.0 + w as f32);
+            }
+        }
+        for k in -4..=4i32 {
+            c.put(sx + 4 * f, sy - 3 + k, b.y + 0.6, [180, 180, 196], [20, 20, 24], 3.0 + k as f32);
+        }
+        // the bolt in the groove, catching the light
+        let glint = if (t / 6) % 4 == 0 { 200 } else { 60 };
+        for k in 5..=8i32 {
+            c.put(sx + k * f, sy - 3, b.y + 0.7, [230, 230, 240], [glint, glint, glint / 2], 3.0);
+        }
     }
     // ---- projectiles
     for p in &g.projs {

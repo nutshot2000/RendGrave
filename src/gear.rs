@@ -44,6 +44,7 @@ impl Game {
         let (mwx, mwy) = self.mouse_world(inp);
         self.hit_barrels(px, py, aim, ws.reach, ws.arc);
         self.hit_cracks(px, py, aim, ws.reach);
+        self.hit_bows(px, py, aim, ws.reach, ws.arc);
         let edge = self.rank(Sk::Edge);
         let ex_r = self.rank(Sk::Executioner);
         let crit_ch = 0.15 + 0.08 * ex_r as f32 + g.crit / 100.0;
@@ -136,6 +137,9 @@ impl Game {
     /// a hammer blow: smashes a hole, shatters bone and ice, throws them back
     fn crush_enemy(&mut self, i: usize, h: f32, dmg: f32, crit: bool) {
         if self.enemies[i].frozen > 0 && self.shatter(i) {
+            return;
+        }
+        if self.shield_block(i, dmg, true) {
             return;
         }
         let e = &mut self.enemies[i];

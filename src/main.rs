@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // Run normally to play. `--showcase <dir>` plays a scripted demo and saves screenshots there.
 mod areas;
+mod anatomy;
 mod kingparts;
 mod savefile;
 #[cfg(test)]
@@ -660,6 +661,38 @@ impl App {
                 }
                 cam(g);
             }
+            440 => {
+                // shield-bearers, a dropped crossbow, a leaking bloater and a burning bandit
+                g.travel(areagen::AreaId::Ravenhold);
+                g.banner = None;
+                g.toast = None;
+                g.enemies.clear();
+                g.player.x += 260.0;
+                let (px, py) = (g.player.x, g.player.y);
+                for (k, wood) in [(0, true), (1, false)] {
+                    let mut e = g.scaled_enemy(Kind::Bandit, px + 50.0 + k as f32 * 30.0, py - 12.0);
+                    e.shield_wood = wood;
+                    e.shield_max = 60.0;
+                    e.shield = if k == 1 { 25.0 } else { 60.0 };
+                    e.sface = -1.0;
+                    e.face = -1.0;
+                    e.stun = 100000;
+                    g.enemies.push(e);
+                }
+                let mut cb = g.scaled_enemy(Kind::Crossbow, px - 40.0, py + 20.0);
+                cb.face = 1.0;
+                g.enemies.push(cb);
+                let n = g.enemies.len() - 1;
+                g.on_sever(n, &[crate::body::PK::ArmF]);
+                g.enemies[n].alive = false;
+                let mut b = g.scaled_enemy(Kind::Bloater, px + 20.0, py + 30.0);
+                b.stun = 100000;
+                b.hp = 1000.0;
+                g.enemies.push(b);
+                let n = g.enemies.len() - 1;
+                g.puncture(n);
+                cam(g);
+            }
             395 => {
                 if let Some(b) = g.enemies.iter().position(|e| e.k.boss() && e.alive) {
                     let m = g.enemies[b].maxhp;
@@ -680,7 +713,7 @@ impl App {
             }
             _ => {}
         }
-        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken")];
+        let shots = [(60, "x1_cracked_wall"), (110, "x2_breach_and_urns"), (175, "x3_champions"), (212, "x4_robber"), (222, "x5_streak"), (330, "x6_portal"), (365, "x7_king_cracked"), (430, "x8_king_broken"), (480, "x9_anatomy")];
         shots.iter().find(|s| s.0 == f).map(|s| s.1.to_string())
     }
     fn step_showcase(&mut self) -> Option<String> {
@@ -1031,7 +1064,7 @@ impl App {
             let done = if sh.loot {
                 shot.as_deref() == Some("g7_inventory")
             } else if sh.extras {
-                shot.as_deref() == Some("x8_king_broken")
+                shot.as_deref() == Some("x9_anatomy")
             } else if sh.menus {
                 shot.as_deref() == Some("m4_dialogue")
             } else if sh.tour {

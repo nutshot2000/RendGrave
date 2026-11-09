@@ -87,6 +87,17 @@ pub struct Enemy {
     pub wk_init: [i32; 3],
     /// the one-armed King's grab: >0 winding up, <0 lunging
     pub grab: i32,
+    /// see anatomy.rs: F_PANIC, F_DROPPED, F_PUNCTURED
+    pub flags: u8,
+    /// a punctured bloater: frames of acid left to leak
+    pub leak: i32,
+    /// shield-bearers: what's left of the shield, its full strength, wood or iron,
+    /// and the side it's held on (it turns slower than its bearer)
+    pub shield: f32,
+    pub shield_max: f32,
+    pub shield_wood: bool,
+    pub sface: f32,
+    pub sturn: i32,
 }
 
 pub struct Player {
@@ -347,6 +358,8 @@ pub struct Game {
     pub hit_h: Option<f32>,
     /// (enemy, height, damage) hits on the King from explosions and acid, applied after
     pub part_hits: Vec<(usize, f32, f32)>,
+    /// crossbows dropped by crossbowmen who lost their firing arm, still loaded
+    pub loose_bows: Vec<crate::anatomy::LooseBow>,
     /// first-time tips already shown (bits)
     pub tips: u8,
     /// a save that failed, to tell the player about
@@ -419,6 +432,13 @@ fn enemy(k: Kind, x: f32, y: f32) -> Enemy {
         wk: [1.0; 3],
         wk_init: [0; 3],
         grab: 0,
+        flags: 0,
+        leak: 0,
+        shield: 0.0,
+        shield_max: 0.0,
+        shield_wood: false,
+        sface: 1.0,
+        sturn: 0,
         slow: 0,
         bleed_dot: 0,
         bleed_amt: 0.0,
@@ -565,6 +585,7 @@ impl Game {
             sell_confirm: None,
             hit_h: None,
             part_hits: vec![],
+            loose_bows: vec![],
             tips: 0,
             ground: vec![],
             inv_open: false,
@@ -865,6 +886,7 @@ impl Game {
         self.update_talents();
         self.update_enemies();
         self.update_projs();
+        self.bows_tick();
         for (i, h, d) in std::mem::take(&mut self.part_hits) {
             if i < self.enemies.len() {
                 self.boss_part_hit(i, h, d);
@@ -1357,6 +1379,7 @@ impl Game {
     }
 
     pub fn explode(&mut self, x: f32, y: f32, z: f32, r: f32) {
+        self.bows_blast(x, y, r);
         self.sounds.push(Snd { k: Sfx::Explosion, x: x, y: y, v: (r / 16.0).min(1.3) });
         self.shake = self.shake.max(6.0);
         self.hitstop = self.hitstop.max(3);
@@ -1534,8 +1557,10 @@ impl Game {
                             if let Some(i) = hit_e {
                                 // a direct hit hurts on top of the blast
                                 let d = 16.0 * (1.0 + 0.15 * self.rank(Sk::Kindling) as f32) * self.spell_power();
-                                self.hit_h = Some(-z);
-                                self.hurt(i, d, [255, 170, 80], false);
+                                if !self.shield_block(i, d, false) {
+                                    self.hit_h = Some(-z);
+                                    self.hurt(i, d, [255, 170, 80], false);
+                                }
                             }
                             self.explode(x, y, z.max(2.0), r);
                             if self.rank(Sk::Splinter) > 0 {
@@ -1788,7 +1813,7 @@ impl Game {
                     }
                 });
             }
-            if u[1] {
+            if u[1] && e.k != Kind::Bloater {
                 e.body.each_in(0.0, -1.0, 6.0, |p, _, h| {
                     if h < 4.0 && rnd() < 0.08 {
                         p.acid = p.acid.max(160);
@@ -1837,8 +1862,13 @@ impl Game {
             for d in dr {
                 drips.push((ex + d.0, ey, -d.1));
             }
-            let ds = e.body.split();
-            let had = !ds.is_empty();
+            let mut ds = e.body.split();
+            let severed: Vec<PK> = ds.iter().map(|d| d.part.k).collect();
+            if e.k == Kind::Crossbow && e.flags & crate::anatomy::F_DROPPED == 0 {
+                // the crossbow lands on the ground, loaded, rather than flying off as a gib
+                ds.retain(|d| d.part.k != PK::Weapon);
+            }
+            let had = !severed.is_empty();
             let big_piece = ds.iter().any(|d| d.part.count() > 25);
             let m = e.body.mirror;
             let k = e.k;
@@ -1859,6 +1889,7 @@ impl Game {
                 if big_piece {
                     self.float(ex, ey - 70.0, txt, [255, 120, 100], false);
                 }
+                self.on_sever(i, &severed);
             }
             let e = &mut self.enemies[i];
             // how much body is left?
@@ -1900,6 +1931,7 @@ impl Game {
             self.boss_logic(i);
             self.boss_moves(i);
             self.champion_tick(i);
+            self.anatomy_tick(i);
             self.robber_tick(i);
             let e = &mut self.enemies[i];
             // AI
@@ -2081,6 +2113,9 @@ impl Game {
                 if e.t > 60 {
                     want = (e.vx, e.vy);
                 }
+            }
+            if let Some(w) = self.panic_want(i, spd) {
+                want = w;
             }
             let e = &mut self.enemies[i];
             // separation from other enemies

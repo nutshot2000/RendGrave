@@ -193,3 +193,80 @@ fn one_armed_king_calls_archers() {
     let skels = g.enemies.iter().filter(|e| e.k == Kind::Skeleton).count();
     assert!(archers >= 3 && skels == 0, "archers {} skeletons {}", archers, skels);
 }
+
+#[test]
+fn shields_block_from_the_front_only() {
+    let (mut g, i) = arena(Kind::Skeleton);
+    g.enemies[i].shield = 50.0;
+    g.enemies[i].shield_max = 50.0;
+    // the player stands to its left; it faces left: blocked
+    g.enemies[i].x = g.player.x + 20.0;
+    g.enemies[i].sface = -1.0;
+    let hp = g.enemies[i].hp;
+    assert!(g.shield_block(i, 10.0, false));
+    assert_eq!(g.enemies[i].hp, hp);
+    assert!(g.enemies[i].shield < 50.0);
+    // facing away: the blow gets through
+    g.enemies[i].sface = 1.0;
+    assert!(!g.shield_block(i, 10.0, false));
+    // a hammer breaks it fast
+    g.enemies[i].sface = -1.0;
+    g.shield_block(i, 30.0, true);
+    assert_eq!(g.enemies[i].shield, 0.0);
+}
+
+#[test]
+fn a_dropped_crossbow_shoots_through_a_line() {
+    let (mut g, i) = arena(Kind::Crossbow);
+    let (px, py) = (g.player.x, g.player.y);
+    g.enemies[i].x = px + 10.0;
+    g.enemies[i].face = 1.0;
+    g.on_sever(i, &[crate::body::PK::ArmF]);
+    assert_eq!(g.loose_bows.len(), 1);
+    // two zombies in line beyond it
+    for k in 0..2 {
+        let mut z = g.scaled_enemy(Kind::Zombie, g.loose_bows[0].x + 40.0 + k as f32 * 20.0, g.loose_bows[0].y);
+        z.stun = 1000;
+        g.enemies.push(z);
+    }
+    g.enemies[i].alive = false;
+    let before: Vec<f32> = g.enemies.iter().map(|e| e.hp).collect();
+    let b = g.loose_bows[0];
+    g.player.x = b.x - 15.0;
+    g.player.y = b.y;
+    g.hit_bows(b.x - 15.0, b.y, 0.0, 30.0, 1.2);
+    assert!(g.loose_bows.is_empty());
+    let hurt = (1..g.enemies.len()).filter(|&k| g.enemies[k].hp < before[k] || !g.enemies[k].alive).count();
+    assert_eq!(hurt, 2, "the bolt goes through both");
+    let _ = py;
+}
+
+#[test]
+fn a_cut_bloater_leaks_acid() {
+    let (mut g, i) = arena(Kind::Bloater);
+    g.enemies[i].hp = 1000.0;
+    g.hurt(i, 1.0, [255, 255, 255], false);
+    assert!(g.enemies[i].leak > 0);
+    let (x, y) = (g.enemies[i].x as i32, g.enemies[i].y as i32);
+    for _ in 0..12 {
+        g.frame += 1;
+        g.anatomy_tick(i);
+    }
+    let acid = (-4..=4).flat_map(|dx| (-2..=3).map(move |dy| (dx, dy))).filter(|(dx, dy)| g.world.at(x + dx, y + dy) == crate::world::ACID).count();
+    assert!(acid > 0, "acid on the floor under it");
+}
+
+#[test]
+fn burning_enemies_run_at_their_friends() {
+    let (mut g, i) = arena(Kind::Bandit);
+    let (x, y) = (g.enemies[i].x, g.enemies[i].y);
+    let friend = g.scaled_enemy(Kind::Bandit, x + 60.0, y);
+    g.enemies.push(friend);
+    g.enemies[i].burning = 40;
+    let w = g.panic_want(i, 1.0).expect("it panics");
+    assert!(w.0 > 0.5, "runs toward its friend");
+    g.enemies[i].x = x + 55.0;
+    g.panic_want(i, 1.0);
+    let lit = g.enemies[1].body.parts.iter().flat_map(|p| p.px.iter()).filter(|p| p.m != 0 && p.burn > 0).count();
+    assert!(lit > 0, "and sets it alight");
+}
