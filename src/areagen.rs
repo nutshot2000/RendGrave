@@ -904,9 +904,11 @@ fn fen(w: &mut World, s: u32) -> Spawns {
     for y in 0..w.ah {
         for x in 0..w.aw {
             let (fx, fy) = (x as f32, y as f32);
-            let n = fbm(fx * 0.014, fy * 0.014, s);
+            // mostly dark bog moss; peat in broad bands; a few drier grassy rises
+            let n = fbm(fx * 0.007, fy * 0.007, s);
+            let dry = fbm(fx * 0.009, fy * 0.009, s + 1);
             let i = y * W + x;
-            w.g[i] = if n > 0.6 { PEAT } else if n < 0.36 { MUD } else if fbm(fx * 0.03, fy * 0.03, s + 1) > 0.5 { MOSS } else { GRASS };
+            w.g[i] = if n > 0.58 { PEAT } else if dry > 0.64 { GRASS } else { MOSS };
             let wet = fbm(fx * 0.011, fy * 0.011, s + 2);
             // keep the map edges dry so you can always arrive and leave
             let edge = ((x.min(w.aw - x) as f32 - 60.0) / 220.0).clamp(0.0, 1.0);
@@ -996,9 +998,8 @@ fn ravenhold(w: &mut World, s: u32) -> Spawns {
     for y in r0..r1 {
         for x in c0..c1 {
             let i = idx(x, y);
-            if rnd() < 0.9 {
-                w.g[i] = if fbm(x as f32 * 0.03, y as f32 * 0.03, s + 3) > 0.55 { FLOOR } else { DIRT };
-            }
+            // trodden earth, muddier in the low spots
+            w.g[i] = if fbm(x as f32 * 0.012, y as f32 * 0.012, s + 3) > 0.6 { MUD } else { DIRT };
         }
     }
     // curtain walls, 7 thick, with a gatehouse on the west and breaches
@@ -1050,6 +1051,9 @@ fn ravenhold(w: &mut World, s: u32) -> Spawns {
         w.rect(kx + 50 + k * 60, ky + 104, kx + 58 + k * 60, ky + 112, BRICK);
     }
     let (sx, sy) = (kx + kw / 2, ky + 26);
+    // a cobbled road from the gate across the yard to the keep's door
+    let yard_road = path(w, &[(c0 as f32 + 4.0, gate_y), ((c0 + kx) as f32 / 2.0, gate_y + rr(-20.0, 20.0)), ((kx + kw / 2) as f32, (ky + kh) as f32 + 24.0), ((kx + kw / 2) as f32, (ky + kh) as f32 + 2.0)], 6.0, s + 7);
+    let _ = yard_road;
     for y in sy..sy + 16 {
         for x in sx - 12..sx + 12 {
             w.g[idx(x, y)] = STAIRS;

@@ -113,22 +113,69 @@ fn fire_col(seed: u32, t: u64) -> [u8; 3] {
     }
 }
 
+/// ground that blends into its neighbours (grass, moss, earth, mud, peat, ash)
+fn natural(g: u8) -> bool {
+    matches!(g, GRASS | MOSS | DIRT | MUD | PEAT | BURNT)
+}
+
 fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
     let s = w.shade[i] as f32 / 255.0;
     let n = vnoise(x as f32 * 0.08, y as f32 * 0.08, 3);
-    let mut c = match w.g[i] {
+    let g0 = w.g[i];
+    // where two kinds of natural ground meet, each pixel may show its neighbour's ground
+    // instead, so the border breaks up into a soft speckled blend rather than a hard line
+    let g = if natural(g0) {
+        let r = 6.0;
+        let ox = ((h2(x, y, 41) - 0.5) * 2.0 * r) as i32;
+        let oy = ((h2(y, x, 43) - 0.5) * 1.4 * r) as i32;
+        let (nx, ny) = (x + ox, y + oy);
+        if World::inb(nx, ny) {
+            let gn = w.g[ny as usize * W + nx as usize];
+            if natural(gn) { gn } else { g0 }
+        } else {
+            g0
+        }
+    } else {
+        g0
+    };
+    // broad, gentle light and shade across the whole ground, and a little fine grain
+    let broad = 0.86 + 0.26 * vnoise(x as f32 * 0.011, y as f32 * 0.011, 77);
+    let grain = 0.94 + 0.12 * vnoise(x as f32 * 0.21, y as f32 * 0.21, 5) + s * 0.06;
+    let b = broad * grain;
+    let mut c = match g {
         GRASS => {
             if s > 0.996 {
                 [[170u8, 150, 70], [150, 110, 160], [190, 190, 200]][(w.shade[i] % 3) as usize]
+            } else if h2(x, y / 3, 9) < 0.07 {
+                // a blade of grass catching the light
+                scl([70, 104, 56], b)
+            } else if h2(x + 7, y / 2, 10) < 0.05 {
+                scl([34, 56, 32], b)
             } else {
-                let b = 0.8 + n * 0.35 + s * 0.12;
-                scl([50, 82, 44], b)
+                scl([50, 80, 45], b)
             }
         }
-        MOSS => scl([46, 70, 52], 0.8 + n * 0.3 + s * 0.12),
-        DIRT => scl([92, 72, 54], 0.82 + n * 0.25 + s * 0.12),
-        MUD => scl([62, 50, 40], 0.85 + s * 0.15),
-        BURNT => scl([38, 33, 31], 0.85 + s * 0.2),
+        MOSS => {
+            if h2(x / 2, y / 2, 12) < 0.08 {
+                scl([62, 92, 58], b)
+            } else {
+                scl([44, 72, 50], b)
+            }
+        }
+        DIRT => {
+            let h = h2(x, y, 14);
+            if h < 0.025 {
+                // a pebble
+                scl([112, 106, 98], b)
+            } else if h2(x / 2, y, 15) < 0.09 {
+                // fallen needles and leaf litter
+                scl([94, 60, 40], b)
+            } else {
+                scl([80, 66, 50], b)
+            }
+        }
+        MUD => scl([58, 48, 38], b * (0.95 + s * 0.1)),
+        BURNT => scl([38, 33, 31], b * (0.95 + s * 0.15)),
         ROAD => {
             // packed earth with cobbles showing through
             let cob = h2(x / 3, y / 2 + (x / 3) % 2, 13);
@@ -137,7 +184,7 @@ fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
         }
         PEAT => {
             let fib = vnoise(x as f32 * 0.5, y as f32 * 0.12, 61);
-            scl([54, 42, 32], 0.75 + fib * 0.35 + s * 0.1)
+            scl([50, 44, 34], (0.82 + fib * 0.26) * broad)
         }
         PLANK => {
             let board = (y.rem_euclid(5) == 0) as i32 as f32;
@@ -152,12 +199,39 @@ fn ground_col(w: &World, i: usize, x: i32, y: i32) -> [u8; 3] {
             scl([96, 90, 100], b - step * 0.25)
         }
         FLOOR => {
-            let (tx, ty) = (x.rem_euclid(10), (y + (x / 10) % 2 * 5).rem_euclid(10));
-            let tile = h2(x / 10, (y + (x / 10) % 2 * 5) / 10, 8);
-            if tx == 0 || ty == 0 {
-                [40, 38, 44]
+            // worn flagstones of uneven size: the nearest of a few jittered points decides
+            // which stone a pixel belongs to, and the gap between stones is the grout
+            let (cs, cy_) = (11, 8);
+            let (gx, gy) = (x.div_euclid(cs), y.div_euclid(cy_));
+            let (mut d1, mut d2, mut id) = (1e9f32, 1e9f32, 0.0f32);
+            for oy in -1..=1 {
+                for ox in -1..=1 {
+                    let (cx_, cyy) = (gx + ox, gy + oy);
+                    let px = (cx_ * cs) as f32 + h2(cx_, cyy, 51) * cs as f32;
+                    let py = (cyy * cy_) as f32 + h2(cx_, cyy, 52) * cy_ as f32;
+                    let d = ((x as f32 - px) / 1.2).powi(2) + (y as f32 - py).powi(2);
+                    if d < d1 {
+                        d2 = d1;
+                        d1 = d;
+                        id = h2(cx_, cyy, 53);
+                    } else if d < d2 {
+                        d2 = d;
+                    }
+                }
+            }
+            let gap = d2.sqrt() - d1.sqrt();
+            let broad = 0.82 + 0.3 * vnoise(x as f32 * 0.02, y as f32 * 0.02, 54);
+            if gap < 1.0 {
+                scl([42, 39, 44], broad)
             } else {
-                scl([78, 74, 82], 0.82 + tile * 0.25 + s * 0.08 + if ty == 1 { 0.08 } else { 0.0 })
+                let base = if id < 0.07 { [70, 74, 66] } else if id > 0.9 { [86, 78, 72] } else { [76, 72, 80] };
+                let crack = h2(x, y / 2, 55) < 0.012 && gap > 2.5;
+                let wear = 0.86 + id * 0.18 + (gap.min(4.0) / 4.0) * 0.08 + s * 0.06;
+                if crack {
+                    scl([40, 38, 42], broad)
+                } else {
+                    scl(base, wear * broad)
+                }
             }
         }
         _ => [60, 60, 60],
@@ -177,10 +251,27 @@ fn top_col(w: &World, i: usize, m: u8, x: i32, y: i32, t: u64, g: [u8; 3]) -> ([
     let z = [0u8; 3];
     match m {
         WATER => {
-            let wv = ((x as f32 * 0.35 + y as f32 * 0.5 + t as f32 * 0.05).sin() + (x as f32 * 0.13 - t as f32 * 0.03).sin()) * 0.5;
-            let edge = !is_liquid(w.at(x, y - 1));
-            let c = if edge { [110, 150, 180] } else if wv > 0.85 { [120, 170, 200] } else { scl([34, 66, 100], 0.9 + wv * 0.15) };
-            (mixc(c, g, 0.12), z)
+            // depth from how far the shore is: pale and murky at the edge, dark further out
+            let dry = |dx: i32, dy: i32| !is_liquid(w.at(x + dx, y + dy));
+            let near = dry(0, -1) || dry(0, 1) || dry(-1, 0) || dry(1, 0);
+            let shallow = near || dry(0, -3) || dry(0, 3) || dry(-4, 0) || dry(4, 0);
+            let mid = shallow || dry(0, -7) || dry(0, 7) || dry(-9, 0) || dry(9, 0);
+            let slow = vnoise(x as f32 * 0.05 + t as f32 * 0.006, y as f32 * 0.08, 19);
+            let base = if mid { [32, 60, 78] } else { [18, 36, 54] };
+            let base = if shallow { [46, 78, 90] } else { base };
+            let mut c = scl(mixc(base, g, if shallow { 0.3 } else { 0.15 }), 0.86 + slow * 0.24);
+            // a thin pale line where the water meets the bank
+            if near && dry(0, -1) {
+                c = [96, 132, 150];
+            }
+            // small glints drifting on the surface, short horizontal flecks, not stripes
+            let gx = (x + (t / 9) as i32) / 3;
+            let gl = h2(gx, y, 23);
+            let tw = ((t as f32 * 0.05 + h2(gx, y, 29) * 6.28).sin() + 1.0) * 0.5;
+            if gl < 0.03 && tw > 0.6 {
+                c = mixc(c, [170, 205, 225], 0.7);
+            }
+            (c, z)
         }
         ACID => {
             let wv = (x as f32 * 0.5 + t as f32 * 0.08 + s * 6.0).sin();

@@ -849,8 +849,8 @@ impl App {
         let gl = gfx::Globals {
             screen: [0.0, 0.0, 0.0, (self.game.frame % 1000) as f32],
             low: [0.0; 4],
-            amb_out: [0.15, 0.19, 0.30, self.game.flash],
-            amb_in: [0.035, 0.035, 0.05, self.game.player.hurt.min(1.0)],
+            amb_out: { let a = area_mood(self.game.area).0; [a[0], a[1], a[2], self.game.flash] },
+            amb_in: { let a = area_mood(self.game.area).1; [a[0], a[1], a[2], self.game.player.hurt.min(1.0)] },
             misc: [0.0, 0.0, if indoor { 1.1 } else { 0.85 }, 1.15],
         };
         let path = shot.as_ref().map(|s| format!("{}/{}.png", self.show.as_ref().unwrap().dir, s));
@@ -1057,6 +1057,27 @@ fn low_test() {
         }
         let b = &g.barrels[0];
         println!("arrow at a {}: alive {}, fuse {}", name, b.alive, b.fuse);
+    }
+}
+
+/// each area's night: (outdoor ambient light, indoor ambient light)
+fn area_mood(a: areagen::AreaId) -> ([f32; 3], [f32; 3]) {
+    use areagen::AreaId;
+    match a {
+        // warm hearth-lit town
+        AreaId::Ashford => ([0.17, 0.18, 0.28], [0.045, 0.038, 0.045]),
+        // cold blue-green under the pines
+        AreaId::Pines => ([0.12, 0.18, 0.25], [0.035, 0.035, 0.05]),
+        // pale moonlight on the graves
+        AreaId::Graveyard => ([0.17, 0.18, 0.27], [0.035, 0.035, 0.05]),
+        // a sickly green murk over the bog
+        AreaId::Fen => ([0.12, 0.17, 0.14], [0.035, 0.04, 0.035]),
+        // dusk-red sky over the bandit castle
+        AreaId::Ravenhold => ([0.2, 0.15, 0.2], [0.045, 0.035, 0.035]),
+        // cold, blue-black crypt
+        AreaId::Crypt(_) => ([0.15, 0.19, 0.30], [0.028, 0.034, 0.058]),
+        // warmer, smokier cellars
+        AreaId::Cellars(_) => ([0.15, 0.19, 0.30], [0.04, 0.036, 0.034]),
     }
 }
 
